@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Interactive system design flows: step through real architectures and see each component, payload, failure mode and the code behind it.">
+<meta name="theme-color" content="#f7f5f0">
+<title>System Design Flows</title>
+<style>
+/*CSS*/
+</style>
+</head>
+<body>
+<header class="sd-top"><div class="sd-top-in">
+  <a class="sd-brand" href="#/"><span class="sd-logo"><i></i><i></i><i></i><i></i></span><span>System Design Flows</span></a>
+  <nav class="sd-nav">
+    <a href="#/" data-nav="flows">Flows</a>
+    <a href="#/glossary" data-nav="glossary">Glossary</a>
+    <a href="#/edit" data-nav="edit">Edit &amp; host</a>
+    <button class="sd-iconbtn" id="themeBtn" aria-label="Switch light or dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor"/></svg></button>
+  </nav>
+</div><div class="sd-progressbar"></div></header>
+<main class="sd-main" id="app"></main>
+
+<template id="edit-guide">
+<div class="sd-prose">
+<div class="sd-eyebrow">Edit &amp; host</div>
+<h1>Change a flow, add a flow, put it online</h1>
+<p>Everything is one HTML file with no build step and no server. The flows are plain data near the top of the <code>&lt;script&gt;</code> section, one <code>flow({ ... })</code> call per flow, so when a technology or a best practice changes you edit text, not code.</p>
+
+<h2>Where things are</h2>
+<ul>
+<li><b>Flows:</b> search the file for <code>flow({</code>. Each call is one flow. Their order in the file is their order on the home page within a category.</li>
+<li><b>Glossary:</b> search for <code>terms({</code>. Add <code>'term': 'plain explanation'</code> and every <code>{{term}}</code> in any flow becomes a tappable definition.</li>
+<li><b>Engine:</b> the last script block ("the app engine"). You don't need to touch it to add content.</li>
+</ul>
+
+<h2>Add a flow in five minutes</h2>
+<ol>
+<li>Copy the smallest existing <code>flow({ ... })</code> block and paste it below the others.</li>
+<li>Give it a new <code>id</code> (letters and dashes; it becomes the link <code>#/flow/your-id</code>).</li>
+<li>List the <code>nodes</code> and place each on the <code>grid</code> with <code>x</code> (column) and <code>y</code> (row), counting from 0. On phones, wide grids are turned on their side automatically.</li>
+<li>Write the <code>steps</code> in order. Each step moves from one node to another (or stays on one node for internal work).</li>
+<li>Open the file in a browser and step through it. If a node id is misspelled, that step's arrow won't draw.</li>
+</ol>
+
+<h2>The shape of a flow</h2>
+<pre><code data-lang="ts">flow({
+  id: 'url-shortener',                 // unique, used in the link
+  title: 'URL shortener',
+  category: 'Product systems',         // one of the home page groups
+  tags: ['Base62', 'Redis', 'PostgreSQL'],
+  summary: 'One sentence shown on the card and the flow header.',
+  requirements: { functional: ['...'], nonFunctional: ['...'] },
+  estimates: [{ label: 'Writes', value: '1,200 / s', note: 'how you got there' }],
+  grid: { cols: 4, rows: 2 },
+  nodes: [
+    { id: 'app', label: 'Next.js app', sub: 'browser', kind: 'client', x: 0, y: 0,
+      desc: 'What this component is for.' },
+    // kind: client | edge | service | worker | db | cache | queue | storage | external
+    // optional icon: phone lb cdn mail bell clock lock card map chart search user spider dns video
+  ],
+  steps: [
+    { from: 'app', to: 'api', label: 'POST /v1/links',     // short arrow label
+      title: 'Heading for the step',
+      caption: 'One or two sentences under the diagram.',
+      text: ['Longer explanation, one string per paragraph.'],
+      details: ['Bullet points for the internals.'],
+      payload: { method: 'POST', body: { long_url: 'https://...' } }, // object = JSON with automatic diff, string = raw
+      payloadKind: 'HTTP request',      // label above the payload
+      payloadLang: 'http',              // only for string payloads: http sql redis bash text
+      fields: { 'body.long_url': 'What this field means' },
+      failure: ['What breaks here and what the system does about it.'],
+      code: [{ lang: 'python', title: 'FastAPI endpoint', src: String.raw`...` }],
+      async: true,                      // dashed arrow: goes through a queue
+      reply: true                       // dotted arrow: a response
+    }
+  ],
+  api: [{ verb: 'POST', path: '/v1/links', desc: '...' }],
+  schema: String.raw`CREATE TABLE ...`,
+  decisions: [{ q: 'A question an interviewer asks', options: [
+    { verdict: 'bad', name: 'Option', why: '...' },
+    { verdict: 'good', name: 'Option', why: '...' },
+    { verdict: 'great', name: 'Option', why: '...' } ] }],
+  refs: [{ label: 'Source title', url: 'https://...', note: 'why it is worth reading' }]
+});</code></pre>
+
+<h2>Markup inside any text</h2>
+<ul>
+<li><code>`code`</code> for inline code.</li>
+<li><code>**bold**</code> for emphasis.</li>
+<li><code>[[nodeId]]</code> draws a coloured chip for a component of the same flow; tapping it highlights that component.</li>
+<li><code>{{term}}</code> or <code>{{term|shown words}}</code> links to the glossary.</li>
+</ul>
+<p>Code samples sit inside <code>String.raw`...`</code>, so the one thing they cannot contain is a backtick. In TypeScript samples, build strings with <code>+</code> instead of template literals.</p>
+
+<h2>Put it online as a static site</h2>
+<p>The file needs no server code, so any static host works. Rename it to <code>index.html</code> first.</p>
+<ul>
+<li><b>GitHub Pages:</b> create a repository, add <code>index.html</code>, then Settings, Pages, deploy from the main branch. The site appears at <code>https://&lt;user&gt;.github.io/&lt;repo&gt;/</code>.</li>
+<li><b>Netlify Drop:</b> drag a folder holding <code>index.html</code> onto app.netlify.com/drop.</li>
+<li><b>Cloudflare Pages or Vercel:</b> connect the repository; there is no build command and the output folder is the root.</li>
+<li><b>Inside your Next.js app:</b> put the file in <code>public/flows/index.html</code> and it is served at <code>/flows/index.html</code>.</li>
+</ul>
+<p>Your progress (which steps you've seen) is kept in your own browser, so it stays on each device.</p>
+</div>
+</template>
+
+<script>
+/*DATA*/
+</script>
+<script>
+/*APP*/
+</script>
+</body>
+</html>

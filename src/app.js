@@ -1,0 +1,620 @@
+/* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
+   You normally never need to edit this file to add or change a flow. */
+(function () {
+'use strict';
+
+const FLOWS = window.SD_FLOWS, GLOSSARY = window.SD_GLOSSARY;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const app = $('#app');
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
+const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party' };
+
+/* ---------- icons ---------- */
+const ICON = {
+  client: '<path d="M4 5h16v10H4z"/><path d="M9 19h6M12 15v4"/>',
+  phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>',
+  edge: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/>',
+  lb: '<circle cx="12" cy="5" r="2"/><path d="M12 7v4M12 11l-6 6M12 11l6 6M12 11v6"/><circle cx="6" cy="19" r="1.6"/><circle cx="12" cy="19" r="1.6"/><circle cx="18" cy="19" r="1.6"/>',
+  cdn: '<circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 2.5 13.5 0 16M12 4c-2.5 2.5-2.5 13.5 0 16"/>',
+  service: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+  worker: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  db: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>',
+  cache: '<path d="M13 2L5 13h6l-1 9 8-11h-6z"/>',
+  queue: '<rect x="3" y="6" width="4" height="12" rx="1"/><rect x="10" y="6" width="4" height="12" rx="1"/><rect x="17" y="6" width="4" height="12" rx="1"/>',
+  storage: '<path d="M4 7h16l-1.5 13h-13z"/><path d="M3 7l2-3h14l2 3"/>',
+  external: '<path d="M7 18a5 5 0 010-10 6 6 0 0111.3 1.5A4 4 0 0117 18z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  bell: '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  card: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
+  map: '<path d="M9 4l6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="M8 16v-5M12 16V8M16 16v-8"/>',
+  spider: '<circle cx="12" cy="12" r="3"/><path d="M12 9V3M12 15v6M9 12H3M15 12h6M9.8 9.8L5 5M14.2 9.8L19 5M9.8 14.2L5 19M14.2 14.2L19 19"/>',
+  dns: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r=".6"/><circle cx="7" cy="12" r=".6"/><circle cx="7" cy="18" r=".6"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'
+};
+const svgIcon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICON[k] || ICON.service) + '</svg>';
+const UI = {
+  prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 108-8H8"/><path d="M10 1L7 4l3 3"/></svg>',
+  search: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
+  theme: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor"/></svg>'
+};
+const nodeIcon = n => svgIcon(n.icon || ({ edge: 'edge', external: 'external' }[n.kind] || n.kind));
+const kc = kind => 'var(--k-' + (kind || 'service') + ')';
+
+/* ---------- progress (stored on this device only) ---------- */
+const STORE = 'sdflows:v1';
+let progress = {};
+try { progress = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { progress = {}; }
+function markSeen(id, i) {
+  const s = new Set(progress[id] || []); s.add(i); progress[id] = Array.from(s);
+  try { localStorage.setItem(STORE, JSON.stringify(progress)); } catch (e) {}
+}
+
+/* ---------- rich text: `code`, **bold**, [[nodeId]] chips, {{glossary term}} ---------- */
+let currentFlow = null;
+function rich(s, flow) {
+  flow = flow || currentFlow;
+  let h = esc(s);
+  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  h = h.replace(/\[\[([\w-]+)(?:\|([^\]]+))?\]\]/g, (m, id, label) => {
+    const n = flow && flow.nodes.find(x => x.id === id);
+    if (!n) return label || id;
+    return '<button type="button" class="sd-n" data-node="' + esc(id) + '" style="--kc:' + kc(n.kind) + '"><i></i>' + (label || esc(n.label)) + '</button>';
+  });
+  h = h.replace(/\{\{([^}|]+)(?:\|([^}]+))?\}\}/g, (m, t, label) => {
+    const key = t.trim().toLowerCase();
+    return GLOSSARY[key] ? '<button type="button" class="sd-term" data-term="' + esc(key) + '">' + (label || t) + '</button>' : (label || t);
+  });
+  return h;
+}
+const paras = (v, flow) => (Array.isArray(v) ? v : [v]).filter(Boolean).map(p => '<p>' + rich(p, flow) + '</p>').join('');
+
+/* ---------- code highlighting ---------- */
+const KW = {
+  python: 'def class return if elif else for while in not and or is None True False import from as with async await try except finally raise lambda yield pass break continue assert del',
+  ts: 'const let var function return if else for while of in new class extends import from export default async await try catch finally throw typeof interface type enum implements null undefined true false this switch case break continue as',
+  sql: 'select from where insert into values update set delete create table index unique primary key references not null default on conflict do nothing returning join left inner group by order limit for skip locked and or as begin commit in is with case when then else end text bigint int integer timestamptz jsonb uuid boolean now interval bigserial serial check alter add desc asc exists using partition over smallint numeric char varchar date gin btree concurrently if replace function language trigger',
+  redis: 'set get incr incrby expire hset hget hgetall hincrby zadd zrange zrevrange zincrby zrem zrangebyscore zcard zscore xadd xreadgroup xack xautoclaim eval evalsha publish subscribe del ex nx px exat multi exec lpush rpush brpop lrange sadd srem smembers sismember pexpire ttl geoadd geosearch scard exists setnx incrbyfloat',
+  bash: 'curl export echo if then fi for do done',
+  yaml: 'true false null',
+  http: ''
+};
+KW.tsx = KW.ts; KW.js = KW.ts;
+const COMMENT = { python: '#', bash: '#', yaml: '#', redis: '#', ts: '//', tsx: '//', js: '//', sql: '--', http: null, json: null };
+function highlight(src, lang) {
+  lang = lang || 'text';
+  const kws = new Set((KW[lang] || '').split(' ').filter(Boolean));
+  const ci = lang === 'sql' || lang === 'redis';
+  const cm = COMMENT[lang];
+  const parts = [];
+  if (cm) parts.push('(' + cm.replace(/[/]/g, '\\/') + '[^\\n]*)'); else parts.push('(\\u0000NEVER)');
+  parts.push('("""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\')');
+  parts.push('(@[\\w.]+)');
+  parts.push('(\\b\\d+(?:\\.\\d+)?\\b)');
+  parts.push('([A-Za-z_][\\w]*)(?=\\s*\\()');
+  parts.push('([A-Za-z_][\\w-]*)');
+  const re = new RegExp(parts.join('|'), 'g');
+  let out = '', last = 0, m;
+  if (lang === 'text' || lang === 'json') return esc(src);
+  while ((m = re.exec(src))) {
+    out += esc(src.slice(last, m.index)); last = re.lastIndex;
+    const t = m[0];
+    if (m[1]) out += '<span class="c">' + esc(t) + '</span>';
+    else if (m[2]) out += '<span class="s">' + esc(t) + '</span>';
+    else if (m[3] && lang !== 'sql') out += '<span class="de">' + esc(t) + '</span>';
+    else if (m[4]) out += '<span class="nu">' + esc(t) + '</span>';
+    else if (m[5]) out += kws.has(ci ? t.toLowerCase() : t) ? '<span class="kw">' + esc(t) + '</span>' : '<span class="fn">' + esc(t) + '</span>';
+    else if (m[6]) out += kws.has(ci ? t.toLowerCase() : t) ? '<span class="kw">' + esc(t) + '</span>' : esc(t);
+    else out += esc(t);
+  }
+  return out + esc(src.slice(last));
+}
+
+/* ---------- JSON payload with automatic diff against the previous step ---------- */
+function flatten(v, p, out) {
+  out = out || {};
+  if (v && typeof v === 'object') {
+    const ks = Array.isArray(v) ? v.map((_, i) => i) : Object.keys(v);
+    if (!ks.length) out[p] = JSON.stringify(v);
+    ks.forEach(k => flatten(v[k], p === '' ? String(k) : p + '.' + k, out));
+  } else out[p] = JSON.stringify(v);
+  return out;
+}
+function fmtVal(v) {
+  if (typeof v === 'string') return '<span class="s">' + esc(JSON.stringify(v)) + '</span>';
+  if (typeof v === 'number') return '<span class="n">' + v + '</span>';
+  return '<span class="b">' + esc(JSON.stringify(v)) + '</span>';
+}
+function renderJSON(val, prev, fields) {
+  const pf = prev ? flatten(prev, '') : null;
+  const pkeys = pf ? Object.keys(pf) : [];
+  const fx = fields || {};
+  const lines = [];
+  const status = (path, leaf, v) => {
+    if (!pf) return '';
+    if (leaf) { if (!(path in pf)) return 'add'; return pf[path] !== JSON.stringify(v) ? 'chg' : ''; }
+    return pkeys.some(k => k === path || k.startsWith(path + '.')) ? '' : 'add';
+  };
+  const fieldFor = (path, key) => fx[path] != null ? path : (key != null && fx[key] != null ? String(key) : null);
+  function walk(v, key, path, depth, last) {
+    const ind = '  '.repeat(depth);
+    const kh = (key === null || typeof key === 'number') ? '' : '<span class="k">' + esc(JSON.stringify(key)) + '</span>: ';
+    const comma = last ? '' : ',';
+    const f = key === null ? null : fieldFor(path, typeof key === 'number' ? null : key);
+    const push = (st, html) => lines.push({ st, html, f });
+    if (v && typeof v === 'object') {
+      const arr = Array.isArray(v), ents = arr ? v.map((x, i) => [i, x]) : Object.entries(v);
+      const st = path === '' ? '' : status(path, false);
+      if (!ents.length) { push(st, ind + kh + (arr ? '[]' : '{}') + comma); return; }
+      push(st, ind + kh + (arr ? '[' : '{'));
+      ents.forEach(([k, x], i) => walk(x, arr ? i : k, path === '' ? String(k) : path + '.' + k, depth + 1, i === ents.length - 1));
+      lines.push({ st, html: ind + (arr ? ']' : '}') + comma, f: null });
+    } else push(status(path, true, v), ind + kh + fmtVal(v) + comma);
+  }
+  walk(val, null, '', 0, true);
+  let removed = [];
+  if (pf) {
+    const cur = flatten(val, '');
+    const ckeys = Object.keys(cur);
+    const exists = p => ckeys.some(k => k === p || k.startsWith(p + '.'));
+    const set = new Set();
+    pkeys.filter(k => !(k in cur)).forEach(k => {
+      const segs = k.split('.'); let p = '';
+      for (let i = 0; i < segs.length; i++) { p = i ? p + '.' + segs[i] : segs[i]; if (!exists(p)) { set.add(p); break; } }
+    });
+    removed = Array.from(set);
+  }
+  const html = lines.map(l => {
+    const mark = l.st === 'add' ? '+' : l.st === 'chg' ? '~' : '';
+    const cls = 'ln' + (l.st ? ' ' + l.st : '') + (l.f ? ' fx' : '');
+    return '<span class="' + cls + '"' + (l.f ? ' data-field="' + esc(l.f) + '"' : '') + '><i>' + mark + '</i>' + l.html + '</span>';
+  }).join('');
+  const counts = { add: lines.filter(l => l.st === 'add' && l.f !== undefined).length, chg: lines.filter(l => l.st === 'chg').length };
+  return { html, removed, counts };
+}
+
+/* ---------- tiny architecture thumbnail for the home cards ---------- */
+function thumb(f) {
+  const W = 300, H = 112, g = f.grid, pad = 22;
+  const pos = n => [pad + (n.x + .5) * (W - 2 * pad) / g.cols, 12 + (n.y + .5) * (H - 24) / g.rows];
+  const pairs = new Map();
+  f.steps.forEach(s => { if (s.from !== s.to) { const k = [s.from, s.to].sort().join('|'); pairs.set(k, s); } });
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">';
+  pairs.forEach((s, k) => {
+    const [a, b] = k.split('|').map(id => f.nodes.find(n => n.id === id));
+    if (!a || !b) return; const [x1, y1] = pos(a), [x2, y2] = pos(b);
+    svg += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="var(--rule2)" stroke-width="1.5"/>';
+  });
+  f.nodes.forEach(n => { const [x, y] = pos(n); svg += '<rect x="' + (x - 13) + '" y="' + (y - 9) + '" width="26" height="18" rx="5" fill="' + kc(n.kind) + '"/>'; });
+  return svg + '</svg>';
+}
+
+/* ---------- routing ---------- */
+function route() {
+  stopAll();
+  const h = location.hash.replace(/^#\/?/, '').split('/');
+  window.scrollTo(0, 0);
+  if (h[0] === 'flow' && h[1]) {
+    const f = FLOWS.find(x => x.id === h[1]);
+    if (f) return renderFlow(f, Math.max(0, Math.min(f.steps.length - 1, (parseInt(h[2], 10) || 1) - 1)));
+  }
+  if (h[0] === 'glossary') return renderGlossary();
+  if (h[0] === 'edit') return renderEdit();
+  renderHome();
+}
+function setNav(which) { $$('.sd-nav a').forEach(a => a.classList.toggle('on', a.dataset.nav === which)); }
+
+/* ---------- home ---------- */
+let homeState = { q: '', cat: 'All' };
+function renderHome() {
+  currentFlow = null; setNav('flows'); document.title = 'System Design Flows';
+  $('.sd-progressbar').style.width = '0';
+  const cats = ['All'].concat(CATEGORY_ORDER.filter(c => FLOWS.some(f => f.category === c)));
+  const totalSteps = FLOWS.reduce((a, f) => a + f.steps.length, 0);
+  app.innerHTML =
+    '<section class="sd-hero"><div class="sd-eyebrow">Interactive system design</div>' +
+    '<h1>Watch real systems move, one hop at a time.</h1>' +
+    '<p>' + FLOWS.length + ' flows and ' + totalSteps + ' steps. Pick a flow, step through it, and see what each component does, the exact payload at that point, the fields that change, what fails, and the code behind it in Next.js, FastAPI, PostgreSQL and Redis.</p>' +
+    '<div class="sd-legend">' + Object.keys(KIND_LABEL).map(k => '<span><i style="background:' + kc(k) + '"></i>' + KIND_LABEL[k] + '</span>').join('') + '</div></section>' +
+    '<div class="sd-tools"><label class="sd-search">' + UI.search + '<input id="q" type="search" placeholder="Search flows, components, terms" value="' + esc(homeState.q) + '" autocomplete="off"></label>' +
+    '<div class="sd-chips" id="cats">' + cats.map(c => '<button class="sd-chip' + (c === homeState.cat ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div></div>' +
+    '<div id="list"></div>';
+  const draw = () => {
+    const q = homeState.q.trim().toLowerCase();
+    const match = f => (homeState.cat === 'All' || f.category === homeState.cat) && (!q || [f.title, f.summary, f.category, (f.tags || []).join(' '), f.nodes.map(n => n.label).join(' '), f.steps.map(s => s.title).join(' ')].join(' ').toLowerCase().includes(q));
+    const list = FLOWS.filter(match);
+    if (!list.length) { $('#list').innerHTML = '<p class="sd-empty">No flow matches "' + esc(homeState.q) + '".</p>'; return; }
+    $('#list').innerHTML = CATEGORY_ORDER.concat(Array.from(new Set(FLOWS.map(f => f.category))).filter(c => !CATEGORY_ORDER.includes(c))).map(c => {
+      const fl = list.filter(f => f.category === c); if (!fl.length) return '';
+      return '<div class="sd-cat"><h2>' + esc(c) + '</h2><span class="sd-count">' + fl.length + ' flows</span></div><div class="sd-grid">' + fl.map(card).join('') + '</div>';
+    }).join('');
+  };
+  const card = f => {
+    const seen = (progress[f.id] || []).length;
+    return '<a class="sd-card" href="#/flow/' + f.id + '">' + (seen ? '<span class="sd-done">' + (seen >= f.steps.length ? 'Done' : seen + '/' + f.steps.length) + '</span>' : '') +
+      '<div class="sd-thumb">' + thumb(f) + '</div><div class="sd-card-b"><h3>' + esc(f.title) + '</h3><p>' + esc(f.summary) + '</p>' +
+      '<div class="sd-meta"><span>' + f.steps.length + ' steps</span>' + (f.tags || []).slice(0, 3).map(t => '<span class="sd-tag">' + esc(t) + '</span>').join('') + '</div></div></a>';
+  };
+  draw();
+  $('#q').addEventListener('input', e => { homeState.q = e.target.value; draw(); });
+  $('#cats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; homeState.cat = b.dataset.cat; $$('#cats .sd-chip').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+}
+
+/* ---------- flow page ---------- */
+let S = null; // state of the open flow
+function renderFlow(f, start) {
+  currentFlow = f; setNav(''); document.title = f.title + ' · System Design Flows';
+  const tabsMemo = (S && S.tab) || 'explain';
+  S = { f, i: start, tab: tabsMemo, playing: false, speed: 1, raf: 0, timer: 0 };
+  const sec = [];
+  if (f.requirements) sec.push(['req', 'Requirements']);
+  if (f.estimates) sec.push(['est', 'Scale']);
+  sec.push(['sim', 'Walkthrough']);
+  if (f.api) sec.push(['api', 'API']);
+  if (f.schema) sec.push(['data', 'Data model']);
+  if (f.decisions) sec.push(['deep', 'Deep dives']);
+  sec.push(['steps', 'All steps']);
+  if (f.refs) sec.push(['refs', 'References']);
+  let h = '<nav class="sd-crumb"><a href="#/">Flows</a><span>›</span><span>' + esc(f.category) + '</span></nav>' +
+    '<header class="sd-fhead"><h1>' + esc(f.title) + '</h1><p>' + rich(f.summary) + '</p>' +
+    '<div class="sd-fmeta"><span class="sd-tag">' + f.steps.length + ' steps</span><span class="sd-tag">' + f.nodes.length + ' components</span>' + (f.tags || []).map(t => '<span class="sd-tag">' + esc(t) + '</span>').join('') + '</div></header>' +
+    '<nav class="sd-jump">' + sec.map(s => '<a href="#' + s[0] + '" data-jump="' + s[0] + '">' + s[1] + '</a>').join('') + '</nav>';
+
+  if (f.requirements) {
+    h += '<section class="sd-sec" id="sec-req"><h2>Requirements</h2><p class="sub">What the system must do, and the qualities it must keep while doing it.</p><div class="sd-two">' +
+      '<div class="sd-box sd-pad"><h3>Functional</h3><ul class="sd-list">' + f.requirements.functional.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' +
+      '<div class="sd-box sd-pad"><h3>Non-functional</h3><ul class="sd-list">' + f.requirements.nonFunctional.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div></div></section>';
+  }
+  if (f.estimates) {
+    h += '<section class="sd-sec" id="sec-est"><h2>Scale, back of the envelope</h2><p class="sub">Illustrative assumptions so the design has numbers to push against. Change them and the design changes.</p><div class="sd-est">' +
+      f.estimates.map(e => '<div class="sd-box"><span>' + esc(e.label) + '</span><b>' + esc(e.value) + '</b>' + (e.note ? '<p>' + rich(e.note) + '</p>' : '') + '</div>').join('') + '</div></section>';
+  }
+  h += '<section class="sd-sec" id="sec-sim"><h2>Walkthrough</h2><p class="sub">Tap a component to see its role. Use the arrows, swipe, or press ← → on a keyboard. Payload lines marked <b>+</b> were added at this step, <b>~</b> changed.</p>' +
+    '<div class="sd-sim"><div class="sd-stage"><div class="sd-box">' +
+    '<div class="sd-diagram" id="dg"><div class="sd-canvas" id="cv"><svg class="sd-wires" id="wires"></svg>' +
+    f.nodes.map(n => '<button type="button" class="sd-node" data-node="' + n.id + '" style="--kc:' + kc(n.kind) + '" aria-label="' + esc(n.label) + '"><span class="ic">' + nodeIcon(n) + '</span><span class="tx"><b>' + esc(n.label) + '</b>' + (n.sub ? '<small>' + esc(n.sub) + '</small>' : '') + '</span></button>').join('') +
+    '</div></div>' +
+    '<div class="sd-legend2"><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2"/></svg>request</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="6 5"/></svg>async / queued</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/></svg>response</span></div>' +
+    '<div class="sd-ninfo" id="ninfo"></div>' +
+    '<div class="sd-caption" id="cap"></div>' +
+    '<div class="sd-ctrl"><button class="sd-btn" id="bPrev" aria-label="Previous step">' + UI.prev + '</button><button class="sd-btn pri" id="bNext">Next ' + UI.next + '</button><button class="sd-btn" id="bPlay" aria-label="Play">' + UI.play + '</button><button class="sd-btn" id="bRestart" aria-label="Restart">' + UI.restart + '</button>' +
+    '<label class="sd-speed">speed <input id="speed" type="range" min="0.5" max="2" step="0.25" value="1"></label></div>' +
+    '<div class="sd-dots" id="dots">' + f.steps.map((s, i) => '<button class="sd-dot" data-i="' + i + '" title="' + esc(s.title) + '">' + (i + 1) + '</button>').join('') + '</div>' +
+    '</div></div>' +
+    '<div class="sd-panel sd-box" id="panel"><div class="sd-tabs" id="tabs"></div><div class="sd-tabbody" id="tabbody"></div></div></div></section>';
+
+  if (f.api) {
+    h += '<section class="sd-sec" id="sec-api"><h2>API</h2><p class="sub">The contract between the pieces. Illustrative, versioned paths.</p><div class="sd-box sd-api">' +
+      f.api.map(a => '<div class="sd-ep"><span class="sd-verb ' + esc(a.verb) + '">' + esc(a.verb) + '</span><div><code>' + esc(a.path) + '</code><p>' + rich(a.desc) + '</p></div></div>').join('') + '</div></section>';
+  }
+  if (f.schema) {
+    h += '<section class="sd-sec" id="sec-data"><h2>Data model</h2><p class="sub">' + rich(f.schemaNote || 'Tables, keys and indexes the flow relies on (PostgreSQL unless noted).') + '</p><div class="sd-codeblock"><div class="sd-codehead"><span class="sd-lang ' + (f.schemaLang || 'sql') + '">' + (f.schemaLang || 'sql') + '</span><span class="sd-codetitle">Schema</span><button class="sd-copy" data-copy="schema">Copy</button></div><pre class="sd-code"><code>' + highlight(f.schema.trim(), f.schemaLang || 'sql') + '</code></pre></div></section>';
+  }
+  if (f.decisions) {
+    h += '<section class="sd-sec" id="sec-deep"><h2>Deep dives</h2><p class="sub">The questions an interviewer pushes on, with the options weighed. Verdicts are for this flow\'s requirements, not universal rules.</p>' +
+      f.decisions.map((d, i) => '<details class="sd-dd"' + (i === 0 ? ' open' : '') + '><summary>' + rich(d.q) + '</summary><div class="sd-ddb">' +
+        d.options.map(o => '<div class="sd-opt ' + o.verdict + '"><div class="vh"><span class="sd-verdict ' + o.verdict + '">' + o.verdict + '</span>' + rich(o.name) + '</div><p>' + rich(o.why) + '</p></div>').join('') + '</div></details>').join('') + '</section>';
+  }
+  h += '<section class="sd-sec" id="sec-steps"><h2>All steps</h2><p class="sub">The whole flow at a glance. Tap one to jump there.</p><div class="sd-box"><ol class="sd-steplist" id="steplist">' +
+    f.steps.map((s, i) => { const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to); return '<li data-i="' + i + '"><button data-i="' + i + '"><span class="no">' + (i + 1) + '</span><span>' + esc(s.title) + '</span><span class="hop">' + esc(a.label) + (s.from === s.to ? '' : ' → ' + esc(b.label)) + '</span></button></li>'; }).join('') + '</ol></div></section>';
+  if (f.refs) {
+    h += '<section class="sd-sec" id="sec-refs"><h2>References</h2><p class="sub">Primary sources to go deeper. Payloads and code on this page are illustrative.</p><ol class="sd-refs">' +
+      f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol></section>';
+  }
+  h += '<div class="sd-bar" id="bar"><button id="mPrev" aria-label="Previous step">' + UI.prev + 'Back</button><span class="mid" id="mCount"></span><button id="mNext" aria-label="Next step">Next' + UI.next + '</button></div>';
+  app.innerHTML = h;
+
+  // events
+  $('#bPrev').onclick = () => go(S.i - 1, true);
+  $('#bNext').onclick = () => go(S.i + 1, true);
+  $('#mPrev').onclick = () => go(S.i - 1, true, true);
+  $('#mNext').onclick = () => go(S.i + 1, true, true);
+  $('#bRestart').onclick = () => { setPlaying(false); go(0, true); };
+  $('#bPlay').onclick = () => setPlaying(!S.playing);
+  $('#speed').oninput = e => { S.speed = parseFloat(e.target.value); if (S.playing) { setPlaying(false); setPlaying(true); } };
+  $('#dots').onclick = e => { const b = e.target.closest('[data-i]'); if (b) go(+b.dataset.i, true); };
+  $('#steplist').onclick = e => { const b = e.target.closest('button[data-i]'); if (b) { go(+b.dataset.i, true); $('#sec-sim').scrollIntoView({ behavior: 'smooth' }); } };
+  $('#cv').addEventListener('click', e => { const n = e.target.closest('.sd-node'); if (n) showNode(n.dataset.node); });
+  $$('.sd-jump a').forEach(a => a.onclick = e => { e.preventDefault(); const t = $('#sec-' + a.dataset.jump); if (t) t.scrollIntoView({ behavior: 'smooth' }); });
+  const cs = $('[data-copy=schema]'); if (cs) cs.onclick = () => copyText(f.schema.trim(), cs);
+  swipe($('#panel')); swipe($('#dg'));
+  layout();
+  go(start, false);
+}
+
+function swipe(el) {
+  let x0 = null, y0 = null;
+  el.addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (x0 === null) return; const t = e.changedTouches[0]; const dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+    if (e.target.closest('pre')) return;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) go(S.i + (dx < 0 ? 1 : -1), true);
+  }, { passive: true });
+}
+
+/* layout: positions nodes on a grid; transposes on narrow screens so wide diagrams become tall */
+let L = null;
+function layout() {
+  if (!S) return;
+  const f = S.f, cv = $('#cv'); if (!cv) return;
+  const W = cv.clientWidth;
+  const narrow = W < 560 && f.grid.cols > f.grid.rows;
+  const cols = narrow ? f.grid.rows : f.grid.cols, rows = narrow ? f.grid.cols : f.grid.rows;
+  const rowH = W < 560 ? 104 : 134;
+  const H = rows * rowH;
+  cv.style.height = H + 'px';
+  const colW = W / cols;
+  const nw = Math.max(70, Math.min(W < 560 ? 100 : 150, colW * (W < 560 ? 0.78 : 0.68)));
+  const P = {};
+  f.nodes.forEach(n => {
+    const gx = narrow ? n.y : n.x, gy = narrow ? n.x : n.y;
+    const x = (gx + .5) * colW, y = (gy + .5) * rowH;
+    const el = cv.querySelector('[data-node="' + n.id + '"]');
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--nw', nw + 'px');
+    P[n.id] = { x, y, el };
+  });
+  f.nodes.forEach(n => { const p = P[n.id]; p.w = p.el.offsetWidth; p.h = p.el.offsetHeight; });
+  L = { W, H, P };
+  drawWires();
+}
+
+function edgeGeom(a, b, off) {
+  const A = L.P[a], B = L.P[b];
+  let dx = B.x - A.x, dy = B.y - A.y; const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len * off, ny = dx / len * off;
+  const clip = (P, tx, ty) => { const ddx = tx, ddy = ty; const sx = (P.w / 2 + 7) / Math.abs(ddx || 1e-9), sy = (P.h / 2 + 7) / Math.abs(ddy || 1e-9); const s = Math.min(sx, sy); return [P.x + ddx * s, P.y + ddy * s]; };
+  const [x1, y1] = clip(A, dx, dy); const [x2, y2] = clip(B, -dx, -dy);
+  return { x1: x1 + nx, y1: y1 + ny, x2: x2 + nx, y2: y2 + ny };
+}
+function drawWires() {
+  if (!S || !L) return;
+  const f = S.f, svg = $('#wires'); if (!svg) return;
+  svg.setAttribute('viewBox', '0 0 ' + L.W + ' ' + L.H);
+  const dirs = new Set(f.steps.filter(s => s.from !== s.to).map(s => s.from + '>' + s.to));
+  const offFor = s => dirs.has(s.to + '>' + s.from) ? 4.5 : 0;
+  const seen = new Set(f.steps.slice(0, S.i).map(s => s.from + '>' + s.to));
+  let out = '';
+  const done = new Set();
+  f.steps.forEach(s => {
+    if (s.from === s.to) return; const k = s.from + '>' + s.to; if (done.has(k)) return; done.add(k);
+    const g = edgeGeom(s.from, s.to, offFor(s));
+    out += '<line class="sd-wire' + (seen.has(k) ? ' past' : '') + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+  });
+  const s = f.steps[S.i];
+  $$('.sd-wlabel,.sd-busychip', $('#cv')).forEach(x => x.remove());
+  if (s.from !== s.to) {
+    const g = edgeGeom(s.from, s.to, offFor(s));
+    const col = kc(f.nodes.find(n => n.id === s.from).kind);
+    const ang = Math.atan2(g.y2 - g.y1, g.x2 - g.x1), ah = 9;
+    const p1 = [g.x2 - ah * Math.cos(ang - .45), g.y2 - ah * Math.sin(ang - .45)], p2 = [g.x2 - ah * Math.cos(ang + .45), g.y2 - ah * Math.sin(ang + .45)];
+    out += '<line class="sd-wire active' + (s.async ? ' async' : '') + (s.reply ? ' reply' : '') + '" style="stroke:' + col + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>' +
+      '<path d="M' + g.x2 + ',' + g.y2 + 'L' + p1[0] + ',' + p1[1] + 'L' + p2[0] + ',' + p2[1] + 'z" style="fill:' + col + '"/>' +
+      '<circle id="pk" class="sd-packet" r="6" cx="' + g.x1 + '" cy="' + g.y1 + '" style="fill:' + col + ';color:' + col + '"/>';
+    svg.innerHTML = out;
+    const lab = document.createElement('div');
+    lab.className = 'sd-wlabel'; lab.style.color = col;
+    lab.style.left = ((g.x1 + g.x2) / 2) + 'px'; lab.style.top = ((g.y1 + g.y2) / 2) + 'px';
+    lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>' + esc(s.label || s.title);
+    $('#cv').appendChild(lab);
+    // if the label doesn't fit in the free gap between the two boxes, show only the step number
+    const free = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+    const horizontal = Math.abs(g.x2 - g.x1) >= Math.abs(g.y2 - g.y1);
+    if ((horizontal ? lab.offsetWidth : lab.offsetHeight) > free - 10) { lab.classList.add('badge'); lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>'; lab.title = s.label || s.title; }
+    animatePacket(g);
+  } else {
+    svg.innerHTML = out;
+    const n = f.nodes.find(x => x.id === s.from), P = L.P[s.from];
+    const chip = document.createElement('div');
+    chip.className = 'sd-busychip'; chip.style.color = kc(n.kind);
+    const below = P.y + P.h / 2 + 30 < L.H;
+    chip.style.left = P.x + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
+    chip.textContent = (S.i + 1) + ' · ' + (s.label || s.title);
+    $('#cv').appendChild(chip);
+    cancelAnimationFrame(S.raf);
+  }
+}
+function animatePacket(g) {
+  cancelAnimationFrame(S.raf);
+  const pk = $('#pk'); if (!pk) return;
+  if (reduceMotion) { pk.setAttribute('cx', g.x2); pk.setAttribute('cy', g.y2); return; }
+  const dur = 1300 / S.speed, rest = 500 / S.speed; let t0 = null;
+  const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const tick = ts => {
+    if (t0 === null) t0 = ts; const e = (ts - t0) % (dur + rest); const t = ease(Math.min(1, e / dur));
+    pk.setAttribute('cx', g.x1 + (g.x2 - g.x1) * t); pk.setAttribute('cy', g.y1 + (g.y2 - g.y1) * t);
+    pk.setAttribute('opacity', e > dur ? Math.max(0, 1 - (e - dur) / rest) : 1);
+    S.raf = requestAnimationFrame(tick);
+  };
+  S.raf = requestAnimationFrame(tick);
+}
+
+function go(i, user, fromBar) {
+  const f = S.f; if (i < 0 || i >= f.steps.length) { if (S.playing && i >= f.steps.length) setPlaying(false); return; }
+  S.i = i; markSeen(f.id, i);
+  const s = f.steps[i];
+  history.replaceState(null, '', '#/flow/' + f.id + '/' + (i + 1));
+  // nodes
+  const visited = new Set(); f.steps.slice(0, i + 1).forEach(x => { visited.add(x.from); visited.add(x.to); });
+  $$('.sd-node', $('#cv')).forEach(el => {
+    const id = el.dataset.node;
+    el.classList.toggle('src', id === s.from && s.from !== s.to);
+    el.classList.toggle('dst', id === s.to);
+    el.classList.toggle('busy', id === s.to);
+    el.classList.toggle('dim', !visited.has(id));
+  });
+  drawWires();
+  // caption
+  const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to);
+  $('#cap').innerHTML = '<div class="sn"><span>Step ' + (i + 1) + ' of ' + f.steps.length + '</span><span>·</span><span>' + esc(a.label) + (s.from === s.to ? ' (internal)' : ' → ' + esc(b.label)) + '</span>' + (s.async ? '<span class="sd-tag">async</span>' : '') + '</div><h2>' + rich(s.title) + '</h2><p>' + rich(s.caption) + '</p>';
+  $('#bPrev').disabled = i === 0; $('#bNext').disabled = i === f.steps.length - 1;
+  $('#mPrev').disabled = i === 0; $('#mNext').disabled = i === f.steps.length - 1;
+  $('#mCount').textContent = (i + 1) + ' / ' + f.steps.length;
+  $$('#dots .sd-dot').forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('seen', (progress[f.id] || []).includes(k)); });
+  $$('#steplist li').forEach((li, k) => li.classList.toggle('on', k === i));
+  $('.sd-progressbar').style.width = ((i + 1) / f.steps.length * 100) + '%';
+  renderTabs();
+  $('#ninfo').classList.remove('show');
+  if (user && fromBar) {
+    const st = $('.sd-stage'); const top = st.getBoundingClientRect().top;
+    if (top < 0) window.scrollTo({ top: window.scrollY + top - 60, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+}
+
+function renderTabs() {
+  const f = S.f, s = f.steps[S.i];
+  const codes = s.code ? (Array.isArray(s.code) ? s.code : [s.code]) : [];
+  const tabs = [['explain', 'What happens']];
+  if (s.payload !== undefined) tabs.push(['payload', 'Payload']);
+  if (codes.length) tabs.push(['code', 'Code', codes.length]);
+  if (s.failure) tabs.push(['failure', 'When it fails']);
+  if (!tabs.some(t => t[0] === S.tab)) S.tab = 'explain';
+  $('#tabs').innerHTML = tabs.map(t => '<button class="sd-tab' + (t[0] === S.tab ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + (t[2] > 1 ? ' <span class="ct">' + t[2] + '</span>' : '') + '</button>').join('');
+  $('#tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; S.tab = b.dataset.tab; renderTabs(); };
+  let h = '';
+  if (S.tab === 'explain') {
+    h += '<h3>What happens</h3>' + paras(s.text || s.caption);
+    if (s.details) h += '<h3>Under the hood</h3><ul class="sd-list">' + s.details.map(d => '<li>' + rich(d) + '</li>').join('') + '</ul>';
+    const tn = f.nodes.find(n => n.id === s.to);
+    if (tn.desc) h += '<h3>About ' + esc(tn.label) + '</h3><p>' + rich(tn.desc) + '</p>';
+  } else if (S.tab === 'payload') {
+    h += payloadHTML(s);
+  } else if (S.tab === 'code') {
+    h += codes.map((c, k) => '<div class="sd-codeblock"><div class="sd-codehead"><span class="sd-lang ' + esc(c.lang) + '">' + esc(c.lang) + '</span><span class="sd-codetitle">' + esc(c.title || '') + '</span><button class="sd-copy" data-ci="' + k + '">Copy</button></div>' +
+      (c.note ? '<p class="sd-note" style="margin:0 0 8px">' + rich(c.note) + '</p>' : '') + '<pre class="sd-code"><code>' + highlight(c.src.replace(/^\n+|\s+$/g, ''), c.lang) + '</code></pre></div>').join('') +
+      '<p class="sd-illus">Illustrative code: focused on this step, with imports and error handling trimmed. Library APIs change, so check the docs linked under References.</p>';
+  } else if (S.tab === 'failure') {
+    h += '<div class="sd-fail">' + paras(s.failure) + '</div>';
+  }
+  $('#tabbody').innerHTML = h;
+  $$('#tabbody [data-ci]').forEach(b => b.onclick = () => copyText(codes[+b.dataset.ci].src.trim(), b));
+  $$('#tabbody .ln.fx').forEach(l => l.onclick = e => { const k = l.dataset.field; popover(l, k, (s.fields || {})[k]); e.stopPropagation(); });
+}
+function payloadHTML(s) {
+  const f = S.f;
+  let h = '';
+  let prev = null;
+  if (s.diff !== false) {
+    for (let k = S.i - 1; k >= 0; k--) { const p = f.steps[k].payload; if (p !== undefined) { prev = p; break; } }
+    if (prev && (typeof prev !== 'object' || typeof s.payload !== 'object')) prev = null;
+    if (prev) { // only diff when the two payloads are recognisably the same message
+      const pf = flatten(prev, ''), cf = Object.keys(flatten(s.payload, ''));
+      const shared = cf.filter(k => k in pf).length;
+      if (shared / Math.max(1, cf.length) < 0.35) prev = null;
+    }
+  }
+  h += '<div class="sd-plhead"><span class="sd-plkind">' + esc(s.payloadKind || (typeof s.payload === 'string' ? 'Message' : 'JSON')) + '</span>';
+  if (typeof s.payload === 'object' && prev) h += '<span class="sd-diffkey"><span><i class="sd-json" style="background:var(--add-bg);color:var(--add-ink);border:0;padding:0">+</i>added</span><span><i style="background:var(--chg-bg);color:var(--chg-ink)">~</i>changed</span></span>';
+  else if (typeof s.payload === 'object') h += '<span class="sd-diffkey">new message shape</span>';
+  h += '</div>';
+  if (typeof s.payload === 'string') {
+    h += '<pre class="sd-code"><code>' + highlight(s.payload.replace(/^\n+|\s+$/g, ''), s.payloadLang || 'http') + '</code></pre>';
+  } else {
+    const r = renderJSON(s.payload, prev, s.fields);
+    h += '<pre class="sd-json">' + r.html + '</pre>';
+    if (r.removed.length) h += '<div class="sd-removed">Dropped at this hop: ' + r.removed.map(x => '<s>' + esc(x) + '</s>').join(', ') + '</div>';
+  }
+  if (s.fields) h += '<h3>Fields that matter here</h3><dl class="sd-fields">' + Object.keys(s.fields).map(k => '<dt>' + esc(k) + '</dt><dd>' + rich(s.fields[k]) + '</dd>').join('') + '</dl>';
+  h += '<p class="sd-illus">Illustrative payload: real systems name and shape these differently.</p>';
+  return h;
+}
+
+function showNode(id) {
+  const f = S.f, n = f.nodes.find(x => x.id === id), box = $('#ninfo');
+  const idx = f.steps.map((s, i) => (s.from === id || s.to === id) ? i : -1).filter(i => i >= 0);
+  box.style.setProperty('--kc', kc(n.kind));
+  box.innerHTML = '<b>' + esc(n.label) + '</b> <span class="sd-tag" style="font:11px var(--mono)">' + esc(KIND_LABEL[n.kind] || n.kind) + (n.sub ? ' · ' + esc(n.sub) : '') + '</span><div style="margin-top:4px">' + rich(n.desc || '') + '</div>' +
+    (idx.length ? '<div class="lk">' + idx.map(i => '<button class="sd-dot' + (i === S.i ? ' on' : '') + '" data-i="' + i + '" title="' + esc(f.steps[i].title) + '">' + (i + 1) + '</button>').join('') + '</div>' : '');
+  box.classList.add('show');
+  box.onclick = e => { const b = e.target.closest('[data-i]'); if (b) go(+b.dataset.i, true); };
+  const el = $('#cv [data-node="' + id + '"]'); el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 900);
+}
+
+function setPlaying(on) {
+  S.playing = on; clearInterval(S.timer);
+  $('#bPlay').innerHTML = on ? UI.pause : UI.play; $('#bPlay').setAttribute('aria-label', on ? 'Pause' : 'Play');
+  if (on) { if (S.i >= S.f.steps.length - 1) go(0, true); S.timer = setInterval(() => go(S.i + 1, true), 4200 / S.speed); }
+}
+function stopAll() { if (S) { clearInterval(S.timer); cancelAnimationFrame(S.raf); } }
+
+/* ---------- glossary & edit pages ---------- */
+function termUsage() {
+  const use = {};
+  FLOWS.forEach(f => { const blob = JSON.stringify(f).toLowerCase(); Object.keys(GLOSSARY).forEach(t => { if (blob.includes('{{' + t)) (use[t] = use[t] || []).push(f); }); });
+  return use;
+}
+function renderGlossary() {
+  currentFlow = null; setNav('glossary'); document.title = 'Glossary · System Design Flows'; $('.sd-progressbar').style.width = '0';
+  const use = termUsage();
+  const terms = Object.keys(GLOSSARY).sort();
+  app.innerHTML = '<div class="sd-prose"><div class="sd-eyebrow">Glossary</div><h1>The words, explained plainly</h1><p>' + terms.length + ' terms used across the flows. Underlined words inside a flow open these definitions.</p>' +
+    '<label class="sd-search" style="margin-top:14px">' + UI.search + '<input id="gq" type="search" placeholder="Search terms" autocomplete="off"></label><div class="sd-gl" id="gl"></div></div>';
+  const draw = q => {
+    q = (q || '').toLowerCase();
+    $('#gl').innerHTML = terms.filter(t => !q || t.includes(q) || GLOSSARY[t].toLowerCase().includes(q)).map(t =>
+      '<div class="sd-box" id="t-' + esc(t.replace(/\W+/g, '-')) + '"><b>' + esc(t.charAt(0).toUpperCase() + t.slice(1)) + '</b><p>' + esc(GLOSSARY[t]) + '</p>' +
+      (use[t] ? '<small>Used in: ' + use[t].map(f => '<a href="#/flow/' + f.id + '">' + esc(f.title) + '</a>').join(', ') + '</small>' : '') + '</div>').join('');
+  };
+  draw(''); $('#gq').oninput = e => draw(e.target.value);
+}
+function renderEdit() {
+  currentFlow = null; setNav('edit'); document.title = 'Edit and host · System Design Flows'; $('.sd-progressbar').style.width = '0';
+  app.innerHTML = $('#edit-guide').innerHTML;
+  $$('#app pre code[data-lang]').forEach(c => { c.innerHTML = highlight(c.textContent, c.dataset.lang); });
+}
+
+/* ---------- popover, copy, theme ---------- */
+const pop = document.createElement('div'); pop.className = 'sd-pop'; document.body.appendChild(pop);
+function popover(anchor, title, body) {
+  if (!body) return;
+  pop.innerHTML = '<b>' + esc(title) + '</b>' + rich(body);
+  pop.classList.add('show');
+  const r = anchor.getBoundingClientRect(), pw = Math.min(340, window.innerWidth - 20);
+  pop.style.maxWidth = pw + 'px';
+  let left = Math.min(Math.max(10, r.left), window.innerWidth - pw - 10);
+  pop.style.left = left + 'px';
+  const below = r.bottom + 10 + pop.offsetHeight < window.innerHeight;
+  pop.style.top = (below ? r.bottom + 8 : r.top - pop.offsetHeight - 8) + 'px';
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('.sd-term');
+  if (t) { popover(t, t.textContent, GLOSSARY[t.dataset.term]); e.stopPropagation(); return; }
+  const n = e.target.closest('.sd-n');
+  if (n && S) { showNode(n.dataset.node); const dg = $('#dg'); if (dg && dg.getBoundingClientRect().bottom < 0) dg.scrollIntoView({ behavior: 'smooth' }); return; }
+  if (!e.target.closest('.sd-pop')) pop.classList.remove('show');
+});
+window.addEventListener('scroll', () => pop.classList.remove('show'), { passive: true });
+function copyText(t, btn) {
+  const done = () => { const o = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = o, 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, done); else done();
+}
+document.addEventListener('keydown', e => {
+  if (!S || !$('#cv') || e.target.closest('input,textarea')) return;
+  if (e.key === 'ArrowRight') { go(S.i + 1, true); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { go(S.i - 1, true); e.preventDefault(); }
+  else if (e.key === ' ' && !e.target.closest('button')) { setPlaying(!S.playing); e.preventDefault(); }
+});
+let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(layout, 120); });
+$('#themeBtn').onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('sdflows:theme', r.dataset.theme); } catch (e) {}
+  if (S && $('#cv')) drawWires();
+};
+try { const t = localStorage.getItem('sdflows:theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+window.addEventListener('hashchange', () => { const cur = location.hash; if (S && $('#cv') && cur.startsWith('#/flow/' + S.f.id + '/')) { const n = parseInt(cur.split('/')[3], 10) - 1; if (n !== S.i && n >= 0) go(n, false); return; } route(); });
+window.SD_APP = { go: i => go(i, true), state: () => S, flows: FLOWS };
+route();
+})();
