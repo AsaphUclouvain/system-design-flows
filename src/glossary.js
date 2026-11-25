@@ -149,5 +149,6 @@ terms({
   'ssrf': 'Server-side request forgery: tricking a server into making requests on the attacker\'s behalf, often to internal addresses (databases, the cloud metadata service) the attacker cannot reach directly.',
   'xss': 'Cross-site scripting: an attacker gets their JavaScript to run in another user\'s page, usually by injecting it into content the site displays without escaping.',
   'little\'s law': 'Average number of items in a system = arrival rate × average time each spends inside. Handy for sizing worker pools and connection pools.',
-  'idempotent': 'Safe to repeat: doing it twice has the same effect as doing it once.'
+  'idempotent': 'Safe to repeat: doing it twice has the same effect as doing it once.',
+  'keyframe': 'A video frame stored whole (an I-frame), so decoding can start there. Other frames only store differences from their neighbours. Cuts, seeks and quality switches must land on keyframes.'
 });
