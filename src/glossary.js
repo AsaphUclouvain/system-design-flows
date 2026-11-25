@@ -197,3 +197,6 @@ terms({
 terms({
   'bulkhead': 'Isolating resources (queues, worker pools, connection pools) per kind of work, like the watertight compartments of a ship, so a flood of one kind cannot starve the others.'
 });
+terms({
+  'spatial index': 'An index for two-dimensional data. R-tree style indexes (PostgreSQL GiST) group nearby shapes into nested bounding boxes, so a "near this point" query only looks inside boxes that touch the search area.'
+});
