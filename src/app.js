@@ -10,7 +10,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const app = $('#app');
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
+const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
 const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party' };
 
 /* ---------- icons ---------- */

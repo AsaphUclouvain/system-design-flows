@@ -1,7 +1,7 @@
 flow({
   id: 'ticket-booking',
   title: 'Ticket sale: waiting room, seat holds and checkout',
-  category: 'Commerce and money',
+  category: 'Commerce & money',
   tags: ['Waiting room', 'Seat holds with TTL', 'Optimistic concurrency', 'Hot inventory', 'Payment timeout'],
   summary: 'A concert opens for sale and 400,000 fans arrive in the first minute for 18,000 seats. Follow a fan through a virtual queue, a seat hold that expires on its own after 8 minutes, a payment, and a booking that can never sell the same seat twice.',
   requirements: {

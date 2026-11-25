@@ -1,7 +1,7 @@
 flow({
   id: 'saga-order',
   title: 'Distributed transaction: order saga with compensation',
-  category: 'Commerce and money',
+  category: 'Commerce & money',
   tags: ['Saga', 'Orchestration', 'Outbox', 'Idempotency', 'Compensating transactions', 'Temporal-style workflow'],
   summary: 'Placing an order touches three services that each own their database: orders, inventory and payments. There is no shared transaction. Follow an orchestrator that runs the steps, persists its state after each one, and when the payment is declined undoes the stock reservation, so the system ends consistent.',
   requirements: {

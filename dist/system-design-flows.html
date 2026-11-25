@@ -6465,7 +6465,7 @@ Redis (BFF)
 flow({
   id: 'saga-order',
   title: 'Distributed transaction: order saga with compensation',
-  category: 'Commerce and money',
+  category: 'Commerce & money',
   tags: ['Saga', 'Orchestration', 'Outbox', 'Idempotency', 'Compensating transactions', 'Temporal-style workflow'],
   summary: 'Placing an order touches three services that each own their database: orders, inventory and payments. There is no shared transaction. Follow an orchestrator that runs the steps, persists its state after each one, and when the payment is declined undoes the stock reservation, so the system ends consistent.',
   requirements: {
@@ -6744,7 +6744,7 @@ CREATE TABLE processed_commands (id TEXT PRIMARY KEY, at TIMESTAMPTZ DEFAULT now
 flow({
   id: 'ticket-booking',
   title: 'Ticket sale: waiting room, seat holds and checkout',
-  category: 'Commerce and money',
+  category: 'Commerce & money',
   tags: ['Waiting room', 'Seat holds with TTL', 'Optimistic concurrency', 'Hot inventory', 'Payment timeout'],
   summary: 'A concert opens for sale and 400,000 fans arrive in the first minute for 18,000 seats. Follow a fan through a virtual queue, a seat hold that expires on its own after 8 minutes, a payment, and a booking that can never sell the same seat twice.',
   requirements: {
@@ -7001,7 +7001,7 @@ CREATE TABLE sold_seats (
 flow({
   id: 'collab-editing',
   title: 'Collaborative editing (CRDT document sync)',
-  category: 'Real-time and media',
+  category: 'Real-time',
   tags: ['CRDT (Yjs)', 'WebSocket rooms', 'Awareness / cursors', 'Offline edits', 'Snapshots + update log'],
   summary: 'Two people edit the same document at once, one of them on a train with a flaky connection. Follow a keystroke as a CRDT update through a WebSocket room, see it merge without conflicts with an edit made offline, and see how the server stores updates and snapshots so a document of a million edits still opens instantly.',
   requirements: {
@@ -7480,6 +7480,501 @@ CREATE INDEX ON orders (user_id, id DESC);`,
   ]
 });
 
+flow({
+  id: 'observability-pipeline',
+  title: 'Metrics, logs and traces pipeline',
+  category: 'Data at scale',
+  tags: ['OpenTelemetry', 'Prometheus', 'Structured logs', 'Tail sampling', 'SLO burn-rate alerts'],
+  summary: 'A checkout request gets slow. Follow how one FastAPI request produces a trace, a log line and metric samples, how a collector batches, samples and routes them, and how an SLO burn-rate alert pages the on-call engineer, who jumps from the alert to the exact slow trace and its logs.',
+  requirements: {
+    functional: [
+      'Every service emits metrics, structured logs and traces with shared ids.',
+      'Engineers can go from an alert to the slow requests and their logs in a few clicks.',
+      'Alerts fire on user-visible symptoms (SLOs), not on every CPU spike.'
+    ],
+    nonFunctional: [
+      'Telemetry never slows down or breaks the request path.',
+      'Keep 100% of error and slow traces, but only a few percent of normal ones, to control cost.',
+      'Alert within 5 minutes of a serious SLO breach.'
+    ]
+  },
+  estimates: [
+    { label: 'Requests', value: '20,000 / s', note: 'Across all services.' },
+    { label: 'Spans', value: '≈ 300,000 / s', note: '~15 spans per request before sampling; ~6% kept after tail sampling.' },
+    { label: 'Log lines', value: '≈ 120,000 / s', note: 'About 60 MB/s raw JSON; compressed ~8× in storage.' },
+    { label: 'Active series', value: '≈ 2 million', note: 'Kept under control by banning high-cardinality labels like user id.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'svc', label: 'Checkout API', sub: 'FastAPI + OTel SDK', kind: 'service', x: 0, y: 1, desc: 'Instrumented automatically (HTTP, SQL, Redis) plus a few business spans.' },
+    { id: 'col', label: 'OTel Collector', sub: 'agent + gateway', kind: 'worker', icon: 'pulse', x: 1, y: 1, desc: 'Receives all telemetry, batches it, samples traces, adds metadata and routes each signal to its store.' },
+    { id: 'prom', label: 'Metrics store', sub: 'Prometheus / Mimir', kind: 'db', icon: 'chart', x: 2, y: 0, desc: 'Time series: counters and histograms with labels.' },
+    { id: 'logs', label: 'Log store', sub: 'Loki', kind: 'db', x: 2, y: 1, desc: 'Structured logs indexed by a few labels, searchable by trace id.' },
+    { id: 'traces', label: 'Trace store', sub: 'Tempo / Jaeger', kind: 'db', x: 2, y: 2, desc: 'Spans grouped by trace id.' },
+    { id: 'alert', label: 'Alert rules', sub: 'Alertmanager', kind: 'service', icon: 'bell', x: 3, y: 0, desc: 'Evaluates SLO burn-rate rules and routes alerts.' },
+    { id: 'oncall', label: 'On-call engineer', sub: 'PagerDuty', kind: 'client', icon: 'user', x: 3, y: 1, desc: 'Gets paged and investigates.' },
+    { id: 'graf', label: 'Dashboards', sub: 'Grafana', kind: 'client', icon: 'chart', x: 3, y: 2, desc: 'Graphs with exemplars linking to traces, and trace-to-logs links.' }
+  ],
+  steps: [
+    {
+      from: 'svc', to: 'svc', label: 'request → spans',
+      title: 'One request produces a trace',
+      caption: 'A checkout request enters the API. The OpenTelemetry middleware starts a root span, reads or creates the trace context, and every HTTP, SQL and Redis call inside becomes a child span.',
+      text: ['A trace is a tree of spans sharing one trace id. The id travels between services in the `traceparent` header ({{trace context}}), so the payments service\'s spans join the same tree.', 'Here the SQL span for the inventory query took 1.84 s of a 2.1 s request: that is what the engineer will find later.'],
+      payloadKind: 'Spans (simplified)',
+      payload: { trace_id: '4bf92f3577b34da6a3ce929d0e0e4736', spans: [{ span_id: '00f067aa0ba902b7', name: 'POST /v1/checkout', duration_ms: 2104, status: 'OK', attrs: { 'http.route': '/v1/checkout', 'http.status_code': 200 } }, { span_id: 'a1b2c3d4e5f60718', parent: '00f067aa0ba902b7', name: 'SELECT inventory', duration_ms: 1840, attrs: { 'db.system': 'postgresql', 'db.statement': 'SELECT … FROM stock WHERE sku = ANY($1) FOR UPDATE' } }, { span_id: 'b2c3d4e5f6071829', parent: '00f067aa0ba902b7', name: 'POST payments/charge', duration_ms: 212 }] },
+      code: [{ lang: 'python', title: 'Instrument FastAPI', src: String.raw`
+from opentelemetry import trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+provider = TracerProvider(resource=Resource.create({"service.name": "checkout-api",
+                                                    "deployment.environment": "prod"}))
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="localhost:4317"),
+                                               max_queue_size=8192))   # drops, never blocks
+trace.set_tracer_provider(provider)
+FastAPIInstrumentor.instrument_app(app)
+AsyncPGInstrumentor().instrument()
+
+tracer = trace.get_tracer("checkout")
+
+@app.post("/v1/checkout")
+async def checkout(body: CheckoutIn):
+    with tracer.start_as_current_span("reserve_and_charge") as sp:
+        sp.set_attribute("cart.items", len(body.items))       # low-cardinality only
+        ...` }]
+    },
+    {
+      from: 'svc', to: 'svc', label: 'log + metrics',
+      title: 'The same request writes a log line and metric samples',
+      caption: 'The handler logs one structured JSON line that includes the trace id, and the middleware records the duration in a histogram. Three signals, joined by the trace id.',
+      text: ['Logs are JSON, not free text, so they can be filtered by field. Putting `trace_id` in every line is what makes "show me the logs of this trace" possible.', 'Metric labels must have few values. `route` and `status` are fine; `user_id` would create a time series per user and overwhelm the metrics store.'],
+      payloadKind: 'Log line + metric',
+      payload: { log: { ts: '2026-11-25T11:41:43.902Z', level: 'warning', service: 'checkout-api', msg: 'slow inventory lock', trace_id: '4bf92f3577b34da6a3ce929d0e0e4736', span_id: 'a1b2c3d4e5f60718', order_id: 'ord_7731', wait_ms: 1840 }, metric: { name: 'http_server_duration_seconds', type: 'histogram', labels: { route: '/v1/checkout', method: 'POST', status: '200' }, observed: 2.104, bucket: 'le="2.5"', exemplar: { trace_id: '4bf92f3577b34da6a3ce929d0e0e4736' } } },
+      fields: { exemplar: 'A sample trace id attached to a histogram bucket. On a latency graph you can click a dot and open that exact trace.' },
+      code: [{ lang: 'python', title: 'JSON logs with trace ids', src: String.raw`
+import structlog
+from opentelemetry import trace
+
+def add_trace(_, __, ev):
+    ctx = trace.get_current_span().get_span_context()
+    if ctx.is_valid:
+        ev["trace_id"] = format(ctx.trace_id, "032x")
+        ev["span_id"] = format(ctx.span_id, "016x")
+    return ev
+
+structlog.configure(processors=[structlog.processors.TimeStamper(fmt="iso"),
+                                add_trace, structlog.processors.JSONRenderer()])
+log = structlog.get_logger(service="checkout-api")
+log.warning("slow inventory lock", order_id=oid, wait_ms=waited)` }]
+    },
+    {
+      from: 'svc', to: 'col', label: 'OTLP/gRPC (batched)', async: true,
+      title: 'Ship telemetry without slowing the request',
+      caption: 'The SDK queues spans in memory and exports them in batches every second to a collector agent on the same node. If the collector is slow, the queue drops data instead of blocking requests.',
+      text: ['This is the rule of observability plumbing: losing some telemetry is acceptable, slowing down users is not. Drops are counted in a metric so you know when it happens.'],
+      payloadKind: 'OTLP export',
+      payload: { endpoint: 'localhost:4317', protocol: 'OTLP/gRPC', batch: { spans: 512, bytes_compressed: 41820 }, queue: { size: 8192, used: 640, dropped_total: 0 }, every_ms: 1000 },
+      failure: ['**Collector down:** the SDK retries briefly, then drops; `otel_exporter_dropped_spans_total` rises and has its own alert.']
+    },
+    {
+      from: 'col', to: 'col', label: 'tail sampling',
+      title: 'Decide which traces to keep',
+      caption: 'The collector gateway waits about 10 s for all spans of a trace to arrive, then decides: keep every trace with an error or slower than 1 s, and 5% of the rest. This slow trace is kept.',
+      text: ['With {{tail sampling}} the decision is made after seeing the whole trace. Head sampling (deciding at the first span) is cheaper but throws away most of the interesting slow and failed requests.', 'All spans of one trace must reach the same gateway instance, so agents route by trace id with consistent hashing.'],
+      payloadKind: 'Collector config (excerpt)',
+      payloadLang: 'text',
+      payload: String.raw`
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+      - { name: errors,  type: status_code, status_code: { status_codes: [ERROR] } }
+      - { name: slow,    type: latency,     latency: { threshold_ms: 1000 } }
+      - { name: baseline, type: probabilistic, probabilistic: { sampling_percentage: 5 } }
+
+trace 4bf92f35…  spans=17  duration=2104ms  -> KEEP (policy: slow)`,
+      code: [{ lang: 'text', title: 'Collector pipelines', src: String.raw`
+receivers:  { otlp: { protocols: { grpc: {}, http: {} } } }
+processors: [memory_limiter, k8sattributes, tail_sampling, batch]
+exporters:
+  prometheusremotewrite: { endpoint: http://mimir/api/v1/push }
+  loki:                  { endpoint: http://loki:3100/loki/api/v1/push }
+  otlp/tempo:            { endpoint: tempo:4317 }
+service:
+  pipelines:
+    traces:  { receivers: [otlp], processors: [memory_limiter, k8sattributes, tail_sampling, batch], exporters: [otlp/tempo] }
+    metrics: { receivers: [otlp], processors: [memory_limiter, k8sattributes, batch], exporters: [prometheusremotewrite] }
+    logs:    { receivers: [otlp], processors: [memory_limiter, k8sattributes, batch], exporters: [loki] }` }]
+    },
+    {
+      from: 'col', to: 'traces', label: 'kept spans',
+      title: 'Store the trace',
+      caption: 'Kept traces go to the trace store, which writes them to object storage in blocks indexed by trace id. Lookup by id is fast; searching by attributes uses a small extra index.',
+      text: ['Traces are kept 14 days. Storing only ~6% of them is what makes keeping full detail affordable.'],
+      payloadKind: 'Trace store write',
+      payload: { trace_id: '4bf92f3577b34da6a3ce929d0e0e4736', service: 'checkout-api', root: 'POST /v1/checkout', duration_ms: 2104, spans: 17, block: 's3://traces/tenant-shop/2026-11-25/blk_01JDQ…', retention_days: 14 }
+    },
+    {
+      from: 'col', to: 'logs', label: 'log streams',
+      title: 'Store the logs',
+      caption: 'Logs go to Loki, which indexes only a few labels (service, environment, level) and stores the JSON compressed. A query filters by labels first, then scans for the trace id.',
+      text: ['Indexing every field of every log line is expensive. Indexing a handful of labels and scanning compressed chunks is far cheaper and fast enough when you start from a trace id and a time window.'],
+      payloadKind: 'Log query',
+      payloadLang: 'text',
+      payload: String.raw`
+{service="checkout-api", env="prod"} | json | trace_id="4bf92f3577b34da6a3ce929d0e0e4736"
+
+2026-11-25T11:41:43.902Z  warning  slow inventory lock   order_id=ord_7731 wait_ms=1840
+2026-11-25T11:41:44.010Z  info     checkout completed    order_id=ord_7731 total=117.00`
+    },
+    {
+      from: 'col', to: 'prom', label: 'remote write',
+      title: 'Store the metrics',
+      caption: 'Histogram buckets and counters are written to the metrics store every 15 s. From them, the SLO is computed: the share of checkout requests faster than 1 s and not 5xx.',
+      text: ['An {{slo}} turns raw metrics into a promise: "99.5% of checkouts succeed in under 1 s over 30 days". The remaining 0.5% is the error budget.'],
+      payloadKind: 'PromQL',
+      payloadLang: 'text',
+      payload: String.raw`
+# good events / all events over 5 minutes
+sum(rate(http_server_duration_seconds_bucket{route="/v1/checkout",le="1",status!~"5.."}[5m]))
+/
+sum(rate(http_server_duration_seconds_count{route="/v1/checkout"}[5m]))
+
+=> 0.871      # 12.9% of checkouts are slow or failing right now`
+    },
+    {
+      from: 'prom', to: 'alert', label: 'burn rate > 14.4',
+      title: 'A burn-rate alert fires',
+      caption: 'The error budget is being spent 25 times faster than allowed, over both the last hour and the last 5 minutes. That exceeds the paging threshold of 14.4, so the alert fires.',
+      text: ['{{burn rate}} alerts page on user impact, not on causes. Two windows avoid both slow detection (long window alone) and flapping on short blips (short window alone).', 'Here the error ratio is 12.9% against a budget of 0.5%: a burn rate of about 26.'],
+      payloadKind: 'Alert rule',
+      payloadLang: 'text',
+      payload: String.raw`
+- alert: CheckoutSLOFastBurn
+  expr: |
+    (1 - slo:checkout_good:ratio_rate1h) / (1 - 0.995) > 14.4
+    and
+    (1 - slo:checkout_good:ratio_rate5m) / (1 - 0.995) > 14.4
+  labels: { severity: page, team: checkout }
+  annotations:
+    summary: "Checkout SLO burning {{ $value | printf \"%.0f\" }}x budget"
+    dashboard: https://grafana.example/d/checkout-slo
+
+state: FIRING  value: 25.8  since: 2026-11-25T11:46:00Z`,
+      failure: ['**Alertmanager down:** a "dead man\'s switch" alert that always fires stops arriving at PagerDuty, which pages about the monitoring itself.']
+    },
+    {
+      from: 'alert', to: 'oncall', label: 'page',
+      title: 'The on-call engineer is paged',
+      caption: 'Alertmanager groups related alerts, routes by team label and pages the checkout on-call. The page links straight to the SLO dashboard.',
+      text: ['Grouping matters: forty pods failing produce one page, not forty. Lower-severity budget burns (slow over days) create a ticket instead of waking someone.'],
+      payloadKind: 'Page',
+      payload: { to: 'checkout on-call (Sam)', title: '[FIRING] CheckoutSLOFastBurn: burning 26x budget', links: { dashboard: 'https://grafana.example/d/checkout-slo', runbook: 'https://runbooks.example/checkout-slo' }, grouped_alerts: 1 }
+    },
+    {
+      from: 'graf', to: 'traces', label: 'exemplar → trace',
+      title: 'From the graph to the slow trace',
+      caption: 'On the latency panel, Sam clicks an exemplar dot in the 2.5 s bucket. Grafana opens trace 4bf92f35…, whose waterfall shows the inventory SELECT … FOR UPDATE taking 1.84 s.',
+      text: ['This is why exemplars and trace ids matter: from "something is slow" to "this query waits on a lock" in one click, without guessing.'],
+      payloadKind: 'Trace waterfall',
+      payloadLang: 'text',
+      payload: String.raw`
+POST /v1/checkout                         ████████████████████  2104 ms
+  redis GET cart:usr_ana                  ▏                       1 ms
+  SELECT inventory … FOR UPDATE           █████████████████     1840 ms
+  POST payments/charge                                     ██     212 ms
+  INSERT orders                                              ▏     4 ms`
+    },
+    {
+      from: 'graf', to: 'logs', label: 'trace → logs',
+      title: 'From the trace to its logs, and the cause',
+      caption: 'One more click shows the logs of that trace and of others in the same minute: a bulk stock import started at 11:45 and holds row locks on popular SKUs. Sam pauses the import; the burn rate drops within minutes.',
+      text: ['The fix for the future is in the import job (smaller batches, `SKIP LOCKED`), tracked in the incident review. The pipeline\'s job was to make the cause visible in minutes.'],
+      payloadKind: 'Logs around the incident',
+      payloadLang: 'text',
+      payload: String.raw`
+11:45:02  stock-import  info     batch started  rows=180000 lock=row
+11:46:10  checkout-api  warning  slow inventory lock  wait_ms=1840  trace_id=4bf92f35…
+11:46:11  checkout-api  warning  slow inventory lock  wait_ms=2210  trace_id=9a0c11e2…
+11:52:40  stock-import  info     paused by sam (incident INC-2291)
+11:55:00  alertmanager  info     CheckoutSLOFastBurn resolved`
+    }
+  ],
+  api: [
+    { verb: 'GRPC', path: 'opentelemetry.proto.collector.trace.v1.TraceService/Export', desc: 'OTLP export from SDKs to collectors (also metrics and logs).' },
+    { verb: 'POST', path: '/api/v1/push', desc: 'Prometheus remote write into the metrics store.' },
+    { verb: 'GET', path: '/api/traces/{trace_id}', desc: 'Fetch a trace from the trace store.' }
+  ],
+  schemaLang: 'text',
+  schemaNote: 'What each store keeps and for how long.',
+  schema: String.raw`
+Signal    Store           Indexed by                              Retention   Sampled
+metrics   Mimir           metric name + labels (low cardinality)  13 months   no (aggregated)
+logs      Loki            service, env, level labels only         30 days     no (debug off in prod)
+traces    Tempo           trace id (+ small attribute index)      14 days     tail: errors, >1 s, 5% rest
+
+Shared fields: service.name, deployment.environment, trace_id, span_id`,
+  decisions: [
+    { q: 'What do you alert on?', options: [
+      { verdict: 'bad', name: 'CPU above 80%, every error log', why: 'Noisy pages that often have no user impact; people learn to ignore them.' },
+      { verdict: 'great', name: 'Multi-window SLO burn rate', why: 'Pages only when users are hurt enough to threaten the objective.' }
+    ] },
+    { q: 'How do you sample traces?', options: [
+      { verdict: 'ok', name: 'Head sampling 1%', why: 'Cheap, but 99% of slow and failed requests are lost.' },
+      { verdict: 'great', name: 'Tail sampling: all errors and slow traces + a small baseline', why: 'Keeps the traces you actually need for debugging at a fraction of the cost.' }
+    ] }
+  ],
+  refs: [
+    { label: 'OpenTelemetry: Python instrumentation', url: 'https://opentelemetry.io/docs/languages/python/' },
+    { label: 'Google SRE Workbook: Alerting on SLOs', url: 'https://sre.google/workbook/alerting-on-slos/' },
+    { label: 'OpenTelemetry Collector: tail sampling processor', url: 'https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor' }
+  ]
+});
+
+flow({
+  id: 'leaderboard',
+  title: 'Real-time game leaderboard',
+  category: 'Product systems',
+  tags: ['Redis sorted sets', 'Rank queries', 'Score validation', 'Seasonal boards', 'Sharded top-K'],
+  summary: 'Ten million players finish matches and want to see their rank right away, the global top 10, and the players just above and below them. Follow a score from the game client through validation, a Redis sorted set update, rank queries in O(log n), and the weekly reset that archives a season.',
+  requirements: {
+    functional: [
+      'After a match, the player sees their new global rank within a second.',
+      'Show the top 100, the player\'s own rank, and the 5 players above and below.',
+      'Weekly and all-time boards; friends-only board.'
+    ],
+    nonFunctional: [
+      'Rank queries under 10 ms at 50,000 reads per second.',
+      'Cheated scores must not appear on the board.',
+      'A Redis failure loses no scores: the database stays the source of truth.'
+    ]
+  },
+  estimates: [
+    { label: 'Players', value: '10 million', note: 'Ranked on the weekly board.' },
+    { label: 'Score writes', value: '5,000 / s', note: 'Match completions at peak.' },
+    { label: 'Board memory', value: '≈ 1 GB', note: 'A sorted set costs roughly 80–100 bytes per member: 10M × ~100 B.' },
+    { label: 'Rank lookup', value: 'O(log n)', note: 'ZREVRANK on a skip list: ~23 levels for 10M members.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'game', label: 'Game client', sub: 'match ends', kind: 'client', icon: 'phone', x: 0, y: 0, desc: 'Shows the result screen and the new rank.' },
+    { id: 'match', label: 'Match server', sub: 'authoritative', kind: 'service', icon: 'server', x: 0, y: 2, desc: 'Ran the match and knows the real result; signs it.' },
+    { id: 'api', label: 'Leaderboard API', sub: 'FastAPI', kind: 'service', icon: 'trophy', x: 1, y: 1, desc: 'Validates results, updates boards, answers rank queries.' },
+    { id: 'db', label: 'Scores DB', sub: 'PostgreSQL', kind: 'db', x: 2, y: 2, desc: 'Every accepted match result; the source of truth.' },
+    { id: 'redis', label: 'Boards', sub: 'Redis sorted sets', kind: 'cache', x: 2, y: 0, desc: 'One sorted set per board: member = player id, score = points.' },
+    { id: 'web', label: 'Leaderboard page', sub: 'Next.js', kind: 'client', icon: 'chart', x: 3, y: 0, desc: 'Public top-100 page, revalidated every few seconds.' },
+    { id: 'cron', label: 'Season job', sub: 'weekly', kind: 'worker', icon: 'clock', x: 3, y: 2, desc: 'Closes the weekly board, archives it and hands out rewards.' },
+    { id: 'archive', label: 'Season archive', sub: 'S3 + DB', kind: 'storage', x: 3, y: 1, desc: 'Final standings of past seasons.' }
+  ],
+  steps: [
+    {
+      from: 'match', to: 'api', label: 'POST /results (signed)',
+      title: 'The match server reports the result',
+      caption: 'The score comes from the authoritative match server, not from the player\'s device. It signs the result with an HMAC so the API knows it was not changed or invented.',
+      text: ['If the client reported its own score, a modified client could send any number. Server-authoritative results remove the easiest kind of cheating.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'POST', path: '/internal/v1/results', headers: { 'X-Signature': 'sha256=8f0c…', 'X-Match-Server': 'eu-gs-14' }, body: { match_id: 'm_01JDQH2', mode: 'ranked', ended_at: '2026-11-25T11:41:40Z', results: [{ player: 'p_ana', points: 1340, kills: 9, duration_s: 1210 }, { player: 'p_ben', points: 880, kills: 4, duration_s: 1210 }] } },
+      fields: { match_id: 'Unique per match. Used as an idempotency key: replaying the same result does not add points twice.' }
+    },
+    {
+      from: 'api', to: 'db', label: 'validate + INSERT',
+      title: 'Validate and record the result',
+      caption: 'The API checks the signature, the match id has not been seen, and the numbers are plausible (1,340 points in 20 minutes is within limits). Then it stores the result in the database.',
+      text: ['The database row is written first. If Redis is lost, the boards can be rebuilt from these rows; the reverse is not true.', 'Plausibility rules (points per minute, kills per match) flag outliers for review instead of silently accepting them.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+INSERT INTO match_results (match_id, player_id, points, season, ended_at)
+VALUES ('m_01JDQH2', 'p_ana', 1340, '2026-W48', '2026-11-25T11:41:40Z'),
+       ('m_01JDQH2', 'p_ben',  880, '2026-W48', '2026-11-25T11:41:40Z')
+ON CONFLICT (match_id, player_id) DO NOTHING      -- replay-safe
+RETURNING player_id, points;`,
+      code: [{ lang: 'python', title: 'Result endpoint', src: String.raw`
+@router.post("/internal/v1/results")
+async def results(req: Request, body: MatchResult):
+    raw = await req.body()
+    if not hmac.compare_digest(sign(raw), req.headers["X-Signature"]):
+        raise HTTPException(401)
+    for r in body.results:
+        if r.points / max(r.duration_s / 60, 1) > MAX_POINTS_PER_MIN:
+            await flag_for_review(body.match_id, r)
+            continue
+    inserted = await insert_results(body)            # ON CONFLICT DO NOTHING
+    for r in inserted:                               # only new rows touch the boards
+        await bump_boards(r.player_id, r.points)
+    return {"accepted": len(inserted)}` }],
+      failure: ['**Duplicate delivery:** `ON CONFLICT DO NOTHING` returns no rows, so the boards are not incremented again.', '**Implausible score:** stored with `status = review`, not added to boards, and an anti-cheat analyst gets a queue item.']
+    },
+    {
+      from: 'api', to: 'redis', label: 'ZINCRBY × 3 boards',
+      title: 'Add the points to each board',
+      caption: 'In one pipeline, the API adds 1,340 points to Ana\'s entry in the weekly board, the all-time board and the regional board. Each ZINCRBY is O(log n).',
+      text: ['A Redis {{sorted set}} keeps members ordered by score in a skip list plus a hash map. Updating a score moves the member to its new position; no full re-sort ever happens.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> MULTI
+> ZINCRBY lb:weekly:2026-W48 1340 p_ana
+> ZINCRBY lb:alltime          1340 p_ana
+> ZINCRBY lb:weekly:2026-W48:eu 1340 p_ana
+> EXEC
+1) "48210"        -- Ana's weekly total
+2) "1902455"
+3) "48210"`,
+      failure: ['**Redis unavailable:** the result is already in the database; a retry queue re-applies the increments when Redis recovers. Increments are tied to `match_id` in a small applied-set so a retry does not double count.']
+    },
+    {
+      from: 'game', to: 'api', label: 'GET /me/rank',
+      title: 'The result screen asks for the new rank',
+      caption: 'The game client asks for Ana\'s weekly rank and the players around her. One request returns everything the result screen shows.',
+      text: ['The client polls once after the match ends. A push channel would also work, but one request a second after the match is simpler and enough here.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', path: '/v1/boards/weekly/me?around=5', headers: { Authorization: 'Bearer eyJ… (sub: p_ana)' } }
+    },
+    {
+      from: 'api', to: 'redis', label: 'ZREVRANK + ZREVRANGE',
+      title: 'Rank and neighbours in O(log n)',
+      caption: 'ZREVRANK gives Ana\'s position from the top (0-based). ZREVRANGE with that position ± 5 returns her neighbours with their scores. Both are logarithmic.',
+      text: ['With a SQL table, "what is my rank" means counting all players with more points: O(n) per query, too slow at 10 million rows and 50,000 queries a second.', 'Ties: equal scores are ordered by member id, which is arbitrary. To rank earlier achievers first, encode time in the score (points × 10^10 + (MAX_TS − ts)).'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> ZREVRANK lb:weekly:2026-W48 p_ana
+(integer) 18342                       -- rank 18,343
+> ZREVRANGE lb:weekly:2026-W48 18337 18347 WITHSCORES
+ 1) "p_kito"   2) "48290"
+ 3) "p_mara"   4) "48260"
+ …
+11) "p_ana"   12) "48210"
+ …
+> ZCARD lb:weekly:2026-W48
+(integer) 9871204`,
+      code: [{ lang: 'python', title: 'Rank endpoint', src: String.raw`
+@router.get("/v1/boards/{board}/me")
+async def my_rank(board: str, around: int = 5, user=Depends(current_player)):
+    key = board_key(board)                           # lb:weekly:2026-W48
+    rank = await redis.zrevrank(key, user.id)
+    if rank is None:
+        return {"ranked": False}
+    lo, hi = max(rank - around, 0), rank + around
+    async with redis.pipeline(transaction=False) as p:
+        p.zrevrange(key, lo, hi, withscores=True)
+        p.zcard(key)
+        rows, total = await p.execute()
+    names = await profiles.names([m for m, _ in rows])   # cached lookups
+    return {"rank": rank + 1, "total": total,
+            "percentile": round(100 * (1 - rank / total), 1),
+            "around": [{"rank": lo + i + 1, "player": names[m], "points": int(s)}
+                       for i, (m, s) in enumerate(rows)]}` }]
+    },
+    {
+      from: 'api', to: 'game', label: 'rank 18,343 (top 0.2%)', reply: true,
+      title: 'The player sees their rank',
+      caption: 'The result screen animates Ana climbing from 21,907th to 18,343rd, top 0.2% this week, with the five players just above her as the next targets.',
+      text: ['Showing neighbours instead of only the top 10 keeps the board motivating for the 99.99% of players who will never be in the top 10.'],
+      payloadKind: 'HTTP response',
+      payload: { status: 200, body: { board: 'weekly 2026-W48', rank: 18343, previous_rank: 21907, total: 9871204, percentile: 99.8, points: 48210, around: [{ rank: 18338, player: 'Kito', points: 48290 }, { rank: 18339, player: 'Mara', points: 48260 }, { rank: 18343, player: 'Ana (you)', points: 48210 }, { rank: 18344, player: 'Jules', points: 48200 }] } }
+    },
+    {
+      from: 'web', to: 'api', label: 'GET top 100 (cached)',
+      title: 'The public top 100 is cached',
+      caption: 'The public leaderboard page shows the top 100. It is the same for everyone, so the Next.js page revalidates every 5 seconds instead of hitting Redis for every visitor.',
+      text: ['Personal views (my rank) are computed per request; shared views (top 100) are cached. That split keeps Redis load proportional to active players, not page views.'],
+      payloadKind: 'Next.js + Redis',
+      payloadLang: 'text',
+      payload: String.raw`
+// app/leaderboard/page.tsx
+export const revalidate = 5;    // ISR: at most one API call per 5 s per region
+
+> ZREVRANGE lb:weekly:2026-W48 0 99 WITHSCORES
+1) "p_zed"  2) "912400"
+3) "p_yuna" 4) "905120"   …`
+    },
+    {
+      from: 'api', to: 'redis', label: 'friends board (ZUNION)',
+      title: 'A friends-only board',
+      caption: 'For the friends tab, the API takes Ana\'s 140 friends and reads their weekly scores with one ZMSCORE call, then sorts those 140 numbers in memory.',
+      text: ['For small groups, reading scores and sorting in the API is simplest. Building a separate sorted set per player would cost memory for every player\'s friend list.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> ZMSCORE lb:weekly:2026-W48 p_ben p_chloe p_dan … (140 ids)
+1) "36120"
+2) (nil)            -- has not played this week
+3) "51900"
+…
+-- API sorts 140 values: Ana is 4th among friends`
+    },
+    {
+      from: 'cron', to: 'redis', label: 'close season W48',
+      title: 'The weekly season closes',
+      caption: 'Monday 00:00 UTC, the season job freezes the weekly board: new results already go to lb:weekly:2026-W49. It reads the final top 10,000 to award prizes.',
+      text: ['New results switch boards by the season id computed from `ended_at`, so a match that ended at 23:59:58 on Sunday still counts for W48 even if it is reported a few seconds later.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> ZREVRANGE lb:weekly:2026-W48 0 9999 WITHSCORES      -- prize winners
+> EXPIRE lb:weekly:2026-W48 1209600                    -- keep 2 weeks for disputes
+(integer) 1`
+    },
+    {
+      from: 'cron', to: 'archive', label: 'archive standings',
+      title: 'Archive the final standings',
+      caption: 'The final standings are written to the database (top 10,000 with ranks) and the full board is dumped to S3. Rewards are granted from the database copy, idempotently per season and player.',
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+INSERT INTO season_standings (season, rank, player_id, points)
+SELECT '2026-W48', rank, player_id, points FROM staging_w48   -- loaded from ZREVRANGE
+ON CONFLICT DO NOTHING;
+
+INSERT INTO rewards (season, player_id, reward)
+SELECT season, player_id, CASE WHEN rank <= 100 THEN 'gold_frame' ELSE 'silver_badge' END
+FROM season_standings WHERE season = '2026-W48' AND rank <= 10000
+ON CONFLICT (season, player_id) DO NOTHING;`,
+      text: ['If Redis had lost data, the job could still rebuild the weekly board from `match_results` with one SUM … GROUP BY over the season, which is why every result goes to the database first.']
+    }
+  ],
+  api: [
+    { verb: 'POST', path: '/internal/v1/results', desc: 'Signed match results from match servers.' },
+    { verb: 'GET', path: '/v1/boards/{board}/top?limit=100', desc: 'Top N, cached for 5 s.' },
+    { verb: 'GET', path: '/v1/boards/{board}/me?around=5', desc: 'My rank, percentile and neighbours.' },
+    { verb: 'GET', path: '/v1/boards/{board}/friends', desc: 'Ranking among my friends.' }
+  ],
+  schema: String.raw`
+CREATE TABLE match_results (
+  match_id TEXT, player_id TEXT, points INT NOT NULL, season TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'accepted', ended_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (match_id, player_id)
+);
+CREATE INDEX ON match_results (season, player_id);
+CREATE TABLE season_standings (season TEXT, rank INT, player_id TEXT, points INT,
+                               PRIMARY KEY (season, rank));
+
+-- Redis
+-- lb:weekly:{season}        ZSET player -> points
+-- lb:weekly:{season}:{region}
+-- lb:alltime`,
+  decisions: [
+    { q: 'Where do ranks come from?', options: [
+      { verdict: 'bad', name: 'SELECT COUNT(*) WHERE points > mine', why: 'O(n) per query; 10M rows × 50k queries/s is impossible.' },
+      { verdict: 'great', name: 'Redis sorted sets, rebuilt from the database if needed', why: 'O(log n) updates and rank queries, and the database stays the truth.' }
+    ] },
+    { q: 'Who reports scores?', options: [
+      { verdict: 'bad', name: 'The game client', why: 'Any modified client can post any score.' },
+      { verdict: 'great', name: 'The authoritative match server, signed, with plausibility checks', why: 'Removes the easy cheats and flags the subtle ones.' }
+    ] }
+  ],
+  refs: [
+    { label: 'Redis: Sorted sets', url: 'https://redis.io/docs/latest/develop/data-types/sorted-sets/' },
+    { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' }
+  ]
+});
+
 </script>
 <script>
 /* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
@@ -7494,7 +7989,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const app = $('#app');
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
+const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
 const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party' };
 
 /* ---------- icons ---------- */

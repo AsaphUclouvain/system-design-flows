@@ -1,7 +1,7 @@
 flow({
   id: 'collab-editing',
   title: 'Collaborative editing (CRDT document sync)',
-  category: 'Real-time and media',
+  category: 'Real-time',
   tags: ['CRDT (Yjs)', 'WebSocket rooms', 'Awareness / cursors', 'Offline edits', 'Snapshots + update log'],
   summary: 'Two people edit the same document at once, one of them on a train with a flaky connection. Follow a keystroke as a CRDT update through a WebSocket room, see it merge without conflicts with an edit made offline, and see how the server stores updates and snapshots so a document of a million edits still opens instantly.',
   requirements: {
