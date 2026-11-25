@@ -9,4 +9,8 @@ app = (src / 'app.js').read_text()
 out = tpl.replace('/*CSS*/', css).replace('/*DATA*/', '\n'.join(data)).replace('/*APP*/', app)
 (root / 'dist').mkdir(exist_ok=True)
 (root / 'dist' / 'system-design-flows.html').write_text(out)
+# GitHub Pages serves the docs/ folder of main: https://asaphuclouvain.github.io/system-design-flows/
+(root / 'docs').mkdir(exist_ok=True)
+(root / 'docs' / 'index.html').write_text(out)
+(root / 'docs' / '.nojekyll').write_text('')
 print('built', len(out) // 1024, 'KB')
