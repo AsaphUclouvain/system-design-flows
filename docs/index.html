@@ -9157,6 +9157,397 @@ s3://index/segments/eu-fr/seg_2026-11-25_1140_eu-fr_0042/`,
   ]
 });
 
+flow({
+  id: 'stream-analytics',
+  title: 'Real-time analytics: clickstream to live dashboard',
+  category: 'Data at scale',
+  tags: ['Event collection', 'Kafka partitions', 'Event-time windows', 'Watermarks', 'Exactly-once sinks', 'ClickHouse'],
+  summary: 'A shop wants a live dashboard of views, add-to-carts and revenue per minute during a sale. Follow a click from the browser through a collector and Kafka into a stream job that counts by event-time windows, handles events that arrive late from a phone on a train, and writes results exactly once to a column store the dashboard queries.',
+  requirements: {
+    functional: [
+      'Count page views, add-to-carts and orders per product per minute, live.',
+      'Results are correct by the time the event happened, even when events arrive late.',
+      'Analysts can query raw events afterwards for ad-hoc questions.'
+    ],
+    nonFunctional: [
+      'Dashboard lag under 10 seconds from the click.',
+      'Ingest 200,000 events per second at peak without dropping data.',
+      'No double counting after a job restart.'
+    ]
+  },
+  estimates: [
+    { label: 'Events', value: '200,000 / s', note: 'Peak during a sale; ~17 billion per day.' },
+    { label: 'Event size', value: '≈ 400 B', note: 'JSON before compression: 80 MB/s, about 15 MB/s compressed in Kafka.' },
+    { label: 'Partitions', value: '96', note: 'Each partition comfortably handles ~2,000 events/s per consumer thread.' },
+    { label: 'Late events', value: '≈ 1%', note: 'Mobile clients batching while offline; most arrive within 2 minutes.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'browser', label: 'Shop pages', sub: 'Next.js tracker', kind: 'client', icon: 'phone', x: 0, y: 0, desc: 'Sends events in batches with sendBeacon.' },
+    { id: 'collector', label: 'Collector', sub: 'FastAPI', kind: 'edge', icon: 'download', x: 1, y: 0, desc: 'Validates, enriches and writes events to Kafka; nothing else.' },
+    { id: 'kafka', label: 'events.raw', sub: 'Kafka, 96 partitions', kind: 'queue', x: 2, y: 0, desc: 'Durable buffer of every event, kept 7 days.' },
+    { id: 'flink', label: 'Stream job', sub: 'Flink', kind: 'worker', icon: 'pulse', x: 2, y: 1, desc: 'Keyed by product, counts per event-time minute with watermarks.' },
+    { id: 'state', label: 'Checkpoints', sub: 'RocksDB + S3', kind: 'storage', x: 3, y: 2, desc: 'Window state and Kafka offsets, snapshotted every 10 s.' },
+    { id: 'ch', label: 'Column store', sub: 'ClickHouse', kind: 'db', icon: 'chart', x: 3, y: 1, desc: 'Per-minute aggregates for the dashboard, and raw events for analysts.' },
+    { id: 'dash', label: 'Live dashboard', sub: 'Next.js', kind: 'client', icon: 'chart', x: 3, y: 0, desc: 'Charts refreshed every 5 seconds.' },
+    { id: 'phone', label: 'Phone on a train', sub: 'mobile app', kind: 'client', icon: 'phone', x: 0, y: 2, desc: 'Buffers events while offline and sends them later.' },
+    { id: 'lake', label: 'Raw archive', sub: 'S3 Parquet', kind: 'storage', x: 1, y: 2, desc: 'Every event, partitioned by date, for reprocessing and long-term analysis.' }
+  ],
+  steps: [
+    {
+      from: 'browser', to: 'collector', label: 'POST /e (batch)',
+      title: 'The page sends a batch of events',
+      caption: 'A shopper views a product and adds it to the cart. The tracker queues both events and sends them together with sendBeacon, which survives the page closing.',
+      text: ['Each event has its own id (for deduplication) and the client\'s timestamp of when it happened: the {{event time}}. The server adds its own receive time too, because client clocks can be wrong.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'POST', path: '/e', body: { anon_id: 'a_7f3c19', session: 's_1764069', events: [{ id: 'ev_01JDQK0A', type: 'product_view', product: 'p_812', ts: '2026-11-25T11:41:43.120Z' }, { id: 'ev_01JDQK0B', type: 'add_to_cart', product: 'p_812', qty: 1, price_minor: 8900, ts: '2026-11-25T11:41:51.904Z' }] } },
+      code: [{ lang: 'ts', title: 'Tracker (client)', src: String.raw`
+const queue: TrackEvent[] = [];
+export function track(type: string, props: Record<string, unknown>) {
+  queue.push({ id: ulid(), type, ...props, ts: new Date().toISOString() });
+  if (queue.length >= 20) flush();
+}
+export function flush() {
+  if (!queue.length) return;
+  const body = JSON.stringify({ anon_id: anonId(), session: sessionId(), events: queue.splice(0) });
+  navigator.sendBeacon("/e", new Blob([body], { type: "application/json" }));
+}
+setInterval(flush, 5000);
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flush());` }]
+    },
+    {
+      from: 'collector', to: 'kafka', label: 'produce (key = product)',
+      title: 'Validate, enrich, produce to Kafka',
+      caption: 'The collector checks the schema, drops bot traffic, adds server time and country from the IP, then produces each event to Kafka with the product id as key. It answers 204 as soon as Kafka acknowledges.',
+      text: ['Keying by product puts all events of one product in the same partition, so the stream job can count it without shuffling data between machines.', 'The collector does nothing slow: no database, no joins. Its only job is to get events durably into Kafka fast.'],
+      payloadKind: 'Kafka record',
+      payload: { topic: 'events.raw', partition: 41, key: 'p_812', value: { id: 'ev_01JDQK0B', type: 'add_to_cart', product: 'p_812', qty: 1, price_minor: 8900, ts: '2026-11-25T11:41:51.904Z', recv_ts: '2026-11-25T11:41:52.030Z', country: 'BE', device: 'desktop', anon_id: 'a_7f3c19' }, producer: { acks: 'all', enable_idempotence: true, linger_ms: 5, compression: 'zstd' } },
+      fields: { recv_ts: 'Server receive time. If the client clock is off by more than a few minutes, the job uses this instead.', acks: 'Wait for all in-sync replicas: an event acknowledged to the browser is never lost.' },
+      code: [{ lang: 'python', title: 'Collector endpoint', src: String.raw`
+producer = AIOKafkaProducer(bootstrap_servers=KAFKA, acks="all", enable_idempotence=True,
+                            linger_ms=5, compression_type="zstd")
+
+@app.post("/e", status_code=204)
+async def collect(batch: EventBatch, req: Request):
+    if is_bot(req.headers.get("user-agent", "")):
+        return
+    now = datetime.now(UTC)
+    country = geoip(req.client.host)
+    futs = []
+    for ev in batch.events[:100]:
+        rec = ev.model_dump() | {"recv_ts": now.isoformat(), "country": country,
+                                 "anon_id": batch.anon_id}
+        futs.append(await producer.send("events.raw", key=ev.product.encode(),
+                                        value=orjson.dumps(rec)))
+    await asyncio.gather(*futs)            # 204 only after Kafka acknowledged` }],
+      failure: ['**Kafka slow or unavailable:** the collector buffers briefly in memory, then returns 503; the tracker keeps the batch and retries later. Events carry ids, so a retried batch is deduplicated downstream.']
+    },
+    {
+      from: 'kafka', to: 'lake', label: 'archive to Parquet', async: true,
+      title: 'Every event is archived',
+      caption: 'A separate consumer group writes all raw events to S3 as Parquet files every 5 minutes, partitioned by date and hour. This is independent of the live job.',
+      text: ['The archive makes the live pipeline replaceable: if a bug is found in the stream job, results can be recomputed from the raw events.'],
+      payloadKind: 'Archive file',
+      payload: { path: 's3://events-lake/raw/dt=2026-11-25/hr=11/part-0041-00017.parquet', rows: 612340, size_mb: 41.2, consumer_group: 'lake-writer' }
+    },
+    {
+      from: 'kafka', to: 'flink', label: 'consume partition 41',
+      title: 'The stream job reads by partition',
+      caption: 'The Flink job has 96 parallel readers, one per partition. Each assigns events to one-minute windows by their event time, not by when they arrive.',
+      text: ['A {{tumbling window}} of one minute: 11:41:00–11:42:00, then 11:42:00–11:43:00. The add-to-cart at 11:41:51 belongs to the 11:41 window whenever it arrives.'],
+      payloadKind: 'Window assignment',
+      payload: { event: 'ev_01JDQK0B', event_time: '11:41:51.904', window: '[11:41:00, 11:42:00)', key: 'p_812', window_state_before: { views: 1840, carts: 211, revenue_minor: 1877900 }, after: { views: 1840, carts: 212, revenue_minor: 1886800 } }
+    },
+    {
+      from: 'flink', to: 'flink', label: 'watermark 11:42:05 - 30s',
+      title: 'Watermarks decide when a minute is complete',
+      caption: 'The job cannot know if more events for 11:41 will still come. A watermark says "no more events older than this are expected": the latest event time seen minus 30 seconds. When it passes 11:42:00, the 11:41 window is emitted.',
+      text: ['A {{watermark}} trades latency for completeness. A 30 s delay means the dashboard number for a minute appears 30 s after the minute ends, but includes almost all slightly-late events.'],
+      payloadKind: 'Watermark',
+      payload: { max_event_time_seen: '11:42:31.200', allowed_out_of_orderness_s: 30, watermark: '11:42:01.200', windows_fired: ['[11:41:00, 11:42:00)'], emitted: { product: 'p_812', minute: '11:41', views: 1912, carts: 219, orders: 61, revenue_minor: 5428900 } },
+      code: [{ lang: 'python', title: 'PyFlink job (excerpt)', src: String.raw`
+wm = (WatermarkStrategy
+      .for_bounded_out_of_orderness(Duration.of_seconds(30))
+      .with_timestamp_assigner(EventTimeAssigner())       # ts, or recv_ts if skewed
+      .with_idleness(Duration.of_seconds(60)))            # quiet partitions do not stall time
+
+events = env.from_source(kafka_source("events.raw"), wm, "events")
+per_min = (events
+    .key_by(lambda e: e["product"])
+    .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+    .allowed_lateness(Time.minutes(10))                   # late events update the result
+    .side_output_late_data(TOO_LATE)
+    .aggregate(Counts(), WindowResult()))
+per_min.sink_to(clickhouse_sink("product_minute"))` }]
+    },
+    {
+      from: 'flink', to: 'ch', label: 'INSERT product_minute',
+      title: 'Write the minute to the column store',
+      caption: 'The 11:41 result for p_812 is written to ClickHouse. The table keeps the latest version per (product, minute), so a later correction replaces the number instead of adding to it.',
+      text: ['A ReplacingMergeTree table plus a version column makes the write idempotent: writing the same window twice (after a restart) leaves one row.'],
+      payloadKind: 'SQL (ClickHouse)',
+      payloadLang: 'sql',
+      payload: String.raw`
+INSERT INTO product_minute (product, minute, views, carts, orders, revenue_minor, version)
+VALUES ('p_812', '2026-11-25 11:41:00', 1912, 219, 61, 5428900, 1);
+
+-- table engine: ReplacingMergeTree(version) ORDER BY (product, minute)`
+    },
+    {
+      from: 'phone', to: 'collector', label: 'late batch (2 min)',
+      title: 'A late batch arrives from a train',
+      caption: 'A phone that lost signal in a tunnel sends 14 events from 11:41, two minutes late. The 11:41 window already fired, but allowed lateness keeps its state for 10 minutes, so the count is updated.',
+      text: ['Without event-time windows, these 14 events would be counted in the 11:43 minute, making 11:41 too low and 11:43 too high. With them, the right minute is corrected.', 'Events later than 10 minutes go to a side output and are only included in the nightly batch recomputation from the archive.'],
+      payloadKind: 'Late update',
+      payload: { events: 14, event_times: '11:41:05–11:41:58', arrived: '11:43:57', window: '[11:41:00, 11:42:00)', result: { carts: '219 → 221', views: '1912 → 1924' }, version: 2 }
+    },
+    {
+      from: 'flink', to: 'state', label: 'checkpoint (offsets + state)',
+      title: 'Checkpoint: offsets and window state together',
+      caption: 'Every 10 seconds Flink snapshots the open windows and the Kafka offsets of every partition to S3, as one consistent checkpoint. Sink writes are committed with the same checkpoint.',
+      text: ['This is how {{exactly-once}} works in practice: if the job crashes, it restarts from the last checkpoint, re-reads Kafka from the saved offsets, and rebuilds the same windows. Idempotent sink writes make the replayed output harmless.'],
+      payloadKind: 'Checkpoint',
+      payload: { checkpoint_id: 88213, duration_ms: 640, state_size_mb: 412, offsets: { 'events.raw-41': 1029384712, 'events.raw-42': 1029101998, '…': '94 more' }, location: 's3://flink-ckpt/clickstream/chk-88213' },
+      failure: ['**TaskManager crashes:** Flink restarts the job from checkpoint 88213; up to 10 s of events are processed again, producing the same window results, which overwrite identical rows.']
+    },
+    {
+      from: 'dash', to: 'ch', label: 'SELECT last 30 min',
+      title: 'The dashboard queries the last half hour',
+      caption: 'Every 5 seconds, the dashboard asks ClickHouse for the last 30 minutes of totals and top products. FINAL collapses corrected rows to their latest version. The query scans a few thousand rows in milliseconds.',
+      text: ['A column store reads only the columns a query uses and keeps them compressed, which is why aggregating thousands of rows takes milliseconds. Raw events stay queryable in `events_raw` for ad-hoc analysis.'],
+      payloadKind: 'SQL (ClickHouse)',
+      payloadLang: 'sql',
+      payload: String.raw`
+SELECT minute, sum(views) AS views, sum(carts) AS carts,
+       sum(orders) AS orders, sum(revenue_minor) / 100 AS revenue_eur
+FROM product_minute FINAL
+WHERE minute >= now() - INTERVAL 30 MINUTE
+GROUP BY minute ORDER BY minute;
+
+-- 30 rows in set. Elapsed: 0.012 sec. Processed 41,220 rows.`,
+      code: [{ lang: 'ts', title: 'Dashboard data (route handler)', src: String.raw`
+// app/api/live/route.ts
+export const dynamic = "force-dynamic";
+export async function GET() {
+  const rows = await clickhouse.query({ query: LAST_30_MIN, format: "JSONEachRow" }).then(r => r.json());
+  return Response.json(rows, { headers: { "Cache-Control": "private, max-age=5" } });
+}` }]
+    },
+    {
+      from: 'ch', to: 'dash', label: 'chart update', reply: true,
+      title: 'The chart moves',
+      caption: 'The revenue line extends by one point and the 11:41 bar grows slightly as the late events are included. From click to chart: about 35 seconds, mostly the deliberate watermark delay.',
+      text: ['The dashboard shades the most recent minute as "still settling", because late events can still change it for a few minutes.'],
+      payloadKind: 'Chart data',
+      payload: [{ minute: '11:40', views: 182400, carts: 20110, orders: 5822, revenue_eur: 512340 }, { minute: '11:41', views: 190210, carts: 21004, orders: 6040, revenue_eur: 533910, settling: true }]
+    }
+  ],
+  api: [
+    { verb: 'POST', path: '/e', desc: 'Event collector; batches of up to 100 events; 204 when durable.' },
+    { verb: 'GET', path: '/api/live', desc: 'Last 30 minutes of per-minute totals for the dashboard.' }
+  ],
+  schema: String.raw`
+-- ClickHouse
+CREATE TABLE product_minute (
+  product String, minute DateTime,
+  views UInt64, carts UInt64, orders UInt64, revenue_minor UInt64,
+  version UInt32
+) ENGINE = ReplacingMergeTree(version)
+PARTITION BY toDate(minute) ORDER BY (product, minute) TTL minute + INTERVAL 90 DAY;
+
+CREATE TABLE events_raw (
+  id String, type LowCardinality(String), product String, ts DateTime64(3),
+  recv_ts DateTime64(3), country LowCardinality(String), anon_id String, props String
+) ENGINE = MergeTree PARTITION BY toDate(ts) ORDER BY (type, ts);`,
+  decisions: [
+    { q: 'Which time do you count by?', options: [
+      { verdict: 'bad', name: 'Processing time (when the job sees the event)', why: 'Restarts and late batches shift counts into the wrong minutes.' },
+      { verdict: 'great', name: 'Event time with watermarks and allowed lateness', why: 'Each event counts in the minute it happened, and late data corrects the result.' }
+    ] },
+    { q: 'How do you avoid double counting?', options: [
+      { verdict: 'ok', name: 'At-least-once and accept small errors', why: 'Fine for rough trends, wrong for revenue.' },
+      { verdict: 'great', name: 'Checkpointed offsets + state, idempotent upserts in the sink', why: 'Replays after a crash produce identical rows.' }
+    ] }
+  ],
+  refs: [
+    { label: 'Apache Flink: Timely stream processing (event time, watermarks)', url: 'https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/time/' },
+    { label: 'Tyler Akidau: Streaming 101', url: 'https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/' },
+    { label: 'ClickHouse: ReplacingMergeTree', url: 'https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree' }
+  ]
+});
+
+flow({
+  id: 'kv-store',
+  title: 'Distributed key-value store (Dynamo-style)',
+  category: 'Data at scale',
+  tags: ['Consistent hashing', 'Replication N=3', 'Quorum R/W', 'Vector clocks', 'Hinted handoff', 'Anti-entropy'],
+  summary: 'A shopping-cart store must accept writes even while machines fail. Follow a PUT through a consistent-hash ring to three replicas, a quorum write that succeeds while one node is down, a hint that heals it later, a read that finds two versions and repairs the stale one, and background Merkle-tree sync.',
+  requirements: {
+    functional: [
+      'GET and PUT values by key (a cart per user).',
+      'Writes are accepted even when some replicas are unreachable.',
+      'Concurrent writes to the same cart are never silently lost.'
+    ],
+    nonFunctional: [
+      'p99 under 10 ms for reads and writes inside one region.',
+      'No single point of failure; nodes can be added or removed without downtime.',
+      'Survives the loss of any one node, and of one availability zone.'
+    ]
+  },
+  estimates: [
+    { label: 'Keys', value: '400 million', note: 'Carts and sessions, ~2 KB each: ~800 GB, × 3 replicas = 2.4 TB.' },
+    { label: 'Nodes', value: '24', note: '~100 GB of data per node, with room for growth and rebalancing.' },
+    { label: 'Traffic', value: '150,000 ops / s', note: '~60% reads.' },
+    { label: 'Virtual nodes', value: '256 per node', note: 'Spreads each node\'s share of the ring into many small ranges for even load.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'api', label: 'Cart API', sub: 'FastAPI', kind: 'service', icon: 'cart', x: 0, y: 1, desc: 'Reads and writes carts through the store\'s client.' },
+    { id: 'coord', label: 'Coordinator', sub: 'node A', kind: 'service', icon: 'ring', x: 1, y: 1, desc: 'Any node can coordinate a request; it forwards to the key\'s replicas.' },
+    { id: 'b', label: 'Node B', sub: 'replica 1, zone a', kind: 'db', icon: 'server', x: 2, y: 0, desc: 'First owner of the key on the ring.' },
+    { id: 'c', label: 'Node C', sub: 'replica 2, zone b', kind: 'db', icon: 'server', x: 3, y: 0, desc: 'Second owner.' },
+    { id: 'd', label: 'Node D', sub: 'replica 3, zone c', kind: 'db', icon: 'server', x: 3, y: 1, desc: 'Third owner; about to be unreachable.' },
+    { id: 'e', label: 'Node E', sub: 'next on ring', kind: 'db', icon: 'server', x: 2, y: 2, desc: 'Next healthy node after D; holds a hint while D is down.' },
+    { id: 'gossip', label: 'Membership', sub: 'gossip', kind: 'worker', icon: 'pulse', x: 1, y: 0, desc: 'Every node shares who is alive and who owns which ranges.' },
+    { id: 'ae', label: 'Anti-entropy', sub: 'Merkle trees', kind: 'worker', icon: 'hash', x: 3, y: 2, desc: 'Background comparison of replicas to fix any remaining differences.' }
+  ],
+  steps: [
+    {
+      from: 'api', to: 'coord', label: 'PUT cart:usr_ana',
+      title: 'The API writes a cart',
+      caption: 'Ana adds trail socks to her cart. The Cart API sends PUT with the new cart and the version context it read earlier, to any node; node A coordinates.',
+      text: ['The context (a vector clock) tells the store which version this write is based on. It is what lets the store tell "newer" apart from "concurrent".'],
+      payloadKind: 'Request',
+      payload: { op: 'PUT', key: 'cart:usr_ana', value: { items: [{ sku: 'SPG6-42-BLU', qty: 1 }, { sku: 'SOCK-TRL-M', qty: 2 }] }, context: { vclock: { B: 4 } }, consistency: { N: 3, W: 2, R: 2 } },
+      fields: { context: 'The version Ana\'s session last read: B had written 4 updates.', consistency: 'N replicas, W acks needed for a write, R replies needed for a read. R + W > N means a read always overlaps the latest write\'s replicas.' },
+      code: [{ lang: 'python', title: 'Cart API using the store client', src: String.raw`
+@router.post("/v1/cart/items")
+async def add_item(item: CartItem, user=Depends(current_user)):
+    key = f"cart:{user.id}"
+    got = await kv.get(key, r=2)                      # may return several siblings
+    cart = merge_siblings([v.value for v in got.versions]) if got else Cart()
+    cart.add(item.sku, item.qty)
+    await kv.put(key, cart.model_dump(), context=got.context if got else None, w=2)
+    return cart` }]
+    },
+    {
+      from: 'coord', to: 'coord', label: 'hash → ring position',
+      title: 'Find the key\'s replicas on the ring',
+      caption: 'The key is hashed onto a ring of 2^128 positions. Walking clockwise from that point, the first three distinct physical nodes in different zones own it: B, C and D.',
+      text: ['{{consistent hashing}} means adding a node moves only the keys in the ranges it takes over, about 1/24 of the data, instead of reshuffling everything.', 'Virtual nodes: each physical node appears at 256 random points on the ring, so load spreads evenly and a failed node\'s ranges are picked up by many others.'],
+      payloadKind: 'Ring lookup',
+      payload: { key: 'cart:usr_ana', md5: '7c9e1f0a…', ring_position: '0x7c9e1f0a…', walk: [{ vnode: 'B#118', zone: 'a' }, { vnode: 'B#201', note: 'same node, skip' }, { vnode: 'C#77', zone: 'b' }, { vnode: 'D#12', zone: 'c' }], preference_list: ['B', 'C', 'D'], fallbacks: ['E', 'F'] },
+      fields: { preference_list: 'The N owners of this key. Fallbacks are used when an owner is down (sloppy quorum).' }
+    },
+    {
+      from: 'coord', to: 'b', label: 'write v{B:5}',
+      title: 'Send the write to all three owners',
+      caption: 'The coordinator increments the vector clock (B was the last writer, so it becomes {B:5}) and sends the write to B, C and D in parallel. It needs 2 acknowledgements.',
+      text: ['Each replica appends to its commit log, updates its memtable, and acknowledges. Writing to an in-memory table plus an append-only log is what makes writes so fast (an LSM tree).'],
+      payloadKind: 'Replica write',
+      payload: { key: 'cart:usr_ana', vclock: { B: 5 }, targets: ['B', 'C', 'D'], acks_needed: 2, replies: { B: 'ack 1.1 ms', C: 'ack 1.4 ms', D: 'timeout (no answer)' } }
+    },
+    {
+      from: 'coord', to: 'c', label: 'ack 2/2 → success',
+      title: 'Quorum reached with one node down',
+      caption: 'B and C acknowledge; that is W = 2, so the write succeeds and the API gets OK in about 2 ms. D did not answer: it is in the middle of a network problem.',
+      text: ['A {{quorum}} write tolerates a minority of replicas failing. The API does not wait for D, so one sick node does not make writes slow.'],
+      payloadKind: 'Response',
+      payload: { status: 'OK', key: 'cart:usr_ana', vclock: { B: 5 }, acks: ['B', 'C'], latency_ms: 2.1 },
+      failure: ['**Only one ack before the timeout:** the write returns an error to the API (it may still exist on one replica). The API retries; vector clocks make the retry safe.']
+    },
+    {
+      from: 'coord', to: 'e', label: 'hinted write for D',
+      title: 'Hinted handoff: E keeps D\'s copy',
+      caption: 'To keep three copies, the coordinator writes D\'s copy to the next healthy node on the ring, E, with a hint saying "this belongs to D". E stores it separately.',
+      text: ['{{hinted handoff}} with a {{sloppy quorum}} keeps writes durable on N machines even when an owner is down. The hint is not used for normal reads of E\'s own data.'],
+      payloadKind: 'Hint',
+      payload: { stored_on: 'E', intended_for: 'D', key: 'cart:usr_ana', vclock: { B: 5 }, hint_created: '2026-11-25T11:41:44Z', hint_ttl_hours: 3 }
+    },
+    {
+      from: 'gossip', to: 'e', label: 'D is back',
+      title: 'D returns; the hint is delivered',
+      caption: 'Through gossip, every node learns that D is reachable again 4 minutes later. E sends D the hinted write and deletes the hint once D acknowledges.',
+      text: ['Each node gossips with a few random peers every second, exchanging heartbeats and ring membership. News of a failure or recovery reaches all 24 nodes in a few seconds without a central coordinator.'],
+      payloadKind: 'Gossip + handoff',
+      payload: { gossip: { node: 'D', status: 'UP', heartbeat: 88123, seen_by: '24/24 within 3 s' }, handoff: { from: 'E', to: 'D', hints_sent: 1882, including: 'cart:usr_ana {B:5}', result: 'acked, hints deleted' } }
+    },
+    {
+      from: 'api', to: 'coord', label: 'GET cart (R=2)',
+      title: 'Concurrent writes from two devices',
+      caption: 'Meanwhile Ana\'s phone, working from an older read ({B:4}), wrote "remove socks, add bottle" through node C. Both writes descend from {B:4} but not from each other: they are concurrent. Now a GET asks 2 replicas.',
+      text: ['Last-write-wins by timestamp would keep one and silently drop the other: Ana would lose an item. {{vector clock}}s detect the concurrency so nothing is lost.'],
+      payloadKind: 'Versions on replicas',
+      payload: { key: 'cart:usr_ana', on_B: { vclock: { B: 5 }, items: ['SPG6 ×1', 'SOCK ×2'] }, on_C: [{ vclock: { B: 5 }, items: ['SPG6 ×1', 'SOCK ×2'] }, { vclock: { B: 4, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'] }], comparison: '{B:5} vs {B:4,C:1}: neither dominates → concurrent' }
+    },
+    {
+      from: 'coord', to: 'api', label: '2 siblings + context', reply: true,
+      title: 'The read returns both versions',
+      caption: 'The coordinator gets replies from B and C and finds two versions that are concurrent. It returns both as siblings, with a combined context {B:5, C:1}, and lets the application merge.',
+      text: ['For a cart, the merge is a union of items (with removals tracked so a deleted item does not come back). Amazon\'s Dynamo paper describes exactly this: a deleted item can occasionally reappear, which is better than losing an added one.'],
+      payloadKind: 'Response',
+      payload: { key: 'cart:usr_ana', siblings: [{ items: ['SPG6 ×1', 'SOCK ×2'] }, { items: ['SPG6 ×1', 'BOTTLE ×1'], removed: ['SOCK'] }], context: { B: 5, C: 1 } },
+      code: [{ lang: 'python', title: 'Merging siblings (app side)', src: String.raw`
+def merge_siblings(versions: list[dict]) -> Cart:
+    adds: dict[str, int] = {}
+    removed: set[str] = set()
+    for v in versions:
+        removed |= set(v.get("removed", []))
+        for it in v["items"]:
+            adds[it["sku"]] = max(adds.get(it["sku"], 0), it["qty"])
+    return Cart(items=[{"sku": s, "qty": q} for s, q in adds.items() if s not in removed])
+# -> SPG6 x1, BOTTLE x1   (the phone removed the socks after seeing them)` }]
+    },
+    {
+      from: 'coord', to: 'b', label: 'read repair',
+      title: 'Read repair fixes stale replicas',
+      caption: 'The API writes back the merged cart with context {B:5, C:1}; the coordinator issues {A:1, B:5, C:1}, which dominates both siblings. Replicas replace their old versions, so the conflict disappears.',
+      text: ['{{read repair}} also fixes simpler cases: if one replica returns an older version during a read, the coordinator writes the newest one back to it in the background.'],
+      payloadKind: 'Repair write',
+      payload: { key: 'cart:usr_ana', new_vclock: { A: 1, B: 5, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'], replaced_on: ['B', 'C', 'D'] }
+    },
+    {
+      from: 'ae', to: 'd', label: 'Merkle tree compare',
+      title: 'Anti-entropy catches anything left over',
+      caption: 'Hints can expire and nodes can lose disks. Every hour, replicas of each range compare Merkle trees: if the root hashes differ, they descend only into differing branches and exchange the few keys that differ.',
+      text: ['A {{merkle tree}} of a range with a million keys lets two nodes find 12 differing keys by exchanging a few dozen hashes instead of a million values.'],
+      payloadKind: 'Merkle sync',
+      payload: { range: '0x7c00…–0x7d00…', pair: 'C ↔ D', root_match: false, levels_descended: 8, hashes_exchanged: 34, keys_differing: 12, repaired: 12, took_ms: 41 }
+    }
+  ],
+  api: [
+    { verb: 'GET', path: 'get(key, r=2) -> versions + context', desc: 'Returns one value or several concurrent siblings.' },
+    { verb: 'PUT', path: 'put(key, value, context, w=2)', desc: 'Context from the last read; the store increments the vector clock.' },
+    { verb: 'DEL', path: 'delete(key, context)', desc: 'Writes a tombstone so the delete replicates like any write.' }
+  ],
+  schemaLang: 'text',
+  schemaNote: 'What each node stores (LSM tree per node).',
+  schema: String.raw`
+commit log      append-only, fsync batched every 10 ms
+memtable        in-memory sorted map, flushed to an SSTable at 64 MB
+SSTables        immutable sorted files + Bloom filter + index; compacted in the background
+record          key -> [ (vclock, value | tombstone, write_ts) ... siblings ]
+hints           separate store: (intended_node, key, vclock, value, expires_at)
+merkle trees    one per owned range, rebuilt incrementally
+
+ring            24 nodes x 256 vnodes, N=3 across zones, R=2, W=2`,
+  decisions: [
+    { q: 'How do you handle concurrent writes?', options: [
+      { verdict: 'bad', name: 'Last write wins by wall-clock timestamp', why: 'Clock skew decides which cart survives; additions are silently lost.' },
+      { verdict: 'good', name: 'Single leader per key range', why: 'No conflicts, but writes stop for a range while its leader fails over.' },
+      { verdict: 'great', name: 'Vector clocks + siblings + app-level merge (for carts)', why: 'Always writable, and no update is lost.' }
+    ] },
+    { q: 'How many replicas must answer?', options: [
+      { verdict: 'ok', name: 'W=1, R=1', why: 'Fastest, but reads can miss the latest write.' },
+      { verdict: 'great', name: 'N=3, W=2, R=2', why: 'Survives one node down for reads and writes, and R + W > N gives overlapping quorums.' }
+    ] }
+  ],
+  refs: [
+    { label: 'DeCandia et al.: Dynamo: Amazon\'s Highly Available Key-value Store (2007)', url: 'https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf' },
+    { label: 'Apache Cassandra: Dynamo architecture', url: 'https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html' }
+  ]
+});
+
 </script>
 <script>
 /* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
