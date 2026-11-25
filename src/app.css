@@ -233,9 +233,10 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-opt.great{background:color-mix(in srgb,var(--k-worker) 9%,var(--panel));border-color:color-mix(in srgb,var(--k-worker) 35%,var(--rule))}
 .sd-opt.good{background:color-mix(in srgb,var(--k-service) 7%,var(--panel))}
 .sd-opt.bad{background:color-mix(in srgb,var(--k-cache) 7%,var(--panel));border-color:color-mix(in srgb,var(--k-cache) 30%,var(--rule))}
+.sd-opt.ok{background:color-mix(in srgb,var(--k-queue) 7%,var(--panel))}
 .sd-opt .vh{display:flex;gap:8px;align-items:center;font-weight:650;margin-bottom:3px}
 .sd-verdict{font:700 10.5px/18px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:0 7px;border-radius:6px;color:#fff}
-.sd-verdict.great{background:var(--k-worker)}.sd-verdict.good{background:var(--k-service)}.sd-verdict.bad{background:var(--k-cache)}
+.sd-verdict.great{background:var(--k-worker)}.sd-verdict.good{background:var(--k-service)}.sd-verdict.bad{background:var(--k-cache)}.sd-verdict.ok{background:var(--k-queue)}
 .sd-opt p{margin:0;font-size:14.5px;color:var(--ink2)}
 .sd-refs{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px}
 .sd-refs a{color:var(--ink);text-decoration-color:var(--rule2);text-underline-offset:3px}

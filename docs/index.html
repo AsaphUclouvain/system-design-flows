@@ -242,9 +242,10 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-opt.great{background:color-mix(in srgb,var(--k-worker) 9%,var(--panel));border-color:color-mix(in srgb,var(--k-worker) 35%,var(--rule))}
 .sd-opt.good{background:color-mix(in srgb,var(--k-service) 7%,var(--panel))}
 .sd-opt.bad{background:color-mix(in srgb,var(--k-cache) 7%,var(--panel));border-color:color-mix(in srgb,var(--k-cache) 30%,var(--rule))}
+.sd-opt.ok{background:color-mix(in srgb,var(--k-queue) 7%,var(--panel))}
 .sd-opt .vh{display:flex;gap:8px;align-items:center;font-weight:650;margin-bottom:3px}
 .sd-verdict{font:700 10.5px/18px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:0 7px;border-radius:6px;color:#fff}
-.sd-verdict.great{background:var(--k-worker)}.sd-verdict.good{background:var(--k-service)}.sd-verdict.bad{background:var(--k-cache)}
+.sd-verdict.great{background:var(--k-worker)}.sd-verdict.good{background:var(--k-service)}.sd-verdict.bad{background:var(--k-cache)}.sd-verdict.ok{background:var(--k-queue)}
 .sd-opt p{margin:0;font-size:14.5px;color:var(--ink2)}
 .sd-refs{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px}
 .sd-refs a{color:var(--ink);text-decoration-color:var(--rule2);text-underline-offset:3px}
@@ -575,6 +576,48 @@ terms({
   'little\'s law': 'Average number of items in a system = arrival rate × average time each spends inside. Handy for sizing worker pools and connection pools.',
   'idempotent': 'Safe to repeat: doing it twice has the same effect as doing it once.',
   'keyframe': 'A video frame stored whole (an I-frame), so decoding can start there. Other frames only store differences from their neighbours. Cuts, seeks and quality switches must land on keyframes.'
+});
+terms({
+  'stale-while-revalidate': 'A Cache-Control directive: after a response goes stale, a cache may keep serving it for a while longer while it fetches a fresh copy in the background, so no user waits for the origin.',
+  'surrogate key': 'A tag a CDN stores with a cached object (sent by the origin in a header such as Surrogate-Key or Cache-Tag). One purge by tag removes every object carrying it, instead of purging URLs one by one.',
+  'origin shield': 'A middle CDN tier between the edge locations and your origin. Edge misses go to the shield first, so the origin sees one request per object instead of one per edge location.',
+  'cache key': 'The value a cache looks objects up by. For a CDN it is usually host + path + selected query parameters and headers; anything left out of the key is assumed not to change the response.',
+  'outlier detection': 'A load balancer watches the real responses of each backend and temporarily ejects one that returns too many errors, even if its health check still passes.',
+  'connection draining': 'Before an instance stops, it is removed from the load balancer but kept alive until its in-flight requests finish, so a deploy does not cut requests in half.',
+  'xds': 'Envoy\'s discovery APIs (listeners, clusters, endpoints, routes). A control plane pushes configuration and endpoint lists to the proxies over a long-lived gRPC stream.',
+  'bff': 'Backend for frontend: an API layer built for one client (the mobile app, the web app) that aggregates and reshapes calls to internal services for that client.',
+  'compensating transaction': 'An action that semantically undoes an earlier committed step of a saga (refund a charge, release a reservation). It is not a rollback: the original step happened and stays in the history.',
+  'orchestration': 'In a saga, one coordinator tells each service what to do next and tracks the state. The alternative, choreography, has each service react to the previous service\'s events.',
+  'waiting room': 'A queue in front of a sale that admits users at a controlled rate, so the booking system sees a steady load instead of the whole crowd at the opening second.',
+  'clock skew': 'The difference between the clocks of two machines. NTP keeps it to milliseconds, but it never reaches zero and clocks can jump, so timestamps from different machines are only roughly comparable.',
+  'ntp': 'Network Time Protocol: keeps a machine\'s clock close to reference time servers, adjusting it gradually (slewing) or, for large errors, by stepping it.',
+  'tail sampling': 'Deciding whether to keep a trace after all its spans have arrived, so you can keep every slow or failed trace and only a small share of the normal ones.',
+  'burn rate': 'How fast a service consumes its error budget compared with the allowed pace. A burn rate of 14.4 over one hour spends 2% of a 30-day budget in that hour, which is a common paging threshold.',
+  'spf': 'Sender Policy Framework: a DNS TXT record listing which servers may send mail for a domain. Receivers check the connecting server\'s IP against it.',
+  'dkim': 'DomainKeys Identified Mail: the sending server signs headers and body with a private key; the receiver fetches the public key from DNS and verifies the message was not changed and came from the domain.',
+  'dmarc': 'A DNS policy that tells receivers what to do when SPF and DKIM do not align with the visible From domain (none, quarantine or reject), and where to send reports.',
+  'mx record': 'A DNS record naming the mail servers that accept email for a domain, with priorities. Senders look it up to know where to connect.',
+  'hard bounce': 'A permanent delivery failure (5xx SMTP reply, such as "user unknown"). The address goes on the suppression list; a soft bounce (4xx) is retried.',
+  'suppression list': 'Addresses you must not send to again: hard bounces, spam complaints and unsubscribes. Sending to them hurts your sender reputation.',
+  'kill switch': 'A flag that turns a feature off instantly in production without a deploy.',
+  'consistent bucketing': 'Hashing a stable id (user id + flag key) to a number from 0 to 99, so the same user always lands in the same rollout bucket and raising 10% to 20% only adds users.',
+  'rpo': 'Recovery point objective: how much recent data you can afford to lose in a disaster, measured in time. Asynchronous replication gives an RPO of a few seconds.',
+  'rto': 'Recovery time objective: how long the service may be down before it is back.',
+  'failover': 'Moving traffic and the primary role from a failed component to a standby one.',
+  'lsn': 'Log sequence number: a position in PostgreSQL\'s write-ahead log. Comparing LSNs tells you whether a replica has replayed a given write.',
+  'robots.txt': 'A file at the root of a site telling crawlers which paths they may fetch and sometimes how slowly.',
+  'url frontier': 'A crawler\'s to-do list of URLs, organised by priority and by host so that no single site is hit too often.',
+  'tumbling window': 'Fixed-size, non-overlapping time windows (11:40:00–11:41:00, 11:41:00–11:42:00…). Each event belongs to exactly one.',
+  'event time': 'When something actually happened (the click), as opposed to processing time (when the stream job saw it). Windows by event time give correct counts even when events arrive late.',
+  'hinted handoff': 'When a replica is down, another node accepts its write together with a hint, and forwards the write when the replica comes back.',
+  'read repair': 'During a read from several replicas, the coordinator notices one returned an older version and writes the newest version back to it.',
+  'merkle tree': 'A tree of hashes where each parent is the hash of its children. Two replicas compare roots and descend only into the branches that differ, to find divergent keys quickly.',
+  'sloppy quorum': 'A quorum counted over the first N healthy nodes on the ring rather than the N designated owners, so writes keep succeeding while owners are down (with hinted handoff to fix it later).',
+  'single-flight': 'When many requests miss the same cache key at once, only one of them loads the value; the others wait for its result. Prevents a cache stampede.',
+  'negative caching': 'Caching the fact that something does not exist (a 404, an empty result) for a short time, so repeated lookups of missing keys do not all reach the database.',
+  'read-your-writes': 'A guarantee that after you write something, your own later reads see it, even if they go to a replica that other users read with some lag.',
+  'segment allocation': 'An id-generation scheme where a central table hands each server a block of ids (say 1,000 at a time) and the server gives them out from memory.',
+  'state vector': 'In Yjs, a summary of how many operations from each client a document has seen. Two peers exchange state vectors and send each other only what the other is missing.'
 });
 
 flow({
@@ -5466,6 +5509,506 @@ CREATE UNIQUE INDEX one_active_trip ON trips (driver_id)
   ]
 });
 
+flow({
+  id: 'distributed-cache',
+  title: 'Distributed cache (Redis cache-aside with invalidation)',
+  category: 'Infrastructure foundations',
+  tags: ['Cache-aside', 'Redis Cluster', 'Stampede protection', 'CDC invalidation', 'Two-level cache'],
+  summary: 'A product page is read 40,000 times a second but changes a few times a day. Follow one read through an in-process cache, Redis and PostgreSQL, see how a stampede on an expired hot key is stopped, then follow a price change as it invalidates every copy within a second.',
+  requirements: {
+    functional: [
+      'GET /v1/products/{id} returns the product with price and stock.',
+      'After an admin changes a price, readers see the new price within about one second.',
+      'A missing product returns 404 quickly, without hitting the database every time.'
+    ],
+    nonFunctional: [
+      'p99 read latency under 15 ms at 40,000 reads per second.',
+      'The database must survive the cache being cold or a hot key expiring.',
+      'The cache is an optimisation: if Redis is down, reads still work (slower).'
+    ]
+  },
+  estimates: [
+    { label: 'Reads', value: '40,000 / s', note: 'Peak, all product pages together.' },
+    { label: 'Hit ratio target', value: '≥ 99%', note: '1% of 40,000 = 400 database reads/s, which two replicas handle easily.' },
+    { label: 'Hot set size', value: '≈ 2 GB', note: '500k products × ~4 KB JSON; fits in a 3-shard Redis Cluster with room to spare.' },
+    { label: 'Hottest key', value: '≈ 6,000 / s', note: 'One product on the home page. That is why a small in-process L1 cache sits in front of Redis.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'web', label: 'Product page', sub: 'Next.js', kind: 'client', icon: 'phone', x: 0, y: 0, desc: 'Server component that renders the product page and calls the API.' },
+    { id: 'api', label: 'Catalog API', sub: 'FastAPI pods', kind: 'service', x: 1, y: 0, desc: 'Implements cache-aside: L1 in memory, then Redis, then the database.' },
+    { id: 'l1', label: 'L1 cache', sub: 'in-process LRU', kind: 'cache', x: 1, y: 1, desc: 'A few thousand entries per pod with a 5 s TTL. Absorbs hot keys without a network hop.' },
+    { id: 'redis', label: 'Redis Cluster', sub: '3 shards × 2', kind: 'cache', x: 2, y: 0, desc: '16,384 hash slots split across 3 primaries, each with a replica. Keys are product JSON with a TTL.' },
+    { id: 'replica', label: 'Read replica', sub: 'PostgreSQL', kind: 'db', x: 3, y: 0, desc: 'Serves cache misses so the primary only handles writes.' },
+    { id: 'admin', label: 'Admin console', sub: 'Next.js', kind: 'client', icon: 'user', x: 0, y: 2, desc: 'Where the merchandising team changes prices.' },
+    { id: 'primary', label: 'Primary DB', sub: 'PostgreSQL', kind: 'db', x: 2, y: 2, desc: 'Source of truth for products. Writes go here.' },
+    { id: 'cdc', label: 'Invalidator', sub: 'CDC consumer', kind: 'worker', x: 3, y: 2, desc: 'Reads the database change stream and deletes the matching cache keys, then tells every pod to drop its L1 copy.' },
+    { id: 'bus', label: 'Pub/Sub channel', sub: 'Redis', kind: 'queue', x: 3, y: 1, desc: 'Broadcasts "drop key X" to all API pods so their L1 caches stay in step.' }
+  ],
+  steps: [
+    {
+      from: 'web', to: 'api', label: 'GET /v1/products/p_812',
+      title: 'The page asks for a product',
+      caption: 'The Next.js server component fetches the product. The API answers from the fastest place that holds a fresh copy.',
+      text: ['The Next.js data cache could also hold the response, but then it becomes one more copy to invalidate. Here it is disabled with `cache: "no-store"` and the API owns caching in one place.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', path: '/v1/products/p_812', headers: { Accept: 'application/json', 'X-Request-Id': 'req_7f3a91' } },
+      code: [{ lang: 'ts', title: 'app/products/[id]/page.tsx', src: String.raw`
+export default async function ProductPage({ params }: { params: { id: string } }) {
+  const res = await fetch(process.env.API_URL + "/v1/products/" + params.id, {
+    cache: "no-store",                  // one cache layer to reason about: the API's
+    signal: AbortSignal.timeout(800),
+  });
+  if (res.status === 404) notFound();
+  const p: Product = await res.json();
+  return <ProductView product={p} />;
+}` }]
+    },
+    {
+      from: 'api', to: 'l1', label: 'L1 lookup', 
+      title: 'Check the in-process cache first',
+      caption: 'Each API pod keeps a tiny LRU map with a 5-second TTL. For the hottest products this answers in microseconds and Redis never sees the request.',
+      text: ['The L1 TTL is short on purpose: it bounds how stale a pod can be if an invalidation message is lost. Five seconds of staleness on a product page is acceptable; on a bank balance it would not be.', 'Here the entry for p_812 is missing (the pod just started), so the API goes to Redis.'],
+      payloadKind: 'L1 state',
+      payload: { key: 'product:p_812:v3', hit: false, size: 1834, capacity: 5000, ttl_s: 5 },
+      fields: { 'key': 'The `v3` suffix is the cache schema version. Changing the JSON shape bumps it, so old and new pods never read each other\'s format.' },
+      code: [{ lang: 'python', title: 'Two-level cache', src: String.raw`
+from cachetools import TTLCache
+l1: TTLCache[str, bytes] = TTLCache(maxsize=5000, ttl=5)
+
+def key(pid: str) -> str:
+    return f"product:{pid}:v3"
+
+async def get_product(pid: str) -> bytes | None:
+    k = key(pid)
+    if (v := l1.get(k)) is not None:
+        return v                                   # microseconds, no network
+    v = await redis_get_or_load(k, pid)            # next steps
+    if v is not None:
+        l1[k] = v
+    return v` }]
+    },
+    {
+      from: 'api', to: 'redis', label: 'GET product:p_812:v3',
+      title: 'Ask Redis: the key has expired',
+      caption: 'The client hashes the key to one of 16,384 slots and sends GET to the shard that owns it. The entry expired a moment ago, so Redis returns nil.',
+      text: ['In Redis Cluster the slot is CRC16(key) mod 16384. The client library caches the slot map and follows a `MOVED` reply if a slot has migrated.', 'This product is on the home page: about 6,000 requests a second share this key. If they all go to the database now, that is a {{cache stampede}}.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> CLUSTER KEYSLOT product:p_812:v3
+(integer) 9132                 -- owned by shard B (slots 5461–10922)
+> GET product:p_812:v3
+(nil)                          -- TTL ran out 40 ms ago`,
+      failure: ['**Redis shard down or slow:** the client has a 50 ms timeout and a {{circuit breaker}}. When it opens, the API skips Redis and reads the replica directly with a concurrency limit, serving slower pages instead of errors.', '**MOVED / ASK reply during resharding:** the client refreshes its slot map and retries on the right node; the caller does not notice.']
+    },
+    {
+      from: 'api', to: 'redis', label: 'SET lock NX PX 3000',
+      title: 'Only one request reloads the key',
+      caption: 'The request tries to take a short lock for this key. One pod wins and loads from the database; the others wait a few milliseconds and read the value it writes.',
+      text: ['This is {{single-flight}} across pods. Inside one pod, an asyncio future per key does the same for concurrent coroutines, so at most one request per pod even tries the lock.', 'An alternative is probabilistic early refresh: each read near the end of the TTL has a small chance to refresh early, so the key rarely expires under load at all.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> SET lock:product:p_812:v3 pod-api-7f9c:req_7f3a91 NX PX 3000
+OK                             -- this request loads
+
+(other pods, same millisecond)
+> SET lock:product:p_812:v3 pod-api-2b11:req_19c0 NX PX 3000
+(nil)                          -- wait 20 ms, then GET again`,
+      code: [{ lang: 'python', title: 'Stampede-safe load', src: String.raw`
+async def redis_get_or_load(k: str, pid: str) -> bytes | None:
+    if (v := await redis.get(k)) is not None:
+        return None if v == NEG else v
+    token = f"{POD}:{uuid4().hex}"
+    if await redis.set("lock:" + k, token, nx=True, px=3000):
+        try:
+            row = await load_from_replica(pid)
+            v = NEG if row is None else row.json_bytes()
+            ttl = 60 if row is None else 3600 + random.randint(0, 600)   # jitter
+            await redis.set(k, v, ex=ttl)
+            return None if v == NEG else v
+        finally:
+            await release("lock:" + k, token)      # Lua: delete only if still ours
+    for _ in range(10):                            # someone else is loading
+        await asyncio.sleep(0.02)
+        if (v := await redis.get(k)) is not None:
+            return None if v == NEG else v
+    return (await load_from_replica(pid)).json_bytes()   # give up waiting, still correct` }],
+      failure: ['**The loader crashes while holding the lock:** the 3-second expiry frees it ({{lease}}); the next request reloads.', '**Waiters time out (database slow):** after 200 ms they read the replica themselves. Correct but heavier; a concurrency limit on replica reads keeps it from collapsing.']
+    },
+    {
+      from: 'api', to: 'replica', label: 'SELECT … WHERE id = $1',
+      title: 'Load the row from a read replica',
+      caption: 'The winning request reads the product, its current price and stock from a replica, using the primary key index. About 2 ms.',
+      text: ['A replica can be a few hundred milliseconds behind the primary ({{replication lag}}). That matters for the invalidation path later: an invalidator that deletes the key too early could let a reader re-cache the old row from a lagging replica.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+SELECT p.id, p.title, p.brand, p.price_minor, p.currency, p.version,
+       COALESCE(s.available, 0) AS stock
+FROM products p LEFT JOIN stock s ON s.product_id = p.id
+WHERE p.id = 'p_812';
+
+-- Index Scan using products_pkey on products  (cost=0.42..8.44 rows=1)
+-- Execution Time: 0.211 ms`,
+      failure: ['**Product does not exist:** the loader caches a short-lived tombstone (`NEG`, 60 s). This is {{negative caching}}: bots probing random ids cannot hammer the database.']
+    },
+    {
+      from: 'api', to: 'redis', label: 'SET … EX 3600+jitter',
+      title: 'Write the value back with a jittered TTL',
+      caption: 'The JSON goes into Redis for about an hour, plus a random 0–10 minutes. Keys loaded together then expire at different moments instead of all at once.',
+      text: ['The TTL is a safety net, not the main freshness mechanism: invalidation on change keeps the data fresh, and the TTL only limits damage if an invalidation is ever missed.'],
+      payloadKind: 'Cached value',
+      payload: { key: 'product:p_812:v3', ttl_s: 3913, value: { id: 'p_812', title: 'Speedgoat 6 trail shoe', brand: 'HOKA', price_minor: 11900, currency: 'EUR', stock: 37, version: 17, cached_at: '2026-11-25T11:40:02Z' } },
+      fields: { version: 'Row version from the database. Used in the invalidation step to refuse writing an older version over a newer one.', ttl_s: '3600 + random(0..600). Without jitter, a cache warmed in one burst expires in one burst.' }
+    },
+    {
+      from: 'api', to: 'web', label: '200 OK', reply: true,
+      title: 'Respond, and remember it locally',
+      caption: 'The API stores the bytes in its L1 cache and answers. The next 6,000 requests this second are served from L1 or Redis.',
+      payloadKind: 'HTTP response',
+      payload: { status: 200, headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS-L1, MISS-REDIS, LOAD', 'Server-Timing': 'redis;dur=0.6, db;dur=2.1, total;dur=4.3' }, body: { id: 'p_812', title: 'Speedgoat 6 trail shoe', price: { amount: 119.0, currency: 'EUR' }, stock: 37 } },
+      text: ['The response carries timing headers so the page team can see in DevTools which layer answered and how long each took.'],
+      fields: { 'X-Cache': 'Debug header showing which layer answered. Hits read `HIT-L1` or `HIT-REDIS`.' },
+      details: ['Steady state: about 70% of reads hit L1, 29% hit Redis (~0.5 ms), under 1% reach the replica.', 'Values are stored as already-serialised JSON bytes, so a hit costs no Pydantic work at all.']
+    },
+    {
+      from: 'admin', to: 'primary', label: 'UPDATE price',
+      title: 'An admin lowers the price',
+      caption: 'The merchandising team sets p_812 to €89. The update goes to the primary and bumps the row version in the same statement.',
+      text: ['The admin API does **not** delete the cache key itself after the update. Doing both from application code is a {{dual write}}: a crash between them leaves the old price cached for an hour. The change stream does it instead.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+UPDATE products
+SET price_minor = 8900, version = version + 1, updated_at = now()
+WHERE id = 'p_812' AND version = 17          -- optimistic lock
+RETURNING version;                            -- 18`,
+      failure: ['**Version mismatch (0 rows):** someone else edited the product in the meantime; the console reloads and shows their change ({{optimistic locking}}).']
+    },
+    {
+      from: 'primary', to: 'cdc', label: 'WAL change event', async: true,
+      title: 'The change stream reports the commit',
+      caption: 'Debezium reads PostgreSQL\'s write-ahead log and emits the committed change. The invalidator consumes it, typically 100–500 ms after the commit.',
+      text: ['{{cdc}} sees every committed change, including ones made by scripts, migrations or a support engineer in psql, which app-level invalidation would miss.'],
+      payloadKind: 'CDC event',
+      payload: { op: 'u', source: { table: 'products', lsn: 98322109456, txId: 7713091 }, before: { id: 'p_812', price_minor: 11900, version: 17 }, after: { id: 'p_812', price_minor: 8900, version: 18 }, ts_ms: 1764069702301 },
+      fields: { lsn: 'Position in the WAL. The invalidator waits until replicas have replayed past this {{lsn}} before deleting, so no reader can re-cache the old row from a lagging replica.' }
+    },
+    {
+      from: 'cdc', to: 'redis', label: 'DEL product:p_812:v3',
+      title: 'Delete the key, after replicas caught up',
+      caption: 'The invalidator checks that the replicas have replayed LSN 98322109456, then deletes the Redis key. The next reader reloads the new price.',
+      text: ['Deleting beats overwriting: the invalidator does not need to know how the API builds the JSON, and a delete is idempotent if the event is redelivered.', 'Without the LSN wait there is a classic race: delete → a reader misses → reads the replica that has not replayed yet → caches €119 again for an hour.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+-- replica check (on each replica)
+SELECT pg_last_wal_replay_lsn() >= '16/E4A1B6D0'::pg_lsn;   -- true
+
+> DEL product:p_812:v3
+(integer) 1                    -- next reader reloads version 18`,
+      code: [{ lang: 'python', title: 'Invalidator', src: String.raw`
+async def on_change(ev: ChangeEvent):
+    if ev.source.table != "products":
+        return
+    k = f"product:{ev.after['id'] if ev.after else ev.before['id']}:v3"
+    await wait_replicas_past(ev.source.lsn, timeout_s=5)   # avoid stale re-fill
+    await redis.delete(k)
+    await redis.publish("cache-invalidate", k)
+    await consumer.commit(ev)            # at-least-once: a redelivery just deletes again` }],
+      failure: ['**Invalidator is down:** events wait in Kafka, so nothing is lost; keys are deleted when it comes back. Meanwhile the TTL bounds staleness to about an hour; an alert on consumer lag pages someone long before that.', '**Replica check times out:** delete anyway, then delete again 2 s later (a "delayed double delete") to catch a re-fill from the lagging replica.']
+    },
+    {
+      from: 'cdc', to: 'bus', label: 'PUBLISH cache-invalidate', async: true,
+      title: 'Announce the key to every pod',
+      caption: 'Deleting from Redis is not enough: 24 API pods each hold an L1 copy. The invalidator publishes the key name on a Redis pub/sub channel that all pods subscribe to.',
+      text: ['The message is just the key name. Pods do not need the new value; they drop the entry and reload it on the next request.'],
+      payloadKind: 'Redis',
+      payloadLang: 'redis',
+      payload: String.raw`
+> PUBLISH cache-invalidate "product:p_812:v3"
+(integer) 24                   -- number of subscribers that received it`
+    },
+    {
+      from: 'bus', to: 'api', label: 'drop L1 key',
+      title: 'Every pod drops its local copy',
+      caption: 'All 24 API pods receive the pub/sub message and evict the key from their L1 map. Without this, a pod could keep serving €119 for up to 5 more seconds.',
+      text: ['Redis pub/sub is fire-and-forget: a pod that is reconnecting misses the message. That is acceptable only because the L1 TTL is 5 seconds; the design never relies on pub/sub alone.'],
+      payloadKind: 'Pub/Sub message',
+      payload: { channel: 'cache-invalidate', message: 'product:p_812:v3', receivers: 24 },
+      code: [{ lang: 'python', title: 'L1 eviction listener', src: String.raw`
+async def l1_invalidation_loop():
+    async with redis.pubsub() as ps:
+        await ps.subscribe("cache-invalidate")
+        async for msg in ps.listen():
+            if msg["type"] == "message":
+                l1.pop(msg["data"].decode(), None)
+
+# started from FastAPI's lifespan:
+# app.state.l1_task = asyncio.create_task(l1_invalidation_loop())` }]
+    },
+    {
+      from: 'api', to: 'replica', label: 'reload v18',
+      title: 'The next read loads the new price',
+      caption: 'The next request misses L1 and Redis, takes the reload lock and reads version 18 (€89) from the replica, which has already replayed it. Total time from the admin\'s click to every reader seeing €89: under a second.',
+      payloadKind: 'Cached value',
+      payload: { key: 'product:p_812:v3', ttl_s: 4120, value: { id: 'p_812', title: 'Speedgoat 6 trail shoe', brand: 'HOKA', price_minor: 8900, currency: 'EUR', stock: 37, version: 18, cached_at: '2026-11-25T11:41:43Z' } },
+      text: ['If a slow request that started before the change tries to write version 17 back after this, a small Lua script compares versions and refuses to overwrite 18 with 17.']
+    }
+  ],
+  api: [
+    { verb: 'GET', path: '/v1/products/{id}', desc: 'Cache-aside read through L1 → Redis → replica.' },
+    { verb: 'PATCH', path: '/admin/v1/products/{id}', desc: 'Admin update with `If-Match: <version>`; never touches the cache directly.' },
+    { verb: 'POST', path: '/admin/v1/cache/purge', desc: 'Emergency purge by key prefix, rate-limited and audited.' }
+  ],
+  schema: String.raw`
+CREATE TABLE products (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, brand TEXT,
+  price_minor INT NOT NULL, currency CHAR(3) NOT NULL DEFAULT 'EUR',
+  version INT NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE stock (product_id TEXT PRIMARY KEY REFERENCES products, available INT NOT NULL);
+
+-- Redis
+-- product:{id}:v3        JSON bytes, TTL 3600–4200 s (or "NEG" for 60 s)
+-- lock:product:{id}:v3   reload lock, PX 3000
+-- channel cache-invalidate  L1 evictions`,
+  decisions: [
+    { q: 'Which caching pattern?', options: [
+      { verdict: 'good', name: '{{write-through}}: the API writes the cache on every update', why: 'Fresh, but every write path (scripts, migrations) must remember to do it.' },
+      { verdict: 'great', name: '{{cache-aside}} for reads, CDC-driven deletes for writes', why: 'Reads fill lazily; every committed change invalidates, whoever made it.' }
+    ] },
+    { q: 'How do you survive a hot key expiring?', options: [
+      { verdict: 'bad', name: 'Nothing: every miss reads the database', why: '6,000 identical queries in the same second.' },
+      { verdict: 'good', name: 'TTL jitter', why: 'Spreads expiries of different keys, but one hot key still expires.' },
+      { verdict: 'great', name: 'Single-flight lock + L1 cache + jitter', why: 'One database read per expiry, and the hottest keys rarely reach Redis.' }
+    ] },
+    { q: 'Delete or update the cache on change?', options: [
+      { verdict: 'ok', name: 'Overwrite with the new value', why: 'Two concurrent updates can land in the wrong order and leave the older value.' },
+      { verdict: 'great', name: 'Delete and let the next read reload', why: 'Idempotent, order-insensitive, and the invalidator needs no knowledge of the format.' }
+    ] }
+  ],
+  refs: [
+    { label: 'Redis: Cluster specification (hash slots)', url: 'https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/' },
+    { label: 'Facebook: Scaling Memcache at Facebook (NSDI 2013)', url: 'https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala' },
+    { label: 'Debezium PostgreSQL connector', url: 'https://debezium.io/documentation/reference/stable/connectors/postgresql.html' }
+  ]
+});
+
+flow({
+  id: 'cdn-delivery',
+  title: 'CDN: edge caching, origin shield and purge',
+  category: 'Infrastructure foundations',
+  tags: ['Anycast', 'Edge cache', 'Origin shield', 'Cache-Control', 'Surrogate keys', 'stale-while-revalidate'],
+  summary: 'A visitor in Brussels opens a Next.js page and its images. Follow the request to the nearest edge location, through a miss to the shield and the origin, then see the second visitor get a hit in 4 ms, a stale page refreshed in the background, and a deploy purge everything tagged with one key.',
+  requirements: {
+    functional: [
+      'Static assets (JS, CSS, images) and cacheable HTML are served from edge locations near users.',
+      'A deploy or content change can purge exactly the affected objects within seconds.',
+      'Personalised responses (cart, account) are never cached and shown to another user.'
+    ],
+    nonFunctional: [
+      'Time to first byte under 50 ms for cached objects in Europe and North America.',
+      'Origin load stays small even during traffic spikes: target ≥ 95% offload.',
+      'If the origin is down, users still get the last good copy of cached pages.'
+    ]
+  },
+  estimates: [
+    { label: 'Requests', value: '120,000 / s', note: 'Pages, assets and images at peak.' },
+    { label: 'Offload target', value: '97%', note: 'So the origin serves about 3,600 req/s; the shield turns many edge misses into one origin fetch.' },
+    { label: 'Egress', value: '≈ 30 Gbit/s', note: '120k req/s × ~30 KB average response.' },
+    { label: 'Edge locations', value: '300+', note: 'Typical for a large CDN; anycast picks the nearest by network path.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'browser', label: 'Browser', sub: 'Brussels', kind: 'client', icon: 'phone', x: 0, y: 0, desc: 'A visitor opening /shoes/trail and the images on it.' },
+    { id: 'dns', label: 'DNS', sub: 'anycast', kind: 'edge', icon: 'dns', x: 0, y: 1, desc: 'Answers the CDN hostname with an anycast IP that every edge location announces.' },
+    { id: 'edge', label: 'Edge location', sub: 'BRU PoP', kind: 'edge', icon: 'cdn', x: 1, y: 0, desc: 'Terminates TLS, looks up the cache key, serves hits from memory or SSD.' },
+    { id: 'edge2', label: 'Edge location', sub: 'AMS PoP', kind: 'edge', icon: 'cdn', x: 1, y: 2, desc: 'Another edge location. Without a shield, it would fetch the same object from the origin again.' },
+    { id: 'shield', label: 'Origin shield', sub: 'FRA tier', kind: 'cache', icon: 'shield', x: 2, y: 1, desc: 'One regional cache that all edges ask before the origin.' },
+    { id: 'origin', label: 'Next.js origin', sub: 'Node servers', kind: 'service', x: 3, y: 0, desc: 'Renders pages and sets Cache-Control and Surrogate-Key headers.' },
+    { id: 'bucket', label: 'Asset bucket', sub: 'S3', kind: 'storage', x: 3, y: 2, desc: 'Build output (/_next/static) and product images, immutable files with a hash in their name.' },
+    { id: 'ci', label: 'Deploy / CMS', sub: 'CI job', kind: 'worker', x: 2, y: 2, desc: 'After a deploy or a content edit, calls the CDN purge API by tag.' }
+  ],
+  steps: [
+    {
+      from: 'browser', to: 'dns', label: 'A? www.shop.example',
+      title: 'Resolve the hostname',
+      caption: 'The browser asks DNS for www.shop.example. It is a CNAME to the CDN, whose name servers return one anycast address.',
+      text: ['With {{anycast}}, the same IP is announced from every edge location; Internet routing (BGP) delivers packets to the nearest one by network path. Some CDNs use GeoDNS instead and return a different IP per region.'],
+      payloadKind: 'DNS answer',
+      payloadLang: 'text',
+      payload: String.raw`
+www.shop.example.     300  IN CNAME  shop.example.cdn-provider.net.
+shop.example.cdn-provider.net. 60 IN A 151.101.1.57     ; anycast, announced by 300+ PoPs`,
+      fields: {}
+    },
+    {
+      from: 'browser', to: 'edge', label: 'GET /shoes/trail (TLS)',
+      title: 'TLS ends at the nearest edge',
+      caption: 'The connection lands in the Brussels edge location, 3 ms away. TLS is terminated there with the site\'s certificate, so the handshake does not cross to the origin in Frankfurt.',
+      text: ['A TLS 1.3 handshake costs one round trip; at 3 ms instead of 25 ms, the page starts loading noticeably faster even before any caching.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', url: 'https://www.shop.example/shoes/trail', headers: { 'Accept-Encoding': 'br, gzip', 'Accept-Language': 'fr-BE,fr;q=0.9,en;q=0.8', Cookie: '_ga=GA1.1.33…; theme=dark' } },
+      fields: { Cookie: 'The edge strips cookies that do not change the HTML (analytics, theme) from the cache key; otherwise every visitor would have their own cache entry.' }
+    },
+    {
+      from: 'edge', to: 'edge', label: 'cache lookup: MISS',
+      title: 'Build the cache key and look it up',
+      caption: 'The edge builds the cache key from host, path, encoding and language. Nobody in Brussels asked for this page in the last minute, so it is a miss.',
+      text: ['The {{cache key}} decides correctness. Leave out a header that changes the response (language) and users get the wrong page; include one that does not matter (a full cookie) and the hit ratio drops to zero.'],
+      payloadKind: 'Cache key',
+      payload: { key: 'www.shop.example|/shoes/trail|br|fr', varies_on: ['Accept-Encoding', 'Accept-Language (normalised to fr / en / nl)'], result: 'MISS', stored_objects_in_pop: 18400000 },
+      fields: { varies_on: 'Accept-Language is normalised to a few values first. Raw headers have thousands of variants and would fragment the cache.' },
+      code: [{ lang: 'ts', title: 'Edge function: normalise the key', src: String.raw`
+// runs at the edge before the cache lookup
+export default {
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    const lang = (req.headers.get("accept-language") || "").slice(0, 2);
+    const norm = ["fr", "nl", "en"].includes(lang) ? lang : "en";
+    url.searchParams.delete("utm_source");           // tracking params never change HTML
+    url.searchParams.delete("fbclid");
+    const h = new Headers(req.headers);
+    h.set("x-lang", norm);
+    h.delete("cookie");                                // public pages ignore cookies
+    return fetch(new Request(url.toString(), { headers: h }), {
+      cf: { cacheKey: url.host + url.pathname + url.search + "|" + norm },
+    });
+  },
+};` }]
+    },
+    {
+      from: 'edge', to: 'shield', label: 'GET (miss)',
+      title: 'The miss goes to the origin shield',
+      caption: 'Instead of contacting the origin, the edge asks the shield in Frankfurt. Every edge in Europe asks the same shield, so a popular page is fetched from the origin once, not 40 times.',
+      text: ['The {{origin shield}} also coalesces requests: if 200 edges miss on the same object in the same second, the shield sends one request to the origin and answers all 200 from it.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', url: 'https://origin.shop.example/shoes/trail', headers: { 'X-Lang': 'fr', 'CDN-Loop': 'edge-bru', Via: '1.1 edge-bru' } },
+      fields: { 'CDN-Loop': 'Prevents request loops if a CDN is misconfigured to point at itself.' },
+      failure: ['**Shield unreachable:** edges fall back to contacting the origin directly. Origin load jumps, which is why the origin is sized for some multiple of normal miss traffic.']
+    },
+    {
+      from: 'shield', to: 'origin', label: 'GET /shoes/trail',
+      title: 'The origin renders the page',
+      caption: 'Next.js renders the category page and returns it with caching headers: shared caches may keep it for 60 s, then serve it stale for 10 minutes while revalidating, and the page carries two purge tags.',
+      text: ['`s-maxage` applies to shared caches (CDN) only; `max-age=0` keeps browsers asking the CDN, which is cheap. {{stale-while-revalidate}} means no user ever waits for a re-render after the first one.'],
+      payloadKind: 'HTTP response',
+      payload: { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400', 'Surrogate-Key': 'category:trail products-list', ETag: '"c7f1-9a2"', Vary: 'X-Lang' }, body: '<!doctype html>… (38 KB)' },
+      fields: { 'Surrogate-Key': 'Tags for purging. Changing any trail shoe purges `category:trail`, without knowing every URL that shows it ({{surrogate key}}).', 'stale-if-error': 'If the origin returns 5xx or is down, the CDN may serve the stale copy for a day.' },
+      code: [{ lang: 'ts', title: 'next.config.js + route headers', src: String.raw`
+// app/shoes/[cat]/page.tsx
+export const revalidate = 60;
+
+// middleware.ts: add purge tags and shared-cache rules to public pages
+export function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const cat = req.nextUrl.pathname.split("/")[2];
+  res.headers.set("Cache-Control",
+    "public, max-age=0, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400");
+  res.headers.set("Surrogate-Key", "category:" + cat + " products-list");
+  return res;
+}
+export const config = { matcher: ["/shoes/:path*"] };` }],
+      failure: ['**Origin returns 500:** with `stale-if-error`, the shield serves its last good copy if it has one. With nothing cached, the error goes to the user, but is not cached (5xx are not cacheable by default here).']
+    },
+    {
+      from: 'shield', to: 'edge', label: '200 + store', reply: true,
+      title: 'Both tiers store the page',
+      caption: 'The shield stores the response, then the Brussels edge stores it too. The visitor gets the page about 45 ms after the request; the next visitor in Brussels will not wait for Frankfurt.',
+      payloadKind: 'HTTP response',
+      payload: { status: 200, headers: { 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=600', Age: '0', 'X-Cache': 'MISS, MISS', 'Server-Timing': 'cdn-cache;desc=MISS, edge;dur=2, origin;dur=38' } },
+      text: ['`X-Cache: MISS, MISS` reads edge then shield. `Age` counts seconds since the origin produced the response.']
+    },
+    {
+      from: 'browser', to: 'edge', label: 'GET /_next/static/…js',
+      title: 'Assets are immutable and cached for a year',
+      caption: 'The page pulls its JavaScript and images. Their file names contain a content hash, so they can be cached by browsers and the CDN for a year and never need a purge.',
+      text: ['A new deploy produces new file names (`main-8c1e.js` becomes `main-41ab.js`), so the HTML points at new files and old ones simply stop being requested.', 'Images go through an image optimiser at the edge that resizes and converts to AVIF/WebP depending on the `Accept` header.'],
+      payloadKind: 'HTTP response',
+      payload: { request: 'GET /_next/static/chunks/main-8c1e2f.js', status: 200, headers: { 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Encoding': 'br', 'X-Cache': 'HIT', Age: '86211' } },
+      fields: { immutable: 'Tells browsers not to revalidate even on reload. Safe only because the URL changes whenever the content does.' }
+    },
+    {
+      from: 'shield', to: 'bucket', label: 'GET image (miss)',
+      title: 'Images are fetched from the bucket, not the app servers',
+      caption: 'The first request for a new product photo misses at the edge and the shield, and the shield fetches the original from the S3 bucket. Node servers never spend time streaming bytes.',
+      text: ['The CDN has a second origin for `/images/*` and `/_next/static/*` that points at the bucket. The bucket only accepts requests signed by the CDN (origin access control), so nobody can bypass the cache and run up the S3 bill.', 'The image optimiser stores each variant (width 640, AVIF) as its own cached object; the original is fetched once.'],
+      payloadKind: 'Origin request',
+      payload: { method: 'GET', url: 'https://assets-shop.s3.eu-central-1.amazonaws.com/images/p_812/main.jpg', headers: { Authorization: 'AWS4-HMAC-SHA256 Credential=\u2026 (signed by the CDN)' }, response: { status: 200, 'Content-Length': 2381204, 'Cache-Control': 'public, max-age=86400, s-maxage=2592000' }, variant_served: { width: 640, format: 'avif', bytes: 48211 } },
+      fields: { variant_served: 'The edge resized the 2.3 MB original to a 48 KB AVIF for this phone screen.' },
+      failure: ['**Object missing (404):** cached briefly (negative caching, 60 s) so a broken image link does not hit S3 on every page view.']
+    },
+    {
+      from: 'edge2', to: 'shield', label: 'GET (miss) → HIT',
+      title: 'Another edge misses, the shield hits',
+      caption: 'A visitor in Amsterdam requests the same page. The Amsterdam edge misses, but the shield has it: answered in 12 ms without touching the origin.',
+      payloadKind: 'HTTP response',
+      payload: { status: 200, headers: { Age: '14', 'X-Cache': 'MISS, HIT' } },
+      text: ['This is the point of a shield: origin requests scale with the number of distinct objects, not with objects × edge locations.']
+    },
+    {
+      from: 'edge', to: 'origin', label: 'stale → background refresh', async: true,
+      title: 'A stale page is served instantly, refreshed behind the scenes',
+      caption: '90 seconds later the Brussels copy is older than s-maxage. The next visitor still gets it immediately; the edge revalidates in the background with If-None-Match.',
+      text: ['The origin compares the ETag. If the page did not change, it answers `304 Not Modified` with no body and the cached copy is fresh again for 60 s.'],
+      payloadKind: 'Conditional request',
+      payload: { request: { method: 'GET', path: '/shoes/trail', headers: { 'If-None-Match': '"c7f1-9a2"' } }, response: { status: 304, headers: { ETag: '"c7f1-9a2"', 'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=600' } }, user_saw: 'X-Cache: STALE (4 ms)' }
+    },
+    {
+      from: 'ci', to: 'edge', label: 'POST /purge tag=category:trail',
+      title: 'A price change purges by tag',
+      caption: 'An editor changes a trail shoe\'s price. The CMS webhook calls the CDN purge API with the tag category:trail; every edge and the shield drop all objects with that tag within a couple of seconds.',
+      text: ['Purging by tag replaces guessing URLs: the category page, page 2, the sorted variants and the French and Dutch versions all carry the same tag.', 'Most CDNs offer a soft purge that marks objects stale instead of deleting them, so the next request is served stale while revalidating, avoiding a burst on the origin.'],
+      payloadKind: 'Purge API',
+      payload: { method: 'POST', path: '/zones/z_41/purge_cache', body: { tags: ['category:trail'], soft: true }, response: { success: true, id: 'purge_9f1c', propagated_ms: 1800 } },
+      code: [{ lang: 'python', title: 'FastAPI: purge after a product change', src: String.raw`
+@router.post("/internal/cms/product-changed")
+async def product_changed(ev: ProductChanged):
+    tags = [f"product:{ev.id}", f"category:{ev.category}"]
+    async with httpx.AsyncClient(timeout=5) as c:
+        r = await c.post(f"{CDN_API}/zones/{ZONE}/purge_cache",
+                         headers={"Authorization": f"Bearer {CDN_TOKEN}"},
+                         json={"tags": tags, "soft": True})
+        r.raise_for_status()
+    return {"purged": tags}` }],
+      failure: ['**Purge API call fails:** the job retries with {{exponential backoff}}. Worst case, `s-maxage=60` limits how long the old price shows; that short TTL is the backstop.', '**Purging everything after each deploy:** origin load spikes to 30× normal for a minute. Hashed asset names and tag purges avoid full purges entirely.']
+    }
+  ],
+  api: [
+    { verb: 'GET', path: '/{any public path}', desc: 'Served by the CDN; origin sets `Cache-Control`, `ETag`, `Surrogate-Key`.' },
+    { verb: 'POST', path: '/zones/{zone}/purge_cache', desc: 'CDN purge by tags, URLs or prefix; soft purge marks stale.' },
+    { verb: 'POST', path: '/internal/cms/product-changed', desc: 'CMS webhook that triggers the tag purge.' }
+  ],
+  schemaLang: 'text',
+  schemaNote: 'Caching rules by path. The CDN stores objects; your systems only set headers.',
+  schema: String.raw`
+Path                      Cache-Control                                         Purge
+/_next/static/*           public, max-age=31536000, immutable                    never (hashed names)
+/images/*                 public, max-age=86400, s-maxage=2592000                tag product:{id}
+/shoes/*, /p/*            public, max-age=0, s-maxage=60, swr=600, sie=86400      tag category:*, product:*
+/api/products/*           public, s-maxage=30                                    tag product:{id}
+/cart, /account, /api/me  private, no-store                                      n/a (never cached)`,
+  decisions: [
+    { q: 'How do you keep cached HTML fresh?', options: [
+      { verdict: 'bad', name: 'Long TTL and full purge on every deploy', why: 'Origin stampede after each deploy; stale content between deploys.' },
+      { verdict: 'good', name: 'Short s-maxage only', why: 'Simple, but every page re-renders every minute in every region.' },
+      { verdict: 'great', name: 'Short s-maxage + stale-while-revalidate + tag purges', why: 'Instant responses, fresh within seconds of a change, and low origin load.' }
+    ] },
+    { q: 'Why add an origin shield?', options: [
+      { verdict: 'ok', name: 'Edges go straight to origin', why: 'Fine for small sites; with 300 PoPs, each object can be fetched 300 times.' },
+      { verdict: 'great', name: 'One shield region near the origin', why: 'Collapses misses from every edge into one origin request per object.' }
+    ] }
+  ],
+  refs: [
+    { label: 'MDN: Cache-Control', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control' },
+    { label: 'RFC 5861: stale-while-revalidate and stale-if-error', url: 'https://www.rfc-editor.org/rfc/rfc5861' },
+    { label: 'Cloudflare: What is anycast?', url: 'https://www.cloudflare.com/learning/cdn/glossary/anycast-network/' }
+  ]
+});
+
 </script>
 <script>
 /* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
@@ -5518,6 +6061,14 @@ const ICON = {
   gauge: '<path d="M4 18a8 8 0 1116 0"/><path d="M12 18l4-6"/>',
   cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H5v1a3 3 0 003 3M16 6h3v1a3 3 0 01-3 3M12 13v4M8 21h8M9 17h6v4H9z"/>',
+  pen: '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>',
+  hash: '<path d="M9 3L7 21M17 3l-2 18M4 8h17M3 16h17"/>',
+  server: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+  ticket: '<path d="M3 8a2 2 0 002-2h14a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H5a2 2 0 00-2-2v-2a2 2 0 000-4z"/><path d="M14 6v12"/>',
+  ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.6"/><circle cx="19" cy="15" r="1.6"/><circle cx="5" cy="15" r="1.6"/>',
+  pulse: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
   video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'
 };
 const svgIcon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICON[k] || ICON.service) + '</svg>';
