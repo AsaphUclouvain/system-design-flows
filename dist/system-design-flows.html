@@ -8708,6 +8708,455 @@ CREATE INDEX ON opening_hours (place_id, weekday);`,
   ]
 });
 
+flow({
+  id: 'multi-region',
+  title: 'Multi-region replication and failover',
+  category: 'Infrastructure foundations',
+  tags: ['Active-passive database', 'Async replication', 'Read-your-writes', 'GeoDNS routing', 'Regional failover', 'RPO / RTO'],
+  summary: 'The shop runs in Frankfurt and Virginia. Follow a write from a European user to the primary, its asynchronous trip across the Atlantic, an American user reading from the local replica while still seeing their own fresh writes, and then the whole Frankfurt region failing and traffic and the primary role moving to Virginia.',
+  requirements: {
+    functional: [
+      'Users are served from the nearest region for low latency.',
+      'A user always sees their own writes immediately, wherever they read.',
+      'If a whole region fails, the service continues from the other region.'
+    ],
+    nonFunctional: [
+      'Reads under 50 ms for users on both continents.',
+      'RPO: lose at most a few seconds of writes in a regional disaster. RTO: back within 5 minutes.',
+      'No split brain: never two regions accepting writes for the same data at once.'
+    ]
+  },
+  estimates: [
+    { label: 'Regions', value: '2', note: 'eu-central-1 (primary) and us-east-1 (standby + read replicas).' },
+    { label: 'Transatlantic RTT', value: '≈ 90 ms', note: 'Frankfurt ↔ Virginia. Synchronous replication would add this to every commit.' },
+    { label: 'Replication lag', value: '≈ 100–300 ms', note: 'Normal async lag across the Atlantic; alert above 5 s.' },
+    { label: 'Write share', value: '≈ 5%', note: 'Of all requests. Reads dominate, which is why local read replicas pay off.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'eu_user', label: 'User in Brussels', sub: 'browser', kind: 'client', icon: 'phone', x: 0, y: 0, desc: 'Routed to Frankfurt.' },
+    { id: 'us_user', label: 'User in Boston', sub: 'browser', kind: 'client', icon: 'phone', x: 0, y: 2, desc: 'Routed to Virginia.' },
+    { id: 'dns', label: 'Global DNS', sub: 'latency routing', kind: 'edge', icon: 'globe', x: 0, y: 1, desc: 'Answers with the nearest healthy region; health checks remove a failed region.' },
+    { id: 'eu_app', label: 'EU app', sub: 'Next.js + FastAPI', kind: 'service', x: 1, y: 0, desc: 'Full application stack in Frankfurt.' },
+    { id: 'us_app', label: 'US app', sub: 'Next.js + FastAPI', kind: 'service', x: 1, y: 2, desc: 'Full application stack in Virginia; sends writes to the primary.' },
+    { id: 'eu_db', label: 'EU primary', sub: 'PostgreSQL', kind: 'db', x: 2, y: 0, desc: 'Accepts all writes. Has a synchronous standby in another Frankfurt zone.' },
+    { id: 'us_db', label: 'US replica', sub: 'PostgreSQL', kind: 'db', x: 2, y: 2, desc: 'Streams WAL asynchronously from Frankfurt; serves US reads; can be promoted.' },
+    { id: 'ctl', label: 'Failover controller', sub: 'runbook automation', kind: 'worker', icon: 'shield', x: 3, y: 1, desc: 'Detects a regional outage, fences the old primary, promotes the replica and flips routing.' },
+    { id: 's3', label: 'Object storage', sub: 'S3, replicated', kind: 'storage', x: 3, y: 0, desc: 'Images and files, replicated to the other region in the background.' }
+  ],
+  steps: [
+    {
+      from: 'eu_user', to: 'dns', label: 'A? api.shop.example',
+      title: 'Route each user to the nearest region',
+      caption: 'DNS with latency-based routing answers Brussels users with the Frankfurt load balancer and Boston users with Virginia. Health checks run from several locations every 10 seconds.',
+      text: ['DNS answers have a short TTL (60 s) so that, in a failover, clients move to the other region quickly. Some resolvers ignore TTLs, which is one reason an anycast front door is often added in front.'],
+      payloadKind: 'DNS answers',
+      payloadLang: 'text',
+      payload: String.raw`
+; from a Brussels resolver
+api.shop.example.  60  IN A  3.120.41.7     ; eu-central-1 ALB
+; from a Boston resolver
+api.shop.example.  60  IN A  44.198.12.90   ; us-east-1 ALB
+
+health: eu-central-1 HEALTHY (3/3 checkers)  us-east-1 HEALTHY (3/3)`
+    },
+    {
+      from: 'eu_app', to: 'eu_db', label: 'UPDATE address (COMMIT)',
+      title: 'A European user writes',
+      caption: 'The Brussels user changes their delivery address. The EU app writes to the primary in Frankfurt; the commit waits for the synchronous standby in another Frankfurt zone (2 ms), not for Virginia.',
+      text: ['Synchronous inside the region, asynchronous across regions: losing one zone loses nothing, and commits do not pay the 90 ms transatlantic round trip.', 'The response returns the commit\'s {{lsn}} to the client in a cookie; that is what makes read-your-writes possible later.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+UPDATE addresses SET line1 = 'Rue de la Loi 16', city = 'Bruxelles', updated_at = now()
+WHERE user_id = 'usr_ana' AND id = 'addr_33';
+COMMIT;                                     -- waits for eu-central-1b standby (synchronous_commit = on)
+SELECT pg_current_wal_lsn();                -- 3A/7F21C9B8  -> returned as cookie "rv"`,
+      code: [{ lang: 'python', title: 'Write and remember the LSN', src: String.raw`
+@router.patch("/v1/addresses/{aid}")
+async def update_address(aid: str, body: AddressIn, resp: Response, user=Depends(current_user)):
+    async with primary.acquire() as c, c.transaction():
+        await c.execute(UPDATE_ADDRESS, body.line1, body.city, user.id, aid)
+    lsn = await primary.fetchval("SELECT pg_current_wal_lsn()::text")
+    resp.set_cookie("rv", lsn, max_age=60, httponly=True, secure=True, samesite="lax")
+    return {"ok": True}` }]
+    },
+    {
+      from: 'eu_db', to: 'us_db', label: 'WAL stream (async)', async: true,
+      title: 'The change crosses the Atlantic',
+      caption: 'The primary streams its write-ahead log to the Virginia replica, which replays it. Lag is usually 100–300 ms. The European user already got their answer.',
+      text: ['{{replication lag}} is the cost of async replication: for a short window, Virginia has an older copy. It is also the {{rpo}}: if Frankfurt vanished now, the last ~200 ms of commits would be lost.'],
+      payloadKind: 'Replication status',
+      payload: { application_name: 'us-east-1-replica', state: 'streaming', sync_state: 'async', sent_lsn: '3A/7F21C9B8', replay_lsn: '3A/7F1E0040', replay_lag_ms: 212 },
+      fields: { replay_lag_ms: 'How far behind the replica is in time. Alerting at 5 s keeps the RPO honest.' },
+      failure: ['**Transatlantic link degraded:** lag grows; the primary keeps WAL around (replication slot) until the replica catches up. A max-slot-size guard prevents filling the primary\'s disk.']
+    },
+    {
+      from: 'us_user', to: 'us_app', label: 'GET /v1/products',
+      title: 'An American user arrives in Virginia',
+      caption: 'The Boston resolver got the Virginia address, so the request lands in us-east-1, about 8 ms away instead of 90 ms to Frankfurt. The full app stack runs there too.',
+      text: ['Every region runs the same Next.js and FastAPI deployment from the same images. Only the database role differs: Virginia has replicas, Frankfurt the primary.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', path: '/v1/products?category=trail', served_by: 'us-east-1', client_rtt_ms: 8, headers: { 'CloudFront-Viewer-Country': 'US' } }
+    },
+    {
+      from: 'us_app', to: 'us_db', label: 'read (local replica)',
+      title: 'An American user reads locally',
+      caption: 'A Boston user opens the product catalogue. The US app reads from the local replica in 2 ms instead of crossing the Atlantic (about 90 ms). A product edited 200 ms ago might still show its old version, which is acceptable here.',
+      payloadKind: 'Query',
+      payload: { region: 'us-east-1', target: 'local replica', query: 'SELECT … FROM products WHERE category = $1 LIMIT 40', took_ms: 2.3, staleness_bound: '≤ replication lag (≈ 0.2 s)' },
+      text: ['Most reads tolerate a fraction of a second of staleness. The ones that do not are handled by routing rules, as the next step shows.']
+    },
+    {
+      from: 'us_app', to: 'eu_db', label: 'write → EU primary',
+      title: 'An American user writes: the write goes to Frankfurt',
+      caption: 'The Boston user places an order. Writes must go to the single primary, so the US app sends this transaction to Frankfurt. It costs about 90 ms extra, paid only on writes.',
+      text: ['One primary for all writes avoids conflicts entirely. The alternative, writing in both regions (multi-primary), needs conflict resolution for every table and is usually reserved for data that can be partitioned by home region.'],
+      payloadKind: 'Write routing',
+      payload: { region: 'us-east-1', target: 'eu-central-1 primary', statement: 'INSERT INTO orders …', network_rtt_ms: 88, commit_ms: 94, returned_lsn: '3A/7F2A0010' }
+    },
+    {
+      from: 'us_app', to: 'us_db', label: 'read own write (wait LSN)',
+      title: 'Read-your-writes after crossing regions',
+      caption: 'The order confirmation page loads right after. The request carries the LSN of the order commit. The US app checks the local replica has replayed past it; it has not yet, so it waits up to 300 ms, then reads locally.',
+      text: ['{{read-your-writes}} without sending every read to the primary: only this user\'s reads, only for a minute after their write, and only if the replica is behind their LSN. Everyone else reads freely.', 'If the wait would exceed 300 ms, the read goes to the primary instead, slower but correct.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+-- on the US replica
+SELECT pg_last_wal_replay_lsn() >= '3A/7F2A0010'::pg_lsn;   -- false
+-- ...poll every 20 ms...
+SELECT pg_last_wal_replay_lsn() >= '3A/7F2A0010'::pg_lsn;   -- true after 140 ms
+SELECT * FROM orders WHERE id = 'ord_8812';                 -- sees the new order`,
+      code: [{ lang: 'python', title: 'Pick a connection for a read', src: String.raw`
+async def read_conn(req: Request):
+    rv = req.cookies.get("rv")                       # LSN of this user's last write
+    if not rv:
+        return local_replica
+    deadline = time.monotonic() + 0.3
+    while time.monotonic() < deadline:
+        if await local_replica.fetchval("SELECT pg_last_wal_replay_lsn() >= $1::pg_lsn", rv):
+            return local_replica
+        await asyncio.sleep(0.02)
+    return primary                                   # still behind: read the source` }]
+    },
+    {
+      from: 'eu_app', to: 's3', label: 'upload + CRR', async: true,
+      title: 'Files replicate too',
+      caption: 'An uploaded invoice PDF is stored in the Frankfurt bucket and copied to Virginia by cross-region replication, usually within seconds to minutes. Database rows referencing it can arrive before the file.',
+      text: ['The app handles the gap: if a file is missing in the local bucket, it fetches it from the other region. Without this, a failover could show broken images for objects uploaded in the last minutes.'],
+      payloadKind: 'Replication rule',
+      payload: { source: 's3://shop-files-euc1', destination: 's3://shop-files-use1', status: 'Enabled', replication_time_control: '15 minutes SLA (99.99%)', object: 'invoices/ord_8812.pdf', replication_status: 'COMPLETED' }
+    },
+    {
+      from: 'ctl', to: 'eu_db', label: 'region down: fence',
+      title: 'Frankfurt fails',
+      caption: 'A regional outage makes Frankfurt unreachable from health checkers on three continents for 2 minutes. The controller declares the region failed and first fences the old primary so it can never accept writes again, even if it comes back.',
+      text: ['Fencing comes before promotion. Without it, a network partition could leave Frankfurt still accepting writes from some clients while Virginia accepts others: {{split brain}}, with two diverging histories.', 'Fencing here means revoking the EU database\'s credentials and security group access, and bumping an epoch number apps check before writing.'],
+      payloadKind: 'Failover decision',
+      payload: { detected_at: '2026-11-25T11:52:10Z', signals: { health_checks_failed: '9/9 checkers, 120 s', eu_api_5xx: 'no responses', replica_lag_s: 'stalled at 0.4 s' }, decision: 'regional failover to us-east-1', fencing: ['revoke app role on eu primary', 'security group: deny 5432', 'epoch 7 → 8 in global config'], approved_by: 'on-call (Sam), 11:53:02Z' },
+      fields: { approved_by: 'Regional failover is automated but gated by one human confirmation, because a false positive is itself an outage.' }
+    },
+    {
+      from: 'ctl', to: 'us_db', label: 'promote replica',
+      title: 'Promote Virginia to primary',
+      caption: 'The Virginia replica stops replaying, promotes itself, and starts accepting writes as the new primary on a new timeline. The last 0.4 s of Frankfurt commits that never arrived are lost: that is the RPO in action.',
+      text: ['Lost commits are not silently forgotten: when Frankfurt returns, its WAL after the divergence point is compared, and those few transactions are listed for reconciliation (for example orders paid but not in the new primary).'],
+      payloadKind: 'Promotion',
+      payloadLang: 'text',
+      payload: String.raw`
+$ pg_ctl promote -D /var/lib/postgresql/data
+waiting for server to promote.... done
+server promoted
+
+LOG:  selected new timeline ID: 9
+LOG:  last replayed LSN 3A/7F3B2280  (approx. 0.4 s behind the old primary)
+LOG:  database system is ready to accept connections`,
+      failure: ['**Promotion fails:** a second replica in another US zone is promoted instead. Each region keeps at least two database nodes for this reason.']
+    },
+    {
+      from: 'ctl', to: 'dns', label: 'EU → unhealthy',
+      title: 'Route everyone to Virginia',
+      caption: 'Frankfurt is marked unhealthy in DNS, so European users now get the Virginia address. The US apps switch their write connection to the local new primary through a config change keyed by the epoch.',
+      text: ['Total time from detection to writes working again: about 4 minutes, within the 5-minute {{rto}}. European users see higher latency (about 90 ms more) until Frankfurt is restored.'],
+      payloadKind: 'Routing change',
+      payload: { dns: { 'eu-central-1': 'UNHEALTHY (forced)', 'us-east-1': 'HEALTHY' }, app_config: { epoch: 8, primary: 'us-east-1', read_replicas: ['us-east-1b'] }, ttl_s: 60, traffic_moved_after_s: 90 }
+    },
+    {
+      from: 'eu_user', to: 'us_app', label: 'served from US',
+      title: 'Europe is served from America, slower but up',
+      caption: 'The Brussels user\'s next request lands in Virginia. Pages work, writes work. Later, Frankfurt is rebuilt as a replica of Virginia and, in a planned, quiet hour, the primary is switched back.',
+      text: ['Failback is a planned switchover, not another emergency: replicate back, wait until lag is near zero, stop writes for a few seconds, promote, re-route.', 'Failover is practised regularly (game days). A failover path that has never run is a plan, not a capability.'],
+      payloadKind: 'Request',
+      payload: { from: 'Brussels', served_by: 'us-east-1', latency_ms: { before: 28, now: 118 }, status: 200, writes: 'accepted (new primary, epoch 8)' }
+    }
+  ],
+  api: [
+    { verb: 'ANY', path: 'api.shop.example', desc: 'Latency-routed DNS name; each region serves the full API.' },
+    { verb: 'GET', path: '/internal/health/region', desc: 'Deep regional health used by DNS checks (app + database reachability).' },
+    { verb: 'POST', path: '/internal/failover', desc: 'Starts the fenced failover runbook; needs on-call approval.' }
+  ],
+  schemaLang: 'text',
+  schemaNote: 'Topology and replication settings.',
+  schema: String.raw`
+eu-central-1a  primary        synchronous_standby_names = 'FIRST 1 (euc1b)'
+eu-central-1b  sync standby   (zone failure: promoted, RPO 0)
+us-east-1a     async replica  primary_conninfo -> euc1a, replication slot 'use1'
+us-east-1b     async replica  cascades from use1a
+
+App config (global, versioned)
+  epoch: 7           # bumped on every failover; writes carry it and are refused on mismatch
+  primary: eu-central-1
+  read_from: local replica, or primary if user's rv cookie LSN not yet replayed`,
+  decisions: [
+    { q: 'How do the regions replicate?', options: [
+      { verdict: 'bad', name: 'Synchronous across the Atlantic', why: 'Every commit waits ~90 ms, and an ocean link problem stops all writes.' },
+      { verdict: 'good', name: 'Multi-primary with conflict resolution', why: 'Local writes everywhere, but every table needs merge rules.' },
+      { verdict: 'great', name: 'One primary, sync in-region, async cross-region, fenced failover', why: 'Simple consistency, zone failures lose nothing, region failures lose seconds.' }
+    ] },
+    { q: 'How do users see their own writes?', options: [
+      { verdict: 'ok', name: 'Send all reads to the primary', why: 'Correct but loses the latency benefit of replicas.' },
+      { verdict: 'great', name: 'LSN token per user; wait briefly or fall back to primary', why: 'Fresh for the writer, fast for everyone.' }
+    ] }
+  ],
+  refs: [
+    { label: 'PostgreSQL: High availability, load balancing and replication', url: 'https://www.postgresql.org/docs/current/high-availability.html' },
+    { label: 'AWS: Disaster recovery options in the cloud', url: 'https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html' },
+    { label: 'Amazon S3: Replicating objects', url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html' }
+  ]
+});
+
+flow({
+  id: 'web-crawler',
+  title: 'Web crawler and search indexing pipeline',
+  category: 'Search & discovery',
+  tags: ['URL frontier', 'Politeness per host', 'robots.txt', 'Content dedup (SimHash)', 'Inverted index build', 'Recrawl scheduling'],
+  summary: 'A search engine must find, fetch and index billions of pages without overloading any site. Follow one URL from the frontier through robots.txt and per-host rate limits, the fetch, parsing and link extraction, near-duplicate detection, and into an inverted index segment that search servers load.',
+  requirements: {
+    functional: [
+      'Discover new pages by following links and sitemaps; refetch pages as they change.',
+      'Respect robots.txt and never send a site more requests than it can handle.',
+      'Turn fetched pages into searchable index segments.'
+    ],
+    nonFunctional: [
+      'Fetch about 1 billion pages a day.',
+      'Skip near-duplicate pages so the index is not filled with copies.',
+      'A crawler machine dying loses no URLs.'
+    ]
+  },
+  estimates: [
+    { label: 'Fetches', value: '≈ 11,600 / s', note: '1 billion pages / 86,400 s.' },
+    { label: 'Bandwidth', value: '≈ 7 Gbit/s', note: '11,600 × ~75 KB compressed HTML.' },
+    { label: 'Hosts in flight', value: '≈ 1 million', note: 'Politeness allows ~1 request per host every few seconds, so parallelism must come from many hosts.' },
+    { label: 'Duplicates', value: '≈ 25–30%', note: 'Mirrors, tracking parameters, print versions. Detecting them saves index space.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'frontier', label: 'URL frontier', sub: 'priority + host queues', kind: 'queue', icon: 'queue', x: 0, y: 1, desc: 'Every URL to fetch, ordered by priority and grouped by host for politeness.' },
+    { id: 'robots', label: 'robots.txt cache', sub: 'Redis', kind: 'cache', icon: 'shield', x: 0, y: 0, desc: 'Parsed robots rules per host, refreshed daily.' },
+    { id: 'fetch', label: 'Fetcher', sub: 'async workers', kind: 'worker', icon: 'download', x: 1, y: 1, desc: 'Thousands of concurrent HTTP fetches per machine with httpx/asyncio.' },
+    { id: 'dns', label: 'DNS resolver', sub: 'local cache', kind: 'external', icon: 'dns', x: 1, y: 0, desc: 'Caching resolver; DNS would otherwise be a bottleneck.' },
+    { id: 'site', label: 'Website', sub: 'example-blog.be', kind: 'external', icon: 'globe', x: 2, y: 0, desc: 'Somebody else\'s server, to be treated gently.' },
+    { id: 'parse', label: 'Parser', sub: 'extract + dedup', kind: 'worker', icon: 'cpu', x: 2, y: 1, desc: 'Extracts text, links and metadata; computes fingerprints.' },
+    { id: 'store', label: 'Page store', sub: 'S3 (WARC)', kind: 'storage', x: 2, y: 2, desc: 'Raw fetched pages in WARC files, for reprocessing.' },
+    { id: 'seen', label: 'Seen URLs', sub: 'Bloom + KV', kind: 'db', icon: 'hash', x: 1, y: 2, desc: 'Which URLs are already known, and fingerprints of content.' },
+    { id: 'indexer', label: 'Indexer', sub: 'segment builder', kind: 'worker', icon: 'search', x: 3, y: 1, desc: 'Builds inverted index segments from parsed documents.' },
+    { id: 'search', label: 'Search servers', sub: 'load segments', kind: 'service', icon: 'search', x: 3, y: 2, desc: 'Serve queries from the index (the full-text search flow).' }
+  ],
+  steps: [
+    {
+      from: 'frontier', to: 'fetch', label: 'next URL for a ready host',
+      title: 'The frontier hands out a URL',
+      caption: 'The frontier keeps one queue per host and a heap of hosts ordered by when they may next be contacted. example-blog.be\'s time has come, so its highest-priority URL goes to a fetcher.',
+      text: ['The {{url frontier}} solves two problems at once: priority (important pages first) and politeness (no host gets hammered). Front queues sort by priority; back queues hold one host each; a heap of "next allowed time" picks the host.', 'Hosts are assigned to fetcher machines by hashing the host name, so one machine owns all requests to a given site and can enforce its rate.'],
+      payloadKind: 'Frontier entry',
+      payload: { url: 'https://example-blog.be/2026/11/velo-cargo-test', host: 'example-blog.be', priority: 0.71, reason: 'new link from 3 pages', host_next_allowed_at: '2026-11-25T11:41:44.000Z', host_delay_s: 5, assigned_fetcher: 'fetch-17 (hash(host) mod 64)' },
+      fields: { priority: 'From link signals, site importance and how often the page changes.', host_delay_s: 'Seconds between requests to this host; from robots.txt Crawl-delay or adaptive from response times.' }
+    },
+    {
+      from: 'fetch', to: 'robots', label: 'allowed? /2026/11/…',
+      title: 'Check robots.txt',
+      caption: 'The fetcher checks the host\'s cached robots.txt rules. /2026/11/ is allowed for our user agent; /wp-admin/ and /search would not be.',
+      text: ['{{robots.txt}} is fetched once a day per host and cached. If it returns 5xx, the crawler assumes everything is disallowed for a while, which is the safe reading.'],
+      payloadKind: 'robots.txt',
+      payloadLang: 'text',
+      payload: String.raw`
+# https://example-blog.be/robots.txt (cached 6 h ago)
+User-agent: *
+Disallow: /wp-admin/
+Disallow: /search
+Crawl-delay: 5
+Sitemap: https://example-blog.be/sitemap.xml
+
+check("/2026/11/velo-cargo-test", agent="ExampleBot") -> ALLOWED`,
+      code: [{ lang: 'python', title: 'robots check with cache', src: String.raw`
+from urllib.robotparser import RobotFileParser
+
+async def allowed(url: str) -> bool:
+    host = urlsplit(url).netloc
+    raw = await redis.get(f"robots:{host}")
+    if raw is None:
+        raw = await fetch_robots(host)          # 404 -> "" (allow all); 5xx -> "Disallow: /"
+        await redis.set(f"robots:{host}", raw, ex=86400)
+    rp = RobotFileParser()
+    rp.parse(raw.decode().splitlines())
+    return rp.can_fetch("ExampleBot", url)` }]
+    },
+    {
+      from: 'fetch', to: 'dns', label: 'resolve host',
+      title: 'Resolve the host name',
+      caption: 'The fetcher resolves example-blog.be through a local caching resolver. At 11,600 fetches a second, uncached DNS lookups would add latency and overload upstream resolvers.',
+      payloadKind: 'DNS',
+      payload: { host: 'example-blog.be', a: ['185.42.117.20'], ttl_s: 3600, cache: 'HIT', took_ms: 0.2 },
+      text: ['The resolved IP is also used for politeness: several host names on one shared server are rate-limited together by IP, so a hosting provider is not overloaded through many small sites.']
+    },
+    {
+      from: 'fetch', to: 'site', label: 'GET (conditional)',
+      title: 'Fetch the page politely',
+      caption: 'The fetcher sends a GET with an identifying user agent and, because this is a recrawl candidate, If-Modified-Since. It enforces a 10 s timeout and a 5 MB size cap.',
+      text: ['An honest user agent with a contact URL lets site owners reach you instead of blocking you. Conditional requests turn unchanged pages into tiny 304 responses.'],
+      payloadKind: 'HTTP exchange',
+      payload: { request: { method: 'GET', url: 'https://example-blog.be/2026/11/velo-cargo-test', headers: { 'User-Agent': 'ExampleBot/2.1 (+https://search.example/bot)', 'Accept-Encoding': 'br, gzip', 'If-Modified-Since': 'Mon, 23 Nov 2026 08:00:00 GMT' } }, response: { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Last-Modified': 'Wed, 25 Nov 2026 09:12:00 GMT', 'Content-Length': 84211 }, took_ms: 312 } },
+      code: [{ lang: 'python', title: 'Polite async fetch', src: String.raw`
+limits = httpx.Limits(max_connections=2000, max_keepalive_connections=500)
+client = httpx.AsyncClient(http2=True, timeout=10, limits=limits, follow_redirects=False,
+                           headers={"User-Agent": "ExampleBot/2.1 (+https://search.example/bot)"})
+
+async def fetch(entry: FrontierEntry) -> FetchResult:
+    h = {"If-Modified-Since": entry.last_modified} if entry.last_modified else {}
+    async with client.stream("GET", entry.url, headers=h) as r:
+        body = b""
+        async for chunk in r.aiter_bytes():
+            body += chunk
+            if len(body) > 5_000_000:
+                break                                    # size cap
+    await host_clock.schedule_next(entry.host, delay=adaptive_delay(entry.host, r))
+    return FetchResult(entry.url, r.status_code, dict(r.headers), body)` }],
+      failure: ['**429 or 503 from the site:** the host\'s delay doubles (honouring `Retry-After`), and the URL goes back to its host queue.', '**Redirect (301):** the target URL is added to the frontier as a new URL, deduplicated like any other, instead of being followed blindly (redirect loops, traps).', '**Timeout:** retried later with backoff; after 3 failures the URL\'s priority drops.']
+    },
+    {
+      from: 'fetch', to: 'store', label: 'write WARC record',
+      title: 'Keep the raw page',
+      caption: 'The raw response is appended to a WARC file on S3. Parsing and indexing can then be re-run (with a better parser, a new language model) without fetching the web again.',
+      payloadKind: 'WARC record',
+      payloadLang: 'text',
+      payload: String.raw`
+WARC/1.1
+WARC-Type: response
+WARC-Target-URI: https://example-blog.be/2026/11/velo-cargo-test
+WARC-Date: 2026-11-25T11:41:44Z
+WARC-Record-ID: <urn:uuid:3f1c2b9e-…>
+Content-Length: 84903
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+…`,
+      text: ['WARC is the standard web archive format (used by the Internet Archive and Common Crawl). Files of ~1 GB with many records each keep S3 object counts manageable.']
+    },
+    {
+      from: 'fetch', to: 'parse', label: 'page → parser',
+      title: 'Parse text, links and metadata',
+      caption: 'The parser removes navigation and boilerplate, keeps the main text, title, language and canonical URL, and extracts 63 outgoing links, normalised to absolute URLs.',
+      text: ['URL normalisation (lowercase host, remove default ports, sort query parameters, strip tracking parameters like utm_*) prevents the same page being queued under ten spellings.', '`rel=canonical` tells the crawler which URL the site considers the real one; `noindex` meta tags are honoured here.'],
+      payloadKind: 'Parsed document',
+      payload: { url: 'https://example-blog.be/2026/11/velo-cargo-test', canonical: 'https://example-blog.be/2026/11/velo-cargo-test', lang: 'fr', title: 'Test : vélo cargo électrique pour la ville', text_chars: 9412, meta_robots: 'index, follow', out_links: 63, sample_links: ['https://example-blog.be/2026/10/velo-pliant', 'https://vendor.example/cargo-x?utm_source=blog → https://vendor.example/cargo-x'] },
+      fields: { sample_links: 'The second link shows normalisation: the utm parameter is removed before deduplication.' }
+    },
+    {
+      from: 'parse', to: 'seen', label: 'SimHash: near-dup?',
+      title: 'Detect near-duplicate content',
+      caption: 'The parser computes a 64-bit SimHash of the text. Pages whose fingerprints differ in 3 bits or fewer are near-duplicates. This page differs from everything known by at least 6 bits: it is new content.',
+      text: ['An exact hash only catches identical bytes; one changed date in a footer defeats it. SimHash maps similar texts to similar fingerprints, so near-copies (print versions, mirrors) are found by counting differing bits.', 'Finding all fingerprints within 3 bits uses the pigeonhole trick: split the 64 bits into 4 blocks; any match within 3 bits shares at least one identical block, so 4 exact lookups find the candidates.'],
+      payloadKind: 'Fingerprints',
+      payload: { simhash: '0x9f3a61c2e07b4d15', nearest_known: { url: 'https://example-blog.be/2026/10/velo-pliant', simhash: '0x9f3a71c6a17b4c95', hamming_distance: 6 }, threshold: 3, verdict: 'unique' },
+      code: [{ lang: 'python', title: 'SimHash', src: String.raw`
+def simhash(tokens: list[str]) -> int:
+    v = [0] * 64
+    for shingle, weight in shingle_weights(tokens, n=3):     # word 3-grams, tf-idf weights
+        h = xxhash.xxh64_intdigest(shingle)
+        for i in range(64):
+            v[i] += weight if (h >> i) & 1 else -weight
+    return sum(1 << i for i in range(64) if v[i] > 0)
+
+def near_dup(a: int, b: int, k: int = 3) -> bool:
+    return (a ^ b).bit_count() <= k` }],
+      failure: ['**Near-duplicate found:** the page is recorded as a duplicate of its cluster\'s best URL (prefer canonical, HTTPS, shorter); only that one is indexed.']
+    },
+    {
+      from: 'parse', to: 'frontier', label: 'new links (Bloom check)',
+      title: 'Queue the links nobody has seen',
+      caption: 'Each of the 63 links is checked against a Bloom filter of known URLs. 51 were seen before; 12 are probably new, confirmed against the key-value store and added to the frontier with a priority.',
+      text: ['A {{bloom filter}} answers "definitely not seen" or "probably seen" using a few bits per URL. For tens of billions of URLs it fits in memory where an exact set would not. Its rare false positives mean a few new URLs are skipped, which is acceptable.'],
+      payloadKind: 'Link processing',
+      payload: { links: 63, bloom_probably_seen: 51, new: 12, enqueued: [{ url: 'https://example-blog.be/2026/11/antivol-test', priority: 0.55 }, { url: 'https://vendor.example/cargo-x', priority: 0.48 }], skipped: { disallowed_by_robots: 0, nofollow: 2 } }
+    },
+    {
+      from: 'parse', to: 'indexer', label: 'document → index batch',
+      title: 'Build an index segment',
+      caption: 'The indexer collects parsed documents into batches, tokenises and stems the text per language, and writes an immutable inverted index segment: for each term, the sorted list of documents and positions.',
+      text: ['Segments are built offline in bulk and are immutable. That is the same structure as Lucene/Elasticsearch: many segments, periodically merged into larger ones.', 'Link signals (how many pages link here and with what anchor text) are computed in a separate batch job over the link graph and stored as per-document features.'],
+      payloadKind: 'Segment (excerpt)',
+      payloadLang: 'text',
+      payload: String.raw`
+segment seg_2026-11-25_1140_eu-fr_0042   docs=1,200,000  size=2.1 GB
+
+term "velo"     df=18,240   postings: [d_88123:{pos 3,41,77}, d_91002:{pos 12}, …]
+term "cargo"    df= 6,511   postings: [d_88123:{pos 4,42}, …]
+term "electr"   df=40,330   postings: [d_88123:{pos 5}, …]      (stemmed électrique)
+doc d_88123 -> url https://example-blog.be/2026/11/velo-cargo-test, lang fr, len 1,402 tokens`
+    },
+    {
+      from: 'indexer', to: 'search', label: 'publish segment',
+      title: 'Search servers load the new segment',
+      caption: 'The finished segment is uploaded and announced. Search servers download it, open it alongside existing segments, and the page becomes searchable, about 30 minutes after it was fetched.',
+      text: ['The query side is the full-text search flow: a query for "vélo cargo" now intersects postings from this segment too and ranks the page with BM25 plus link and freshness signals.'],
+      payloadKind: 'Publish',
+      payload: { segment: 'seg_2026-11-25_1140_eu-fr_0042', shards: 'eu-fr-07', replicas_loaded: '3/3', live_at: '2026-11-25T12:12:30Z', fetch_to_searchable_min: 31 }
+    },
+    {
+      from: 'frontier', to: 'frontier', label: 'schedule recrawl',
+      title: 'Decide when to come back',
+      caption: 'The page changed since the last visit, so its change-rate estimate goes up and its next visit is scheduled sooner: in 2 days instead of 7. Pages that never change drift towards monthly visits.',
+      text: ['Recrawl scheduling spends the fetch budget where change happens: news front pages every few minutes, old blog posts every few months. Sitemaps with `lastmod` and conditional requests make each revisit cheap.'],
+      payloadKind: 'Recrawl decision',
+      payload: { url: 'https://example-blog.be/2026/11/velo-cargo-test', visits: 4, changes_detected: 2, estimated_change_interval_days: 3.1, next_fetch_at: '2026-11-27T11:41:44Z', last_modified: 'Wed, 25 Nov 2026 09:12:00 GMT' }
+    }
+  ],
+  api: [
+    { verb: 'GET', path: '/{robots.txt, sitemap.xml}', desc: 'Read from each site before crawling.' },
+    { verb: 'POST', path: '/internal/frontier/urls', desc: 'Add URLs (from links, sitemaps, submissions) with a priority.' },
+    { verb: 'GET', path: '/internal/crawl/{url_hash}', desc: 'Crawl status of a URL: last fetch, status, duplicate cluster, next fetch.' }
+  ],
+  schema: String.raw`
+-- URL state (wide-column KV, keyed by url hash)
+url_hash BYTES PRIMARY KEY, url TEXT, host TEXT,
+status SMALLINT, last_fetch TIMESTAMP, last_modified TEXT, etag TEXT,
+simhash BIGINT, dup_of BYTES, change_interval_days REAL, next_fetch TIMESTAMP, priority REAL
+
+-- Host state
+host TEXT PRIMARY KEY, ip TEXT, delay_s REAL, next_allowed TIMESTAMP,
+robots_fetched TIMESTAMP, error_streak INT
+
+-- Storage
+s3://crawl/warc/2026/11/25/fetch-17-000123.warc.gz
+s3://index/segments/eu-fr/seg_2026-11-25_1140_eu-fr_0042/`,
+  decisions: [
+    { q: 'How do you stay polite at 11,600 fetches a second?', options: [
+      { verdict: 'bad', name: 'One global queue, fetch as fast as possible', why: 'Popular sites get hundreds of requests a second and block you.' },
+      { verdict: 'great', name: 'Per-host queues, host ownership by hash, adaptive delays', why: 'High total throughput from many hosts, gentle on each one.' }
+    ] },
+    { q: 'How do you avoid indexing copies?', options: [
+      { verdict: 'ok', name: 'Exact content hash', why: 'Misses pages that differ by a date or an ad.' },
+      { verdict: 'great', name: 'URL normalisation + canonical tags + SimHash near-dup detection', why: 'Catches spelling variants of URLs and near-identical content.' }
+    ] }
+  ],
+  refs: [
+    { label: 'RFC 9309: Robots Exclusion Protocol', url: 'https://www.rfc-editor.org/rfc/rfc9309' },
+    { label: 'Manning, Raghavan, Schütze: Introduction to IR, ch. 20 (Web crawling)', url: 'https://nlp.stanford.edu/IR-book/html/htmledition/web-crawling-and-indexes-1.html' },
+    { label: 'Manku et al.: Detecting near-duplicates for web crawling (SimHash)', url: 'https://research.google/pubs/detecting-near-duplicates-for-web-crawling/' }
+  ]
+});
+
 </script>
 <script>
 /* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
