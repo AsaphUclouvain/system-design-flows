@@ -432,7 +432,7 @@ async def get_prefs(r: Redis, db, user_id: str) -> dict:
         'Priority matters: a security alert ("new sign-in") ignores quiet hours and digests; a "someone liked your post" never does.',
         'Text is rendered per recipient locale. Untrusted user text (the comment preview) is truncated and escaped, never interpreted as template code.',
         'The `collapse_key` (`post:p_8812:comments`) lets the phone replace an older banner for the same post instead of stacking ten banners.',
-        'For a post with a million followers this step is a {{fanout}}: the service would split recipients into batches and emit one job per batch instead of a loop that runs for minutes.'
+        'For a post with a million followers this step is a {{fan-out}}: the service would split recipients into batches and emit one job per batch instead of a loop that runs for minutes.'
       ],
       payloadKind: 'Notification (in memory)',
       payload: {

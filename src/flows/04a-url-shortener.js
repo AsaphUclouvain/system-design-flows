@@ -22,18 +22,18 @@ flow({
     { label: 'Code space', value: '62⁷ ≈ 3.5 × 10¹²', note: '7 Base62 characters. At 8.6M a day that lasts about 1,100 years.' },
     { label: 'Storage', value: '≈ 1.6 TB / 5 years', note: '15.7B links × about 100 bytes per row (plus indexes).' }
   ],
-  grid: { cols: 5, rows: 2 },
+  grid: { cols: 4, rows: 3 },
   nodes: [
     { id: 'app', label: 'Next.js app', sub: 'dashboard', kind: 'client', x: 0, y: 0, desc: 'Where the owner pastes the long URL and later reads the analytics.' },
-    { id: 'visitor', label: 'Visitor', sub: 'browser', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Anyone who clicks sho.rt/aZ3kP9x in a chat, an email or a post.' },
-    { id: 'cdn', label: 'CDN edge', sub: 'cache', kind: 'edge', icon: 'cdn', x: 1, y: 1, desc: 'Caches redirect responses close to visitors. A hit never reaches your servers.' },
+    { id: 'visitor', label: 'Visitor', sub: 'browser', kind: 'client', icon: 'user', x: 0, y: 2, desc: 'Anyone who clicks sho.rt/aZ3kP9x in a chat, an email or a post.' },
+    { id: 'cdn', label: 'CDN edge', sub: 'cache', kind: 'edge', icon: 'cdn', x: 1, y: 2, desc: 'Caches redirect responses close to visitors. A hit never reaches your servers.' },
     { id: 'api', label: 'Links API', sub: 'FastAPI', kind: 'service', x: 1, y: 0, desc: 'Write path: validates the URL, generates the code, stores the link.' },
-    { id: 'redir', label: 'Redirect service', sub: 'FastAPI', kind: 'service', x: 2, y: 1, desc: 'Read path, deployed separately so a write-path incident cannot break redirects. Looks up the code and answers 302.' },
-    { id: 'idgen', label: 'ID generator', sub: 'Snowflake', kind: 'service', icon: 'dns', x: 2, y: 0, desc: 'Produces unique 64-bit ids with no coordination per request: timestamp + machine id + sequence.' },
-    { id: 'redis', label: 'Redis', sub: 'code → URL', kind: 'cache', x: 3, y: 1, desc: 'Hot codes and their long URLs. A few GB covers the links that get most clicks.' },
-    { id: 'db', label: 'Links DB', sub: 'PostgreSQL', kind: 'db', x: 3, y: 0, desc: 'Source of truth: one row per link, primary key on the code.' },
-    { id: 'kafka', label: 'Click events', sub: 'Kafka', kind: 'queue', x: 4, y: 1, desc: 'Every redirect emits a small event here, fire-and-forget, so analytics never adds latency.' },
-    { id: 'olap', label: 'Analytics', sub: 'ClickHouse', kind: 'db', icon: 'chart', x: 4, y: 0, desc: 'Column store that aggregates billions of clicks by day, country and referrer in milliseconds.' }
+    { id: 'redir', label: 'Redirect service', sub: 'FastAPI', kind: 'service', x: 2, y: 2, desc: 'Read path, deployed separately so a write-path incident cannot break redirects. Looks up the code and answers 302.' },
+    { id: 'idgen', label: 'ID generator', sub: 'Snowflake', kind: 'service', icon: 'dns', x: 0, y: 1, desc: 'Produces unique 64-bit ids with no coordination per request: timestamp + machine id + sequence.' },
+    { id: 'redis', label: 'Redis', sub: 'code → URL', kind: 'cache', x: 2, y: 1, desc: 'Hot codes and their long URLs. A few GB covers the links that get most clicks.' },
+    { id: 'db', label: 'Links DB', sub: 'PostgreSQL', kind: 'db', x: 1, y: 1, desc: 'Source of truth: one row per link, primary key on the code.' },
+    { id: 'kafka', label: 'Click events', sub: 'Kafka', kind: 'queue', x: 3, y: 1, desc: 'Every redirect emits a small event here, fire-and-forget, so analytics never adds latency.' },
+    { id: 'olap', label: 'Analytics', sub: 'ClickHouse', kind: 'db', icon: 'chart', x: 3, y: 0, desc: 'Column store that aggregates billions of clicks by day, country and referrer in milliseconds.' }
   ],
   steps: [
     {
@@ -236,9 +236,9 @@ async def redirect(code: str, request: Request):
       fields: { key: 'Keyed by code so all clicks of a link land in one {{partition}}.', 'value.ip_hash': 'A salted hash, not the raw IP: enough to count unique visitors without keeping personal data.' }
     },
     {
-      from: 'redir', to: 'visitor', label: '302 Location', reply: true,
+      from: 'redir', to: 'cdn', label: '302 Location', reply: true,
       title: 'The visitor is redirected',
-      caption: 'A 302 with the long URL in Location. The CDN caches this response for five minutes, so the next clicks from that region never reach the origin.',
+      caption: 'A 302 with the long URL in Location goes back through the edge to the visitor\'s browser, which follows it. The CDN caches this response for five minutes, so the next clicks from that region never reach the origin.',
       text: ['**301 or 302?** A 301 (permanent) can be cached by browsers indefinitely: faster for repeat visitors, but you lose analytics for them and cannot change or disable the link for those browsers. Most commercial shorteners use 302 (or 307) and let the CDN cache it briefly.', 'Disabling a malicious link then takes effect within the CDN max-age, and you can purge the CDN path for urgent cases.'],
       payloadKind: 'HTTP response',
       payloadLang: 'http',
@@ -267,10 +267,10 @@ FROM clicks GROUP BY code, day, country;`,
       failure: ['**Consumer falls behind:** {{consumer lag}} grows and dashboards show slightly stale numbers; redirects are unaffected. Alert on lag, not on individual events.']
     },
     {
-      from: 'app', to: 'olap', label: 'GET /v1/links/aZ3kP9x/stats',
+      from: 'api', to: 'olap', label: 'stats query',
       title: 'The owner reads the stats',
-      caption: 'The dashboard asks for daily clicks; the aggregate table answers. Numbers trail reality by seconds to a minute.',
-      text: ['In production this request goes through [[api]], which checks that the caller owns the link, then queries ClickHouse. It is drawn directly to keep the diagram readable.'],
+      caption: 'The dashboard calls GET /v1/links/aZ3kP9x/stats; the Links API checks ownership and queries the aggregate table. Numbers trail reality by seconds to a minute.',
+      text: ['Reading the small `clicks_daily` table, not raw clicks, keeps this query in the low milliseconds even for links with millions of clicks. Unique visitors use `uniqMerge` over the stored HyperLogLog-style states.'],
       payloadKind: 'Response',
       payload: { code: 'aZ3kP9x', range: '2026-11-19..2026-11-25', total_clicks: 48213, unique_visitors: 31877, by_day: [{ day: '2026-11-24', clicks: 12034 }, { day: '2026-11-25', clicks: 30111 }], top_countries: [{ country: 'BE', clicks: 9120 }, { country: 'FR', clicks: 7766 }], top_referrers: [{ host: 't.co', clicks: 20410 }, { host: 'mail.google.com', clicks: 8113 }] }
     }

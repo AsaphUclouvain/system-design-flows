@@ -23,7 +23,7 @@ terms({
   'trace context': 'Standard HTTP headers (traceparent, tracestate) that carry a trace id across services, so every log line and timing span for one user action can be joined together.',
   'jwt': 'JSON Web Token: a compact, signed JSON document (header.payload.signature). The server can verify it with a key, without a database lookup. It is signed, not encrypted: anyone can read its contents.',
   'jwks': 'JSON Web Key Set: a public URL where an identity provider publishes the public keys that verify its tokens. The `kid` in a token header says which key to use.',
-  'fanout': 'Sending one message to many recipients or one write to many places. "Fan-out on write" does it when the message is created; "fan-out on read" does it when someone reads.',
+  'fan-out': 'Sending one message to many recipients or one write to many places. "Fan-out on write" does it when the message is created; "fan-out on read" does it when someone reads.',
   'quiet hours': 'A period the user chose (say 22:00 to 07:00 in their time zone) when non-urgent notifications are held back and sent afterwards.',
   'circuit breaker': 'A guard around calls to a dependency. After too many failures it "opens" and fails fast for a while instead of waiting on timeouts, then lets a few test calls through to see if the dependency recovered.',
   'head-of-line blocking': 'When the first item in a queue is stuck, everything behind it waits even if it could have been processed.',
