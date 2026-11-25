@@ -619,6 +619,9 @@ terms({
   'segment allocation': 'An id-generation scheme where a central table hands each server a block of ids (say 1,000 at a time) and the server gives them out from memory.',
   'state vector': 'In Yjs, a summary of how many operations from each client a document has seen. Two peers exchange state vectors and send each other only what the other is missing.'
 });
+terms({
+  'bulkhead': 'Isolating resources (queues, worker pools, connection pools) per kind of work, like the watertight compartments of a ship, so a flood of one kind cannot starve the others.'
+});
 
 flow({
   id: 'notification-system',
@@ -7972,6 +7975,488 @@ CREATE TABLE season_standings (season TEXT, rank INT, player_id TEXT, points INT
   refs: [
     { label: 'Redis: Sorted sets', url: 'https://redis.io/docs/latest/develop/data-types/sorted-sets/' },
     { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' }
+  ]
+});
+
+flow({
+  id: 'email-delivery',
+  title: 'Transactional email delivery',
+  category: 'Messaging & events',
+  tags: ['Templating', 'SMTP / MTA', 'SPF, DKIM, DMARC', 'Bounces and complaints', 'Suppression list', 'Per-domain throttling'],
+  summary: 'A customer resets their password and the email must land in the inbox, not spam, within seconds. Follow it from the API through a queue, template rendering, DKIM signing and an SMTP conversation with Gmail\'s servers, then see a bounce and a spam complaint come back and protect your sender reputation.',
+  requirements: {
+    functional: [
+      'Send transactional emails (password reset, receipts) from templates with per-user data.',
+      'Track each message: queued, sent, delivered, bounced, complained, opened.',
+      'Never send again to addresses that hard-bounced, complained or unsubscribed.'
+    ],
+    nonFunctional: [
+      'Password-reset emails delivered in under 10 seconds p95.',
+      'High inbox placement: authenticated mail, low bounce and complaint rates.',
+      'Marketing bursts never delay transactional mail.'
+    ]
+  },
+  estimates: [
+    { label: 'Transactional', value: '≈ 3M / day', note: 'Receipts, resets, notifications; ~35/s average, 300/s peak.' },
+    { label: 'Marketing', value: '≈ 20M / week', note: 'Sent on separate queues and IPs so it cannot slow down resets.' },
+    { label: 'Bounce budget', value: '< 2%', note: 'Mailbox providers start filtering senders with high bounce rates.' },
+    { label: 'Complaint budget', value: '< 0.1%', note: 'Gmail\'s sender guidelines ask to stay under 0.1% and never reach 0.3%.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Auth API', sub: 'FastAPI', kind: 'service', icon: 'key', x: 0, y: 0, desc: 'Creates the reset token and asks for the email to be sent.' },
+    { id: 'q', label: 'Email queue', sub: 'priority lanes', kind: 'queue', x: 1, y: 0, desc: 'Separate lanes for transactional and bulk mail.' },
+    { id: 'render', label: 'Email worker', sub: 'templates + checks', kind: 'worker', icon: 'mail', x: 1, y: 1, desc: 'Checks suppression, renders the template, builds the MIME message.' },
+    { id: 'supp', label: 'Suppression list', sub: 'PostgreSQL', kind: 'db', icon: 'shield', x: 0, y: 2, desc: 'Addresses that must not receive mail.' },
+    { id: 'mta', label: 'Sending MTA', sub: 'Postfix / SES', kind: 'service', icon: 'server', x: 2, y: 0, desc: 'Signs with DKIM, queues per destination domain and talks SMTP.' },
+    { id: 'dns', label: 'DNS', sub: 'MX, SPF, DKIM', kind: 'external', icon: 'dns', x: 2, y: 2, desc: 'Where receivers look up your SPF, DKIM key and DMARC policy, and where you look up their MX.' },
+    { id: 'gmail', label: 'Receiving server', sub: 'gmail-smtp-in', kind: 'external', icon: 'mail', x: 3, y: 0, desc: 'Gmail\'s inbound mail servers.' },
+    { id: 'events', label: 'Feedback handler', sub: 'webhooks', kind: 'worker', icon: 'bell', x: 3, y: 2, desc: 'Processes delivery, bounce and complaint events.' },
+    { id: 'log', label: 'Message log', sub: 'PostgreSQL', kind: 'db', x: 1, y: 2, desc: 'Status history of every message.' }
+  ],
+  steps: [
+    {
+      from: 'app', to: 'q', label: 'enqueue password_reset',
+      title: 'The app asks for an email, it does not send it',
+      caption: 'Ana clicks "Forgot password". The auth API creates a reset token and enqueues a send request on the transactional lane. It never opens an SMTP connection itself.',
+      text: ['Sending from the request handler would make the page wait on a remote server and lose the email if that server is slow. A queue makes sending retryable and keeps the API fast.', 'The {{idempotency key}} prevents two emails if Ana double-clicks.'],
+      payloadKind: 'Queue message',
+      payload: { lane: 'transactional', message_id: 'em_01JDQJ7', idempotency_key: 'pwreset:usr_ana:2026-11-25T11:41', template: 'password_reset', to: 'ana.lopez@gmail.com', locale: 'fr-BE', data: { first_name: 'Ana', reset_url: 'https://shop.example/reset?t=rst_9fK2…', expires_minutes: 30 } },
+      fields: { lane: 'Transactional and bulk use different queues, workers and sending IPs.', reset_url: 'The token is single-use and expires in 30 minutes; the email itself is not a secret store.' },
+      code: [{ lang: 'python', title: 'Request a send', src: String.raw`
+@router.post("/v1/auth/password-reset")
+async def request_reset(body: ResetIn):
+    user = await users.by_email(body.email)
+    if user:                                          # same answer either way (no account probing)
+        token = await reset_tokens.create(user.id, ttl_min=30)
+        await email_queue.enqueue(
+            lane="transactional", template="password_reset", to=user.email,
+            locale=user.locale, idempotency_key=f"pwreset:{user.id}:{minute()}",
+            data={"first_name": user.first_name,
+                  "reset_url": f"{SITE}/reset?t={token}", "expires_minutes": 30})
+    return {"ok": True}` }]
+    },
+    {
+      from: 'q', to: 'render', label: 'dequeue',
+      title: 'A worker picks it up',
+      caption: 'An email worker takes the message from the transactional lane within milliseconds. Transactional workers never take bulk work, so a newsletter of 2 million emails cannot delay a reset.',
+      text: ['This is {{bulkhead}} isolation applied to email: separate queues and worker pools per traffic type.'],
+      payloadKind: 'Worker',
+      payload: { worker: 'email-tx-4', lane: 'transactional', queue_depth: 12, bulk_queue_depth: 1840220, waited_ms: 31 }
+    },
+    {
+      from: 'render', to: 'supp', label: 'is suppressed?',
+      title: 'Check the suppression list first',
+      caption: 'Before rendering, the worker checks that ana.lopez@gmail.com has not hard-bounced, complained or unsubscribed. She has not, so the send continues.',
+      text: ['Sending to a {{suppression list}} address again is how senders lose reputation: mailbox providers see repeated sends to dead or complaining addresses as spam behaviour.', 'Password resets ignore marketing unsubscribes (people must still be able to reset), but never ignore hard bounces or complaints.'],
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+SELECT reason, created_at FROM suppressions
+WHERE email_hash = digest(lower('ana.lopez@gmail.com'), 'sha256')
+  AND (reason IN ('hard_bounce', 'complaint') OR (reason = 'unsubscribe' AND category = 'marketing' AND $cat = 'marketing'));
+-- 0 rows`
+    },
+    {
+      from: 'render', to: 'render', label: 'render + MIME',
+      title: 'Render the template into a MIME message',
+      caption: 'The worker renders the French template with Ana\'s data into HTML and a plain-text version, then builds a MIME message with the headers mailbox providers expect.',
+      text: ['A plain-text part, a real From address, and a `List-Unsubscribe` header on non-essential mail all help inbox placement. Links point to your own domain, which matches the DKIM domain.'],
+      payloadKind: 'MIME message',
+      payloadLang: 'text',
+      payload: String.raw`
+From: Shop <no-reply@mail.shop.example>
+To: ana.lopez@gmail.com
+Subject: =?UTF-8?Q?R=C3=A9initialisez_votre_mot_de_passe?=
+Date: Wed, 25 Nov 2026 11:41:44 +0100
+Message-ID: <em_01JDQJ7@mail.shop.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+X-Entity-Ref-ID: em_01JDQJ7
+
+--b1
+Content-Type: text/plain; charset=UTF-8
+
+Bonjour Ana, cliquez sur ce lien pour choisir un nouveau mot de passe (valable 30 min) : …
+--b1
+Content-Type: text/html; charset=UTF-8
+
+<!doctype html><html lang="fr">…<a href="https://shop.example/reset?t=rst_9fK2…">Choisir un mot de passe</a>…
+--b1--`,
+      code: [{ lang: 'python', title: 'Render with Jinja2', src: String.raw`
+env = Environment(loader=FileSystemLoader("templates"), autoescape=select_autoescape(["html"]))
+
+def render(msg: SendRequest) -> EmailMessage:
+    html = env.get_template(f"{msg.template}.{msg.locale}.html").render(**msg.data)
+    text = env.get_template(f"{msg.template}.{msg.locale}.txt").render(**msg.data)
+    m = EmailMessage()
+    m["From"] = "Shop <no-reply@mail.shop.example>"
+    m["To"], m["Subject"] = msg.to, subjects[msg.template][msg.locale]
+    m["Message-ID"] = make_msgid(idstring=msg.message_id, domain="mail.shop.example")
+    m.set_content(text)
+    m.add_alternative(html, subtype="html")
+    return m` }]
+    },
+    {
+      from: 'render', to: 'mta', label: 'submit (port 587)',
+      title: 'Hand the message to the sending MTA',
+      caption: 'The worker submits the message to the mail transfer agent and records it as sent to MTA. The MTA (here Amazon SES or your own Postfix) is responsible for getting it to Gmail.',
+      payloadKind: 'Message log',
+      payload: { message_id: 'em_01JDQJ7', status: 'submitted', mta_id: '0102019361a4c2f1-…', ip_pool: 'transactional', submitted_at: '2026-11-25T11:41:44.210Z' },
+      text: ['The MTA keeps a queue per destination domain with its own rate limits, because each mailbox provider tolerates a different sending speed from a given IP.']
+    },
+    {
+      from: 'mta', to: 'dns', label: 'MX gmail.com?',
+      title: 'Find where gmail.com accepts mail',
+      caption: 'The MTA looks up the MX records of gmail.com and connects to the one with the lowest preference number, falling back to the others if it does not answer.',
+      text: ['An {{mx record}} lookup happens per destination domain and is cached for its TTL.'],
+      payloadKind: 'DNS answer',
+      payloadLang: 'text',
+      payload: String.raw`
+gmail.com.  3600 IN MX  5 gmail-smtp-in.l.google.com.
+gmail.com.  3600 IN MX 10 alt1.gmail-smtp-in.l.google.com.
+gmail.com.  3600 IN MX 20 alt2.gmail-smtp-in.l.google.com.`
+    },
+    {
+      from: 'mta', to: 'gmail', label: 'SMTP + DKIM signature',
+      title: 'Sign with DKIM and deliver over SMTP',
+      caption: 'The MTA signs selected headers and the body with the private DKIM key for mail.shop.example, opens a TLS SMTP session with Gmail and transfers the message. Gmail answers 250: accepted.',
+      text: ['{{dkim}} lets Gmail verify the message really comes from your domain and was not modified. The signature covers From, Subject, Date and a hash of the body.'],
+      payloadKind: 'SMTP conversation',
+      payloadLang: 'text',
+      payload: String.raw`
+S: 220 mx.google.com ESMTP
+C: EHLO out-14.mail.shop.example
+S: 250-STARTTLS …
+C: STARTTLS                         (TLS 1.3 negotiated)
+C: MAIL FROM:<bounce+em_01JDQJ7@mail.shop.example>
+S: 250 2.1.0 OK
+C: RCPT TO:<ana.lopez@gmail.com>
+S: 250 2.1.5 OK
+C: DATA
+C: DKIM-Signature: v=1; a=rsa-sha256; d=mail.shop.example; s=s2026;
+C:   h=from:to:subject:date:message-id; bh=47DEQpj8HBSa+/TImW+5JCeuQeR…; b=dzdVyOfAKCd…
+C: (headers and body) .
+S: 250 2.0.0 OK 1764069704 a640c23a62f3a-… - gsmtp`,
+      fields: {},
+      failure: ['**421 / 4xx (try later, rate limited):** a soft failure. The MTA keeps the message and retries with backoff for up to 24 hours, slowing its rate to Gmail.', '**550 5.1.1 (user unknown):** a {{hard bounce}}; no retry, the address goes on the suppression list (a later step).']
+    },
+    {
+      from: 'gmail', to: 'dns', label: 'check SPF, DKIM, DMARC',
+      title: 'Gmail checks who really sent it',
+      caption: 'Gmail looks up your SPF record to check the sending IP, fetches the DKIM public key to verify the signature, and reads your DMARC policy. All three pass and align with the From domain.',
+      text: ['{{spf}} authorises sending IPs; {{dkim}} proves integrity and domain; {{dmarc}} says what to do if both fail and requires the domain in From to match. Since 2024, Gmail and Yahoo require all three for bulk senders.'],
+      payloadKind: 'DNS records + result',
+      payloadLang: 'text',
+      payload: String.raw`
+mail.shop.example.            TXT "v=spf1 include:amazonses.com -all"
+s2026._domainkey.mail.shop.example. TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkqh…"
+_dmarc.shop.example.          TXT "v=DMARC1; p=quarantine; rua=mailto:dmarc@shop.example; adkim=r; aspf=r"
+
+Authentication-Results: mx.google.com;
+  dkim=pass header.i=@mail.shop.example header.s=s2026;
+  spf=pass smtp.mailfrom=bounce+em_01JDQJ7@mail.shop.example;
+  dmarc=pass (p=QUARANTINE) header.from=mail.shop.example`,
+      failure: ['**SPF or DKIM misconfigured after a provider change:** DMARC fails and, with `p=quarantine`, mail goes to spam. DMARC aggregate reports to `rua` reveal this within a day.']
+    },
+    {
+      from: 'mta', to: 'events', label: 'Delivery event', async: true,
+      title: 'A delivery event comes back',
+      caption: 'The MTA reports the 250 from Gmail as a Delivery event. The feedback handler marks the message delivered. About 3 seconds passed since Ana clicked.',
+      text: ['Delivered means Gmail accepted it, not that it reached the inbox: inbox or spam is Gmail\'s decision. Gmail Postmaster Tools shows your domain reputation and spam rate.'],
+      payloadKind: 'Event',
+      payload: { eventType: 'Delivery', mail: { messageId: '0102019361a4c2f1-…', tags: { message_id: ['em_01JDQJ7'] } }, delivery: { timestamp: '2026-11-25T11:41:46.903Z', recipients: ['ana.lopez@gmail.com'], smtpResponse: '250 2.0.0 OK', processingTimeMillis: 2693 } }
+    },
+    {
+      from: 'events', to: 'supp', label: 'Bounce: 5.1.1 → suppress',
+      title: 'Another message hard-bounces',
+      caption: 'A receipt to old.address@company.example bounces with 550 5.1.1 user unknown. The handler adds the address to the suppression list and flags the user\'s email as invalid in the app.',
+      text: ['A bounce comes back either synchronously (rejected during SMTP) or later as a bounce message to the `MAIL FROM` address; encoding the message id in that address (VERP) tells you exactly which message bounced.'],
+      payloadKind: 'Event',
+      payload: { eventType: 'Bounce', bounce: { bounceType: 'Permanent', bounceSubType: 'General', bouncedRecipients: [{ emailAddress: 'old.address@company.example', status: '5.1.1', diagnosticCode: 'smtp; 550 5.1.1 The email account that you tried to reach does not exist' }] }, mail: { tags: { message_id: ['em_01JDQ0Z'] } } },
+      code: [{ lang: 'python', title: 'Feedback handler', src: String.raw`
+@router.post("/webhooks/ses")
+async def ses_events(ev: SesEvent = Depends(verified_sns)):
+    mid = ev.mail.tags["message_id"][0]
+    match ev.eventType:
+        case "Delivery":
+            await log.set_status(mid, "delivered")
+        case "Bounce" if ev.bounce.bounceType == "Permanent":
+            for r in ev.bounce.bouncedRecipients:
+                await suppress(r.emailAddress, "hard_bounce", detail=r.diagnosticCode)
+                await users.mark_email_invalid(r.emailAddress)   # ask to update in app
+            await log.set_status(mid, "bounced")
+        case "Bounce":
+            await log.set_status(mid, "soft_bounced")           # MTA already retried
+        case "Complaint":
+            for r in ev.complaint.complainedRecipients:
+                await suppress(r.emailAddress, "complaint")
+            await log.set_status(mid, "complained")
+    return {"ok": True}` }]
+    },
+    {
+      from: 'events', to: 'log', label: 'Complaint → record',
+      title: 'A spam complaint comes back',
+      caption: 'Someone marks a shipping update as spam. The provider\'s feedback loop reports it; the handler suppresses that address for all non-essential email and records the complaint against the template.',
+      text: ['Complaint rate per template is a key metric. A template with a high rate (too frequent, confusing sender name) is fixed before it drags down the whole domain\'s reputation.'],
+      payloadKind: 'Event + metric',
+      payload: { eventType: 'Complaint', complaint: { complainedRecipients: [{ emailAddress: 'm.dupont@yahoo.fr' }], complaintFeedbackType: 'abuse', timestamp: '2026-11-25T12:03:10Z' }, metric: { template: 'shipping_update', complaint_rate_7d: '0.04%', budget: '0.10%' } }
+    }
+  ],
+  api: [
+    { verb: 'POST', path: '/internal/v1/emails', desc: 'Enqueue a templated email with an idempotency key.' },
+    { verb: 'GET', path: '/internal/v1/emails/{id}', desc: 'Status history: queued, submitted, delivered, bounced…' },
+    { verb: 'POST', path: '/webhooks/ses', desc: 'Delivery, bounce and complaint events (SNS-signed).' },
+    { verb: 'POST', path: '/v1/unsubscribe', desc: 'One-click unsubscribe target for List-Unsubscribe-Post.' }
+  ],
+  schema: String.raw`
+CREATE TABLE email_messages (
+  id TEXT PRIMARY KEY, idem_key TEXT UNIQUE, template TEXT NOT NULL, lane TEXT NOT NULL,
+  to_hash BYTEA NOT NULL, status TEXT NOT NULL, mta_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ
+);
+CREATE TABLE email_events (message_id TEXT, type TEXT, detail JSONB, at TIMESTAMPTZ);
+CREATE TABLE suppressions (
+  email_hash BYTEA NOT NULL, reason TEXT NOT NULL CHECK (reason IN ('hard_bounce','complaint','unsubscribe')),
+  category TEXT, detail TEXT, created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (email_hash, reason, category)
+);`,
+  decisions: [
+    { q: 'Where is mail sent from?', options: [
+      { verdict: 'bad', name: 'smtplib from the request handler', why: 'Slow requests, lost mail on errors, no retry or throttling.' },
+      { verdict: 'good', name: 'Queue + your own Postfix fleet', why: 'Full control, but you manage IP warm-up and reputation yourself.' },
+      { verdict: 'great', name: 'Queue + a managed sending service with event webhooks', why: 'Retries, throttling and feedback loops handled; you own templates and suppression.' }
+    ] },
+    { q: 'How do you protect reputation?', options: [
+      { verdict: 'bad', name: 'One domain and IP for everything', why: 'A marketing complaint spike sends password resets to spam.' },
+      { verdict: 'great', name: 'SPF + DKIM + DMARC, separate streams for transactional and bulk, strict suppression', why: 'Authenticated, isolated and clean lists.' }
+    ] }
+  ],
+  refs: [
+    { label: 'Google: Email sender guidelines', url: 'https://support.google.com/a/answer/81126' },
+    { label: 'RFC 6376: DKIM Signatures', url: 'https://www.rfc-editor.org/rfc/rfc6376' },
+    { label: 'RFC 7489: DMARC', url: 'https://www.rfc-editor.org/rfc/rfc7489' },
+    { label: 'Amazon SES: Event publishing', url: 'https://docs.aws.amazon.com/ses/latest/dg/monitor-using-event-publishing.html' }
+  ]
+});
+
+flow({
+  id: 'feature-flags',
+  title: 'Feature flags and gradual rollout',
+  category: 'Infrastructure foundations',
+  tags: ['Percentage rollout', 'Consistent bucketing', 'Local evaluation', 'Streaming updates', 'Kill switch', 'Exposure events'],
+  summary: 'A new checkout design ships turned off, then goes to 5% of Belgian users, then everyone, without a deploy. Follow a flag change from the dashboard to every FastAPI pod and Next.js server in under a second, how each request is evaluated locally in microseconds, and how a kill switch turns it off when errors rise.',
+  requirements: {
+    functional: [
+      'Turn features on or off for segments (country, plan, internal staff) and percentages of users.',
+      'A user keeps the same variant on every request, device and service.',
+      'Changes take effect everywhere within seconds, with an audit trail.'
+    ],
+    nonFunctional: [
+      'Flag evaluation adds no network call to the request path.',
+      'If the flag service is down, apps keep working with the last known rules.',
+      'No flicker: server-rendered pages and client code agree on the variant.'
+    ]
+  },
+  estimates: [
+    { label: 'Evaluations', value: '≈ 2M / s', note: '20k req/s × ~100 flag checks per request across services.' },
+    { label: 'Per evaluation', value: '< 5 µs', note: 'In-memory rules plus one hash; no I/O.' },
+    { label: 'Rule set size', value: '≈ 300 KB', note: '~400 flags with targeting rules, sent compressed to every SDK.' },
+    { label: 'Propagation', value: '< 1 s', note: 'Server-sent events from the flag service to each SDK.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'pm', label: 'Product manager', sub: 'flag dashboard', kind: 'client', icon: 'user', x: 0, y: 0, desc: 'Edits targeting rules and rollout percentages.' },
+    { id: 'flags', label: 'Flag service', sub: 'FastAPI', kind: 'service', icon: 'flag', x: 1, y: 0, desc: 'Stores rules, versions them, streams changes to SDKs.' },
+    { id: 'fdb', label: 'Flag store', sub: 'PostgreSQL', kind: 'db', x: 1, y: 1, desc: 'Flags, rules, environments and the audit log.' },
+    { id: 'sdk', label: 'Server SDK', sub: 'in each pod', kind: 'worker', icon: 'cpu', x: 2, y: 0, desc: 'Keeps rules in memory, evaluates locally, reports exposures.' },
+    { id: 'next', label: 'Next.js server', sub: 'middleware', kind: 'service', x: 2, y: 1, desc: 'Evaluates flags on the server and passes the result to the page.' },
+    { id: 'user', label: 'Shopper', sub: 'browser', kind: 'client', icon: 'phone', x: 3, y: 1, desc: 'Sees the old or new checkout.' },
+    { id: 'api', label: 'Checkout API', sub: 'FastAPI', kind: 'service', icon: 'cart', x: 3, y: 0, desc: 'Uses the same flag to switch backend behaviour.' },
+    { id: 'analytics', label: 'Exposure events', sub: 'Kafka → warehouse', kind: 'queue', icon: 'chart', x: 2, y: 2, desc: 'Who saw which variant, joined later with conversions and errors.' },
+    { id: 'mon', label: 'Guardrail monitor', sub: 'metrics', kind: 'worker', icon: 'pulse', x: 3, y: 2, desc: 'Watches error rate per variant and can trip the kill switch.' }
+  ],
+  steps: [
+    {
+      from: 'pm', to: 'flags', label: 'PATCH rollout 5% BE',
+      title: 'Roll out to 5% of Belgian users',
+      caption: 'The flag new-checkout has been on for staff for a week. The product manager adds a rule: users in Belgium, 5% get variant on. The change needs a reason and is versioned.',
+      text: ['Shipping code turned off and turning it on separately decouples deploying from releasing: the deploy can happen on Tuesday, the release when the team is watching.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'PATCH', path: '/v1/environments/prod/flags/new-checkout', headers: { 'If-Match': '"v41"' }, body: { rules: [{ id: 'r_staff', when: { attr: 'email', op: 'ends_with', value: '@shop.example' }, serve: 'on' }, { id: 'r_be', when: { attr: 'country', op: 'in', value: ['BE'] }, rollout: { on: 5, off: 95 }, bucket_by: 'user_id' }], default: 'off', reason: 'Start BE rollout (CHK-412)' } },
+      fields: { 'If-Match': 'Optimistic locking: two people editing the same flag cannot overwrite each other.', bucket_by: 'Which attribute keeps a user in the same bucket. user_id for logged-in users, a stable anonymous id otherwise.' }
+    },
+    {
+      from: 'flags', to: 'fdb', label: 'save v42 + audit',
+      title: 'Save the new version and the audit entry',
+      caption: 'The rules are saved as version 42 of the flag, and an audit row records who changed what and why. Every change can be diffed and reverted.',
+      payloadKind: 'SQL',
+      payloadLang: 'sql',
+      payload: String.raw`
+BEGIN;
+UPDATE flags SET rules = $1, version = 42, updated_at = now()
+  WHERE env = 'prod' AND key = 'new-checkout' AND version = 41;
+INSERT INTO flag_audit (env, key, version, actor, reason, diff)
+VALUES ('prod', 'new-checkout', 42, 'usr_pm_lea', 'Start BE rollout (CHK-412)',
+        '{"added_rule":"r_be","rollout":{"on":5}}');
+UPDATE environments SET ruleset_version = ruleset_version + 1 WHERE env = 'prod';   -- 9182
+COMMIT;`,
+      text: ['The environment has one global ruleset version. SDKs compare it to know they are up to date, without comparing 400 flags one by one.']
+    },
+    {
+      from: 'flags', to: 'sdk', label: 'SSE: ruleset 9182',
+      title: 'Stream the change to every SDK',
+      caption: 'Every server SDK keeps one Server-Sent Events connection to the flag service. The new version of new-checkout is pushed to all of them, about 0.3 s after the save.',
+      text: ['Streaming beats polling here: changes arrive in under a second, and the connection is idle the rest of the time. SDKs also poll every 5 minutes as a backup in case a stream silently died.'],
+      payloadKind: 'SSE message',
+      payloadLang: 'text',
+      payload: String.raw`
+event: patch
+id: 9182
+data: {"key":"new-checkout","version":42,"rules":[{"id":"r_staff",…},
+       {"id":"r_be","when":{"attr":"country","op":"in","value":["BE"]},
+        "rollout":{"on":5,"off":95},"bucket_by":"user_id","salt":"nc-7f1"}],"default":"off"}`,
+      failure: ['**Flag service down:** SDKs keep the last ruleset in memory (and on disk, for restarts). Nothing changes until it recovers, but nothing breaks.', '**A brand-new pod starts while the service is down:** it loads the ruleset from a file baked in at deploy time or from a CDN copy, never failing open to random behaviour.']
+    },
+    {
+      from: 'user', to: 'next', label: 'GET /checkout',
+      title: 'A Belgian shopper opens checkout',
+      caption: 'User usr_ana, logged in, country BE, opens the checkout. The Next.js middleware evaluates new-checkout on the server before rendering, so the page never flickers between designs.',
+      text: ['Evaluating in the browser after load would show the old design for a split second, then swap. Server evaluation picks the variant before the first byte.'],
+      payloadKind: 'Evaluation context',
+      payload: { user_id: 'usr_ana', country: 'BE', plan: 'free', email: 'ana.lopez@gmail.com', app_version: 'web' },
+      code: [{ lang: 'ts', title: 'middleware.ts', src: String.raw`
+import { flags } from "@/lib/flags";      // server SDK, rules in memory
+
+export async function middleware(req: NextRequest) {
+  const user = await sessionUser(req);
+  const ctx = { user_id: user?.id ?? anonId(req), country: req.geo?.country ?? "XX",
+                email: user?.email, plan: user?.plan };
+  const variant = flags.variant("new-checkout", ctx);       // ~microseconds, no I/O
+  const res = NextResponse.next();
+  res.headers.set("x-flag-new-checkout", variant);          // read by the page
+  res.cookies.set("ff_nc", variant, { httpOnly: false, sameSite: "lax" }); // client hydration
+  return res;
+}
+export const config = { matcher: ["/checkout/:path*"] };` }]
+    },
+    {
+      from: 'next', to: 'sdk', label: 'evaluate locally',
+      title: 'Evaluate: rules first, then the bucket',
+      caption: 'The SDK walks the rules in order. Ana is not staff; she is in Belgium, so the rollout rule applies. Hashing "nc-7f1:usr_ana" gives bucket 3 out of 100, which is below 5: variant on.',
+      text: ['{{consistent bucketing}} is the key property. The same user always gets the same bucket, and raising 5% to 20% keeps all current users on and only adds buckets 5–19. Nobody flips back and forth.', 'The per-flag salt makes buckets independent between flags, so the same 5% of users are not the guinea pigs for every experiment.'],
+      payloadKind: 'Evaluation',
+      payload: { flag: 'new-checkout', version: 42, matched_rule: 'r_be', hash_input: 'nc-7f1:usr_ana', hash: 'murmur3_32 = 2147483903', bucket: 3, threshold: 5, variant: 'on', took_us: 2.1 },
+      fields: { bucket: 'hash mod 100. Buckets 0–4 get on (5%).', hash_input: 'salt + user id. Changing the salt reshuffles everyone, which is done only to restart an experiment.' },
+      code: [{ lang: 'python', title: 'Local evaluation (Python SDK)', src: String.raw`
+import mmh3
+
+def variant(flag: Flag, ctx: dict) -> str:
+    for rule in flag.rules:
+        if not matches(rule.when, ctx):
+            continue
+        if rule.serve:
+            return rule.serve
+        unit = str(ctx.get(rule.bucket_by, ""))
+        bucket = mmh3.hash(f"{flag.salt}:{unit}", signed=False) % 100
+        acc = 0
+        for name, pct in rule.rollout.items():      # {"on": 5, "off": 95}
+            acc += pct
+            if bucket < acc:
+                return name
+    return flag.default` }]
+    },
+    {
+      from: 'next', to: 'user', label: 'new checkout page', reply: true,
+      title: 'The new design is rendered',
+      caption: 'The server renders the new checkout and sends the variant to the client in a cookie, so client components agree with the server and later calls to the API carry the same decision.',
+      payloadKind: 'Rendered page',
+      payload: { variant: 'on', component: 'CheckoutV2', set_cookie: 'ff_nc=on', html_bytes: 41200 },
+      text: ['Client code reads the cookie instead of evaluating again, so a client SDK with slightly older rules can never disagree with the server render.']
+    },
+    {
+      from: 'api', to: 'sdk', label: 'same flag, backend',
+      title: 'The backend uses the same flag',
+      caption: 'The new checkout calls a new endpoint behaviour (address autocomplete, one-page payment). The Checkout API evaluates new-checkout with the same user id and gets the same answer: on.',
+      text: ['Because evaluation is deterministic (same rules, same user id, same hash), the frontend and every backend service agree without talking to each other.'],
+      payloadKind: 'FastAPI',
+      payloadLang: 'text',
+      payload: String.raw`
+GET /v1/checkout/summary   (user usr_ana)
+flags.variant("new-checkout", {user_id: "usr_ana", country: "BE"}) -> "on"
+-> uses PricingV2 and returns address suggestions`,
+      code: [{ lang: 'python', title: 'FastAPI dependency', src: String.raw`
+def flag(key: str):
+    def dep(user: User = Depends(current_user), req: Request = None) -> str:
+        return flags.variant(key, {"user_id": user.id, "country": user.country,
+                                   "plan": user.plan, "email": user.email})
+    return dep
+
+@router.get("/v1/checkout/summary")
+async def summary(nc: str = Depends(flag("new-checkout")), user=Depends(current_user)):
+    return await (summary_v2(user) if nc == "on" else summary_v1(user))` }]
+    },
+    {
+      from: 'sdk', to: 'analytics', label: 'exposure events', async: true,
+      title: 'Record who saw which variant',
+      caption: 'The SDK batches exposure events (user, flag, variant, rule) and sends them every few seconds. Analysts join them with orders to compare conversion between on and off.',
+      text: ['Exposures are deduplicated per user per flag per hour in the SDK; logging every evaluation would mean millions of identical events per second.'],
+      payloadKind: 'Exposure event',
+      payload: { type: 'flag_exposure', flag: 'new-checkout', version: 42, variant: 'on', rule: 'r_be', user_id: 'usr_ana', ts: '2026-11-25T11:41:44Z', service: 'web-next' }
+    },
+    {
+      from: 'mon', to: 'flags', label: 'kill switch: off',
+      title: 'Guardrail trips the kill switch',
+      caption: 'At 20%, the error rate of checkout for variant on reaches 3.1% against 0.4% for off. The guardrail monitor flips new-checkout\'s kill switch: everyone gets off within a second, no deploy.',
+      text: ['A {{kill switch}} is the main safety benefit of flags: rolling back becomes a click (or an automatic rule), not a revert and a 15-minute deploy.', 'Comparing error rates per variant, not overall, is what makes a 20% rollout problem visible: overall checkout errors only rose from 0.4% to 0.9%.'],
+      payloadKind: 'Guardrail decision',
+      payload: { flag: 'new-checkout', metric: 'checkout_5xx_ratio', window: '5m', by_variant: { on: 0.031, off: 0.004 }, rule: 'on > 3 × off and on > 1% for 2 windows', action: { kill: true, version: 46 }, notified: ['#checkout-team', 'usr_pm_lea'] },
+      failure: ['**False alarm:** the team investigates and re-enables with a click. The audit log shows the automatic kill and who re-enabled it.']
+    },
+    {
+      from: 'flags', to: 'next', label: 'SSE: killed → off',
+      title: 'Everyone is back on the old checkout',
+      caption: 'The kill is streamed like any change. Next request, Ana gets the old checkout. Later, once the bug is fixed, the rollout resumes at 5% and the same users are back in the on group.',
+      payloadKind: 'SSE message',
+      payloadLang: 'text',
+      payload: String.raw`
+event: patch
+id: 9187
+data: {"key":"new-checkout","version":46,"killed":true,"default":"off"}`,
+      text: ['When a flag reaches 100% and stays stable, the old code path and the flag are removed. Stale flags are tracked by age, so the code does not fill up with dead branches.']
+    }
+  ],
+  api: [
+    { verb: 'PATCH', path: '/v1/environments/{env}/flags/{key}', desc: 'Change rules; needs `If-Match` and a reason.' },
+    { verb: 'GET', path: '/v1/sdk/ruleset?env=prod', desc: 'Full ruleset with version, for SDK start-up.' },
+    { verb: 'GET', path: '/v1/sdk/stream?env=prod', desc: 'Server-Sent Events of ruleset patches.' },
+    { verb: 'POST', path: '/v1/environments/{env}/flags/{key}/kill', desc: 'Kill switch: serve default to everyone.' }
+  ],
+  schema: String.raw`
+CREATE TABLE flags (
+  env TEXT, key TEXT, rules JSONB NOT NULL, default_variant TEXT NOT NULL,
+  salt TEXT NOT NULL, killed BOOLEAN DEFAULT false, version INT NOT NULL,
+  owner TEXT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ,
+  PRIMARY KEY (env, key)
+);
+CREATE TABLE flag_audit (
+  id BIGSERIAL PRIMARY KEY, env TEXT, key TEXT, version INT,
+  actor TEXT, reason TEXT, diff JSONB, at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE environments (env TEXT PRIMARY KEY, ruleset_version BIGINT NOT NULL);`,
+  decisions: [
+    { q: 'Where are flags evaluated?', options: [
+      { verdict: 'bad', name: 'Call the flag service on every check', why: 'A network hop per flag per request, and an outage breaks everything.' },
+      { verdict: 'great', name: 'SDK with rules in memory, streamed updates', why: 'Microsecond evaluations and keeps working when the service is down.' }
+    ] },
+    { q: 'How are percentages assigned?', options: [
+      { verdict: 'bad', name: 'random() < 0.05 on each request', why: 'Users flip between designs on every page.' },
+      { verdict: 'great', name: 'hash(salt + user id) mod 100', why: 'Stable per user, consistent across services, and rollouts only add users.' }
+    ] }
+  ],
+  refs: [
+    { label: 'Martin Fowler: Feature Toggles', url: 'https://martinfowler.com/articles/feature-toggles.html' },
+    { label: 'OpenFeature specification', url: 'https://openfeature.dev/specification/' }
   ]
 });
 

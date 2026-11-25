@@ -194,3 +194,6 @@ terms({
   'segment allocation': 'An id-generation scheme where a central table hands each server a block of ids (say 1,000 at a time) and the server gives them out from memory.',
   'state vector': 'In Yjs, a summary of how many operations from each client a document has seen. Two peers exchange state vectors and send each other only what the other is missing.'
 });
+terms({
+  'bulkhead': 'Isolating resources (queues, worker pools, connection pools) per kind of work, like the watertight compartments of a ship, so a flood of one kind cannot starve the others.'
+});
