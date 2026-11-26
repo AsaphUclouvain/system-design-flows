@@ -5553,6 +5553,848 @@ CREATE UNIQUE INDEX one_active_trip ON trips (driver_id)
 });
 
 flow({
+  id: 'stock-exchange',
+  title: 'Stock exchange: order matching',
+  category: 'Commerce & money',
+  tags: ['Order gateway', 'Pre-trade risk checks', 'Sequencer', 'Single-threaded matching engine', 'Order book price-time priority', 'Market data feed', 'Replay for recovery'],
+  summary: 'A broker sends "buy 100 ACME at €52.10". The exchange checks risk, stamps the order with a sequence number, and a single-threaded in-memory matching engine pairs it with sell orders by price, then time. Fills go back to both brokers and the change is broadcast to everyone as market data. Follow a match, a rejected order, and recovery after a crash.',
+  requirements: {
+    functional: ['Accept limit orders and cancels.', 'Match by price-time priority.', 'Publish trades and order-book changes to all participants.'],
+    nonFunctional: ['Microsecond-level, predictable latency.', 'Deterministic: replaying the same input gives the same trades.', 'Fair: everyone sees the same market data at the same time.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'broker', label: 'Broker', sub: 'FIX connection', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Sends orders on behalf of its clients over a persistent session.' },
+    { id: 'gw', label: 'Order gateway', sub: 'validate', kind: 'edge', icon: 'shield', x: 1, y: 1, desc: 'Checks the message format, the session and the symbol.' },
+    { id: 'risk', label: 'Risk check', sub: 'pre-trade', kind: 'service', icon: 'gauge', x: 1, y: 0, desc: 'Rejects orders over the broker\'s limits or far from the current price.' },
+    { id: 'seq', label: 'Sequencer', sub: 'total order + journal', kind: 'queue', icon: 'hash', x: 2, y: 1, desc: 'Gives every input a sequence number and writes it to a journal before matching, so the run can be replayed.' },
+    { id: 'me', label: 'Matching engine', sub: 'one thread, in memory', kind: 'worker', icon: 'cpu', x: 3, y: 1, desc: 'Keeps the order book in memory and processes inputs one at a time, in sequence order.' },
+    { id: 'md', label: 'Market data', sub: 'multicast feed', kind: 'service', icon: 'chart', x: 3, y: 2, desc: 'Publishes every book change and trade to all subscribers.' },
+    { id: 'report', label: 'Execution reports', sub: 'to both brokers', kind: 'service', icon: 'doc', x: 4, y: 1, desc: 'Sends fills to the buyer\'s and seller\'s brokers; feeds clearing.' }
+  ],
+  pseudo: `
+msg = NewOrder(BUY, ACME, qty=100, limit=52.10, client_id=o_77)
+gateway.validate(msg); if not risk.ok(msg): reject
+seq = sequencer.next(); journal.append(seq, msg)
+me.apply(seq, msg):
+    while qty and best_ask.price <= limit:
+        fill = min(qty, best_ask.qty); trade(best_ask.price, fill)
+    if qty: book.bids.insert(limit, time=seq)
+publish(market_data, changes); send(execution_reports)
+recovery: load snapshot; replay journal from snapshot.seq`,
+  steps: [
+    {
+      from: 'broker', to: 'gw', label: 'NewOrder BUY 100 ACME @ 52.10', pc: ['msg = NewOrder', 'gateway.validate'],
+      title: 'A limit order arrives',
+      caption: 'The broker\'s client wants to buy 100 shares, paying at most €52.10 each.',
+      text: [],
+      payloadKind: 'Order',
+      payload: { type: 'NewOrder', side: 'BUY', symbol: 'ACME', qty: 100, limit: 52.1, tif: 'DAY', client_order_id: 'o_77', broker: 'BRK1' }
+    },
+    {
+      from: 'gw', to: 'risk', label: 'notional €5 210 vs limit €2 M', pc: ['risk.ok(msg)'],
+      title: 'Pre-trade risk check',
+      caption: 'Is the broker within its credit limit? Is the price within a sane band of the last trade? A fat-finger order for 1 000 000 shares would stop here.',
+      text: [],
+      payloadKind: 'Risk result',
+      payload: { notional_eur: 5210, broker_limit_eur: 2000000, price_band: '±10%', ok: true },
+      branch: { q: 'Within limits?', options: [ { label: 'yes', goto: 'seq1' }, { label: 'no: reject', goto: 'rej' } ] }
+    },
+    {
+      id: 'rej', path: 'rej', from: 'risk', to: 'broker', reply: true, label: 'Reject: price 5.21 outside band', pc: ['reject'],
+      title: 'Other outcome: rejected',
+      caption: 'Another order typed 5.21 instead of 52.10. It is 90% below the market, outside the band, and rejected before it ever reaches the book.',
+      text: [],
+      payloadKind: 'Reject',
+      payload: { client_order_id: 'o_78', reason: 'PRICE_OUT_OF_BAND', limit: 5.21, reference: 52.08 },
+      next: 'seq1'
+    },
+    {
+      id: 'seq1', from: 'gw', to: 'seq', label: 'seq 10 448 213 → journal', pc: ['seq = sequencer.next()'],
+      title: 'Sequence and journal it',
+      caption: 'Every order and cancel, from every gateway, gets one global sequence number and is written to a journal before matching. The order of the journal is the order of the market.',
+      text: [],
+      payloadKind: 'Journal entry',
+      payload: { seq: 10448213, ts_ns: 1764171012000123456, msg: 'NewOrder BUY 100 ACME @52.10 o_77' }
+    },
+    {
+      from: 'seq', to: 'me', label: 'apply seq 10 448 213', pc: ['me.apply', 'while qty and best_ask', 'book.bids.insert'],
+      title: 'Match by price, then time',
+      caption: 'The best asks are 60 @ 52.05 and 80 @ 52.10. The order takes all 60 at 52.05, then 40 of the 80 at 52.10 (the oldest order at that price goes first). Fully filled, nothing rests on the book.',
+      text: ['LMAX described processing about 6 million orders per second on a single thread with everything in memory: no locks, and the input journal makes it recoverable.'],
+      payloadKind: 'Order book (ACME)',
+      payload: { asks_before: [{ px: 52.05, qty: 60 }, { px: 52.1, qty: 80 }, { px: 52.15, qty: 300 }], trades: [{ px: 52.05, qty: 60 }, { px: 52.1, qty: 40 }], asks_after: [{ px: 52.1, qty: 40 }, { px: 52.15, qty: 300 }] }
+    },
+    {
+      from: 'me', to: 'report', label: 'Fill 60@52.05, Fill 40@52.10', pc: ['send(execution_reports)'],
+      title: 'Execution reports to both sides',
+      caption: 'The buyer\'s broker and each seller\'s broker get fills. Average price: €52.07.',
+      text: [],
+      payloadKind: 'Execution report',
+      payload: { client_order_id: 'o_77', status: 'FILLED', fills: [{ qty: 60, px: 52.05 }, { qty: 40, px: 52.1 }], avg_px: 52.07 }
+    },
+    {
+      from: 'me', to: 'md', label: 'trade + book update, seq 10 448 213', pc: ['publish(market_data'],
+      title: 'Broadcast market data',
+      caption: 'Everyone gets the same messages: two trades and the changed ask levels, numbered so receivers detect gaps.',
+      text: ['Nasdaq\'s TotalView-ITCH feed is an example: messages like Add Order and Order Executed describe every change to the book.'],
+      payloadKind: 'Market data',
+      payload: [{ type: 'Trade', symbol: 'ACME', px: 52.05, qty: 60 }, { type: 'Trade', symbol: 'ACME', px: 52.1, qty: 40 }, { type: 'BookLevel', side: 'ASK', px: 52.1, qty: 40 }]
+    },
+    {
+      from: 'seq', to: 'me', label: 'crash → snapshot @10.4 M + replay journal', pc: ['recovery: load snapshot'],
+      title: 'Recovery: replay the journal',
+      caption: 'If the engine crashes, a standby loads the last snapshot and replays the journal from there. Because matching is deterministic, it rebuilds exactly the same book and trades.',
+      text: [],
+      payloadKind: 'Recovery',
+      payload: { snapshot_seq: 10400000, replayed: 48213, rebuilt_book_matches: true, downtime_ms: 900 }
+    }
+  ],
+  decisions: [
+    { q: 'Multi-threaded or single-threaded matching?', options: [
+      { name: 'Single thread per symbol group, in memory', verdict: 'good', why: 'No locks, deterministic, very fast; shard by symbol for more throughput.' },
+      { name: 'Many threads on a shared book', verdict: 'bad', why: 'Locks, non-deterministic ordering, unfair.' } ] }
+  ],
+  refs: [
+    { label: 'Martin Fowler: The LMAX Architecture', url: 'https://martinfowler.com/articles/lmax.html' },
+    { label: 'Nasdaq TotalView-ITCH 5.0 specification (PDF)', url: 'https://www.nasdaqtrader.com/content/technicalsupport/specifications/dataproducts/NQTVITCHspecification.pdf' },
+    { label: 'FIX Trading Community: FIX protocol', url: 'https://www.fixtrading.org/standards/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Stock Exchange" (book)', url: 'https://bytebytego.com/courses/system-design-interview/stock-exchange' }
+  ],
+  verify: {
+    checked: ['Single-threaded in-memory business logic, input journal and about 6 million orders/s: Fowler, The LMAX Architecture.', 'Add Order / Order Executed messages: Nasdaq ITCH 5.0 spec.'],
+    uncertain: ['Symbol, prices, limits, sequence numbers and recovery time are illustrative.']
+  }
+});
+
+flow({
+  id: 'raft-consensus',
+  title: 'Consensus with Raft (leader election and log replication)',
+  category: 'Databases & replication',
+  tags: ['Leader election', 'Terms', 'Randomized timeouts', 'Log replication', 'Majority commit', 'Network partition (CP)'],
+  summary: 'Raft lets five servers agree on one ordered log even when some crash. One server is leader for a term; it appends client commands and an entry is committed once a majority has stored it. When the leader disappears, a follower whose timer runs out first asks for votes and becomes the new leader. Follow a write, a leader crash and election, and a partitioned minority that cannot accept writes.',
+  requirements: {
+    functional: ['Replicate a sequence of commands (e.g. key-value writes) to all servers in the same order.', 'Elect a new leader automatically after a failure.'],
+    nonFunctional: ['Safety: a committed entry is never lost or reordered.', 'Available while a majority (3 of 5) is up and connected.', 'Used by etcd, Consul, CockroachDB, Kafka KRaft, among others.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'client', label: 'Client', sub: 'SET config=v2', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Sends commands to the leader; followers redirect it there.' },
+    { id: 's1', label: 'S1', sub: 'leader, term 4', kind: 'service', icon: 'flag', x: 2, y: 1, desc: 'Accepts commands, appends them to its log, sends AppendEntries to followers, also as heartbeats.' },
+    { id: 's2', label: 'S2', sub: 'follower', kind: 'service', icon: 'server', x: 1, y: 0, desc: 'Appends entries from the leader if its log matches at the previous index.' },
+    { id: 's3', label: 'S3', sub: 'follower', kind: 'service', icon: 'server', x: 3, y: 0, desc: 'Follower. Its election timer resets on every heartbeat.' },
+    { id: 's4', label: 'S4', sub: 'follower', kind: 'service', icon: 'server', x: 1, y: 2, desc: 'Follower.' },
+    { id: 's5', label: 'S5', sub: 'follower', kind: 'service', icon: 'server', x: 3, y: 2, desc: 'Follower.' },
+    { id: 'sm', label: 'State machine', sub: 'key-value store', kind: 'db', icon: 'db', x: 4, y: 1, desc: 'Each server applies committed entries in log order, so all five reach the same state.' }
+  ],
+  pseudo: `
+leader.on_command(cmd): log.append((term=4, cmd)); send AppendEntries(prevIndex, prevTerm, [entry])
+follower: if log[prevIndex].term == prevTerm: append; reply success
+leader: if success from majority (3 of 5): commitIndex = idx; apply; reply client
+follower: if no heartbeat for timeout (random 150-300 ms): term += 1; become candidate
+candidate: vote for self; RequestVote(term, lastLogIndex, lastLogTerm)
+voter: grant if not voted this term and candidate log is at least as up to date
+if votes >= 3: become leader
+minority side of a partition: cannot reach 3 -> cannot commit`,
+  steps: [
+    {
+      from: 'client', to: 's1', label: 'SET config=v2', pc: ['leader.on_command'],
+      title: 'A command reaches the leader',
+      caption: 'S1 is leader for term 4. It appends the command to its own log at index 17 (not committed yet).',
+      text: [],
+      payloadKind: 'Log entry',
+      payload: { index: 17, term: 4, cmd: 'SET config=v2', committed: false }
+    },
+    {
+      from: 's1', to: 's2', label: 'AppendEntries(prev 16/t4, [17])', pc: ['send AppendEntries', 'follower: if log[prevIndex]'],
+      title: 'Replicate to followers',
+      caption: 'The leader sends the entry with the index and term of the entry before it. A follower only appends if its log matches there; that check keeps all logs identical.',
+      text: [],
+      payloadKind: 'AppendEntries',
+      payload: { term: 4, leaderId: 'S1', prevLogIndex: 16, prevLogTerm: 4, entries: [{ index: 17, term: 4, cmd: 'SET config=v2' }], leaderCommit: 16 }
+    },
+    {
+      from: 's3', to: 's1', reply: true, label: 'success (S2, S3 ack)', pc: ['reply success', 'if success from majority'],
+      title: 'A majority stores it: committed',
+      caption: 'S2 and S3 reply. With S1 itself that is 3 of 5, a majority, so entry 17 is committed. S4 and S5 will catch up; the leader keeps retrying them.',
+      text: ['Any two majorities of 5 overlap in at least one server. That is why a committed entry is always known to whoever wins a later election.'],
+      payloadKind: 'Commit',
+      payload: { index: 17, acks: ['S1', 'S2', 'S3'], majority: 3, commitIndex: 17 }
+    },
+    {
+      from: 's1', to: 'sm', label: 'apply 17 → config=v2; reply OK', pc: ['apply; reply client'],
+      title: 'Apply and answer the client',
+      caption: 'The leader applies the entry to its state machine and replies. Followers apply it when the next heartbeat tells them commitIndex = 17.',
+      text: [],
+      payloadKind: 'Apply',
+      payload: { applied_index: 17, key: 'config', value: 'v2', reply: 'OK' },
+      branch: { q: 'What happens next?', options: [ { label: 'the leader crashes', goto: 'elect' }, { label: 'a network partition', goto: 'part' } ] }
+    },
+    {
+      id: 'elect', path: 'elect', from: 's3', to: 's2', label: 'timeout 183 ms → RequestVote(term 5, last 17/t4)', pc: ['follower: if no heartbeat', 'candidate: vote for self'],
+      title: 'Leader crash: a follower starts an election',
+      caption: 'S1 dies. Followers stop getting heartbeats. Each has a random timeout between 150 and 300 ms, so usually one, here S3 at 183 ms, fires first, becomes candidate for term 5 and asks for votes.',
+      text: ['The randomized timeout is what keeps candidates from splitting the vote over and over.'],
+      payloadKind: 'RequestVote',
+      payload: { term: 5, candidateId: 'S3', lastLogIndex: 17, lastLogTerm: 4 }
+    },
+    {
+      from: 's4', to: 's3', reply: true, label: 'voteGranted (S2, S4) → S3 leads term 5', pc: ['voter: grant if', 'if votes >= 3'],
+      title: 'Votes arrive: new leader',
+      caption: 'S2 and S4 have not voted in term 5 and S3\'s log is at least as up to date as theirs, so they vote yes. S3 has 3 votes and starts sending heartbeats as leader. S4 lacked entry 17; S3 now sends it.',
+      text: [],
+      payloadKind: 'Votes',
+      payload: { term: 5, votes: ['S3', 'S2', 'S4'], leader: 'S3', election_ms: 210 },
+      next: 'end'
+    },
+    {
+      id: 'part', path: 'part', from: 's3', to: 's5', label: 'partition: {S1, S2} | {S3, S4, S5} \u2192 S3+S4+S5 elect', pc: ['minority side of a partition'],
+      title: 'Other outcome: a network partition',
+      caption: 'The network splits. S1 still thinks it is leader but can only reach S2: 2 of 5. It cannot commit anything, so clients on that side get timeouts. On the other side, S3, S4 and S5 elect a leader for term 5 and keep working.',
+      text: ['This is the CAP trade-off in practice: Raft picks consistency, so the minority side becomes unavailable rather than accepting writes that could conflict.'],
+      payloadKind: 'Partition',
+      payload: { minority: ['S1', 'S2'], majority: ['S3', 'S4', 'S5'], minority_can_commit: false, majority_new_term: 5 }
+    },
+    {
+      id: 'end', from: 's3', to: 'sm', label: 'healed: S1 sees term 5 → steps down', pc: ['if votes >= 3: become leader'],
+      title: 'The old leader rejoins as follower',
+      caption: 'When S1 comes back, any message from term 5 tells it a newer leader exists. It becomes a follower and any uncommitted entries it had are overwritten by the leader\'s log.',
+      text: [],
+      payloadKind: 'Rejoin',
+      payload: { server: 'S1', old_term: 4, new_term: 5, role: 'follower', uncommitted_discarded: 1 }
+    }
+  ],
+  decisions: [
+    { q: 'Cluster size?', options: [
+      { name: '3 servers', verdict: 'ok', why: 'Tolerates 1 failure; cheapest.' },
+      { name: '5 servers', verdict: 'good', why: 'Tolerates 2 failures, e.g. one in maintenance and one crash.' },
+      { name: '4 or 6 servers', verdict: 'bad', why: 'Same fault tolerance as 3 or 5 but a bigger majority to reach.' } ] }
+  ],
+  refs: [
+    { label: 'Ongaro & Ousterhout, In Search of an Understandable Consensus Algorithm (Raft paper, PDF)', url: 'https://raft.github.io/raft.pdf' },
+    { label: 'The Raft Consensus Algorithm (site with interactive visualization)', url: 'https://raft.github.io/' },
+    { label: 'etcd docs: FAQ (cluster size and failure tolerance)', url: 'https://etcd.io/docs/v3.5/faq/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 1, chapter "Design a Key-Value Store" (book)', url: 'https://bytebytego.com/courses/system-design-interview/design-a-key-value-store' }
+  ],
+  verify: {
+    checked: ['Terms, AppendEntries consistency check, majority commit, RequestVote rules, randomized election timeouts of e.g. 150–300 ms: Raft paper.', 'Odd cluster sizes and failure tolerance: etcd FAQ.'],
+    uncertain: ['Indices, the 183 ms timeout and election time are illustrative.']
+  }
+});
+
+flow({
+  id: 'caching-strategies',
+  title: 'Caching strategies: cache-aside, write-through, TTL',
+  category: 'Infrastructure foundations',
+  tags: ['Cache-aside (lazy loading)', 'Write-through', 'TTL', 'Invalidate on write', 'Stampede protection', 'Eviction (LRU)'],
+  summary: 'A cache answers reads from memory so the database does not have to. The hard part is keeping it correct. Follow a cache-aside read (hit and miss), a write that invalidates the key, the write-through alternative, and a hot key expiring under load where only one request may rebuild it.',
+  requirements: {
+    functional: ['Serve product pages fast.', 'Reflect price changes quickly.'],
+    nonFunctional: ['Most reads served from cache.', 'Stale data bounded (TTL).', 'A cache failure or expiry must not take down the database.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Shopper', sub: 'product page', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Opens /product/42.' },
+    { id: 'app', label: 'App server', sub: 'owns caching logic', kind: 'service', icon: 'server', x: 1, y: 1, desc: 'In cache-aside, the application decides when to read, fill and invalidate the cache.' },
+    { id: 'cache', label: 'Cache', sub: 'Redis, LRU, TTL', kind: 'cache', icon: 'cache', x: 2, y: 0, desc: 'In-memory key-value store. When full, it evicts the least recently used keys.' },
+    { id: 'db', label: 'Database', sub: 'source of truth', kind: 'db', icon: 'db', x: 3, y: 1, desc: 'Always correct, slower, and must be protected from cache misses in bulk.' },
+    { id: 'admin', label: 'Admin tool', sub: 'changes price', kind: 'client', icon: 'user', x: 2, y: 2, desc: 'Updates the price of product 42.' }
+  ],
+  pseudo: `
+def get_product(id):
+    v = cache.get(f"product:{id}")
+    if v: return v                       # hit
+    if not cache.set(f"lock:{id}", 1, nx=True, ex=5): sleep(50ms); return get_product(id)
+    v = db.query(id); cache.set(f"product:{id}", v, ex=300 + jitter); return v
+def update_price(id, p):                 # cache-aside write
+    db.update(id, p); cache.delete(f"product:{id}")
+def update_price_wt(id, p):              # write-through
+    db.update(id, p); cache.set(f"product:{id}", load(id), ex=300)`,
+  steps: [
+    {
+      from: 'user', to: 'app', label: 'GET /product/42', pc: ['def get_product'],
+      title: 'A read request',
+      caption: 'The app checks the cache before the database.',
+      text: [],
+      payloadKind: 'Request',
+      payload: { method: 'GET', path: '/product/42' }
+    },
+    {
+      from: 'app', to: 'cache', label: 'GET product:42', pc: ['v = cache.get'],
+      title: 'Look in the cache',
+      caption: 'A hit returns in well under a millisecond inside the data center.',
+      text: [],
+      payloadKind: 'Cache read',
+      payload: { key: 'product:42' },
+      branch: { q: 'Is it cached?', options: [ { label: 'hit', goto: 'hit' }, { label: 'miss', goto: 'miss' } ] }
+    },
+    {
+      id: 'hit', path: 'hit', from: 'cache', to: 'app', reply: true, label: 'HIT {name, price 24.99}', pc: ['if v: return v'],
+      title: 'Hit: done',
+      caption: 'The database is not touched. With a good hit rate, the database only sees a small share of reads.',
+      text: [],
+      payloadKind: 'Cache value',
+      payload: { key: 'product:42', value: { name: 'Static Bloom vol. 1', price_eur: 24.99 }, ttl_left_s: 212 },
+      next: 'write'
+    },
+    {
+      id: 'miss', from: 'app', to: 'db', label: 'MISS → SELECT * FROM products WHERE id=42', pc: ['v = db.query(id)'],
+      title: 'Miss: load from the database (lazy loading)',
+      caption: 'Only data that is actually requested ends up in the cache. AWS calls this lazy loading.',
+      text: [],
+      payloadKind: 'Query',
+      payload: { sql: 'SELECT id, name, price FROM products WHERE id = 42', ms: 9 }
+    },
+    {
+      from: 'app', to: 'cache', label: 'SET product:42 … EX 300 (+jitter)', pc: ['cache.set(f"product:{id}", v'],
+      title: 'Fill the cache with a TTL',
+      caption: 'The TTL caps how stale the value can get even if an invalidation is missed. A little random jitter stops thousands of keys from expiring at the same second.',
+      text: [],
+      payloadKind: 'Cache write',
+      payload: { key: 'product:42', ttl_s: 317, value: { price_eur: 24.99 } }
+    },
+    {
+      id: 'write', from: 'admin', to: 'db', label: 'UPDATE price = 19.99', pc: ['def update_price', 'db.update(id, p)'],
+      title: 'A write: update the database first',
+      caption: 'The price drops to €19.99. The database is updated first, so it stays the source of truth.',
+      text: [],
+      payloadKind: 'Update',
+      payload: { sql: 'UPDATE products SET price = 19.99 WHERE id = 42' },
+      branch: { q: 'Which write strategy?', options: [ { label: 'cache-aside: delete the key', goto: 'del' }, { label: 'write-through: update the cache', goto: 'wt' } ] }
+    },
+    {
+      id: 'del', from: 'app', to: 'cache', label: 'DEL product:42', pc: ['cache.delete'],
+      title: 'Cache-aside: delete the key',
+      caption: 'Deleting (instead of writing the new value) avoids races where two writers leave the older value in the cache. The next read misses and loads €19.99.',
+      text: [],
+      payloadKind: 'Invalidate',
+      payload: { key: 'product:42', deleted: true },
+      next: 'storm'
+    },
+    {
+      id: 'wt', path: 'wt', from: 'app', to: 'cache', label: 'SET product:42 price 19.99', pc: ['def update_price_wt'],
+      title: 'Other outcome: write-through',
+      caption: 'Every write also updates the cache, so reads right after a write hit fresh data. The cost: you cache data that may never be read, which is why it is usually combined with a TTL.',
+      text: [],
+      payloadKind: 'Cache write',
+      payload: { key: 'product:42', value: { price_eur: 19.99 }, ttl_s: 300 }
+    },
+    {
+      id: 'storm', from: 'cache', to: 'app', label: '2 000 requests miss hot key at once → 1 lock', pc: ['if not cache.set(f"lock:{id}"'],
+      title: 'A hot key expires under load',
+      caption: 'Product 42 is on the homepage. When it expires, 2 000 requests miss in the same instant. Without care they all hit the database (a stampede). With a short lock, one request rebuilds; the others wait 50 ms and then hit the fresh value.',
+      text: [],
+      payloadKind: 'Stampede guard',
+      payload: { key: 'product:42', concurrent_misses: 2000, lock_holder: 'req_8812', db_queries: 1 }
+    }
+  ],
+  decisions: [
+    { q: 'Read strategy?', options: [
+      { name: 'Cache-aside (lazy loading)', verdict: 'good', why: 'Only requested data cached; cache failure just means slower reads.' },
+      { name: 'Read-through (cache library loads on miss)', verdict: 'ok', why: 'Cleaner code; the cache layer must know how to load.' } ] },
+    { q: 'Write strategy?', options: [
+      { name: 'Update DB, then delete key', verdict: 'good', why: 'Simple and safe with a TTL as a backstop.' },
+      { name: 'Write-through', verdict: 'ok', why: 'Fresh reads after writes; caches unread data.' },
+      { name: 'Write-behind (cache first, DB later)', verdict: 'bad', why: 'Fast writes, but data is lost if the cache dies before flushing. Only for data you can afford to lose.' } ] }
+  ],
+  refs: [
+    { label: 'AWS ElastiCache docs: Caching strategies (lazy loading, write-through, TTL)', url: 'https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html' },
+    { label: 'Redis docs: Key eviction (LRU policies)', url: 'https://redis.io/docs/latest/develop/reference/eviction/' },
+    { label: 'Redis docs: SET (NX, EX options)', url: 'https://redis.io/docs/latest/commands/set/' },
+    { label: 'Nishtala et al., Scaling Memcache at Facebook (NSDI 2013)', url: 'https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/nishtala' }
+  ],
+  verify: {
+    checked: ['Lazy loading, write-through and adding TTL as the three strategies: AWS ElastiCache docs.', 'SET with NX/EX for a short lock: Redis SET docs.', 'Deleting instead of updating on write, and leases against thundering herds: Scaling Memcache at Facebook.'],
+    uncertain: ['Request counts, TTLs and timings are illustrative.']
+  }
+});
+
+flow({
+  id: 'transformer-attention',
+  title: 'Inside a transformer: tokens, attention, next token',
+  category: 'AI & machine learning',
+  tags: ['Tokenizer', 'Embeddings + positions', 'Q / K / V', 'Scaled dot-product attention', 'Multi-head', 'Causal mask', 'Softmax over vocabulary'],
+  summary: 'Every LLM flow on this site has a box labelled "model". This flow opens it. Text becomes token ids, ids become vectors, and each layer lets every token look at earlier tokens through attention: queries are compared with keys, the scores become weights, and the weights mix the values. After the last layer, a softmax over the vocabulary picks the next token. Follow "The gate is" becoming "The gate is open".',
+  requirements: {
+    functional: ['Turn a prompt into a probability for every possible next token.', 'Repeat to generate text one token at a time.'],
+    nonFunctional: ['Parallel over all positions during training (no recurrence).', 'Each token may only use earlier tokens when generating (causal).']
+  },
+  estimates: ['Original Transformer base model: d_model = 512, 8 heads of size 64, feed-forward size 2048, 6 layers. Modern LLMs are far larger.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'text', label: 'Prompt text', sub: '"The gate is"', kind: 'client', icon: 'doc', x: 0, y: 1, desc: 'Raw characters from the user.' },
+    { id: 'tok', label: 'Tokenizer', sub: 'BPE', kind: 'service', icon: 'hash', x: 1, y: 1, desc: 'Splits text into sub-word tokens and maps each to an integer id.' },
+    { id: 'emb', label: 'Embedding + position', sub: 'id → vector', kind: 'service', icon: 'layers', x: 1, y: 0, desc: 'Looks up a learned vector per id and adds position information so order is known.' },
+    { id: 'attn', label: 'Self-attention', sub: 'Q·Kᵀ/√d → softmax → ·V', kind: 'ai', icon: 'brain', x: 2, y: 1, desc: 'Each token builds a query; compares it with the keys of all earlier tokens; mixes their values by the resulting weights. Several heads do this in parallel.' },
+    { id: 'ffn', label: 'Feed-forward', sub: 'per token MLP', kind: 'ai', icon: 'cpu', x: 3, y: 1, desc: 'Transforms each token\'s vector independently. Attention + feed-forward (with residuals and normalisation) form one layer; layers are stacked.' },
+    { id: 'head', label: 'Output head', sub: 'softmax over vocab', kind: 'ai', icon: 'chart', x: 3, y: 0, desc: 'Projects the last token\'s vector to one score per vocabulary token, then softmax turns scores into probabilities.' },
+    { id: 'out', label: 'Next token', sub: 'sampled', kind: 'client', icon: 'spark', x: 4, y: 1, desc: 'Picked by greedy choice or sampling (temperature, top-p), appended, and the loop repeats.' }
+  ],
+  pseudo: `
+ids = tokenizer.encode("The gate is")          # [791, 18618, 374]
+x = embed[ids] + position(0..2)                 # 3 x d_model
+for layer in layers:
+    Q, K, V = x@Wq, x@Wk, x@Wv                    # per head
+    scores = Q @ K.T / sqrt(d_k)
+    scores[j > i] = -inf                          # causal mask
+    x = x + softmax(scores) @ V                   # mix earlier tokens
+    x = x + ffn(x)
+probs = softmax(x[-1] @ W_vocab)
+next = sample(probs, temperature=0.7)           # " open"`,
+  steps: [
+    {
+      from: 'text', to: 'tok', label: '"The gate is" → [791, 18618, 374]', pc: ['ids = tokenizer.encode'],
+      title: 'Text becomes token ids',
+      caption: 'A byte-pair-encoding tokenizer splits the text into frequent pieces (often whole words with their leading space) and maps each to an id in a vocabulary of tens of thousands to a few hundred thousand.',
+      text: [],
+      payloadKind: 'Tokens',
+      payload: { tokens: ['The', ' gate', ' is'], ids: [791, 18618, 374], note: 'ids depend on the tokenizer' }
+    },
+    {
+      from: 'tok', to: 'emb', label: '3 ids → 3 vectors of 512 numbers', pc: ['x = embed[ids] + position'],
+      title: 'Ids become vectors, plus position',
+      caption: 'Each id selects a learned row of an embedding table. Position information is added, otherwise "gate is the" and "the gate is" would look identical to attention.',
+      text: ['The original paper used fixed sine/cosine position encodings; many current models use rotary position embeddings instead.'],
+      payloadKind: 'Embeddings (truncated)',
+      payload: { shape: [3, 512], row_0_The: [0.12, -0.53, 0.07, '…'], row_1_gate: [-0.31, 0.44, 0.9, '…'], plus: 'position(0), position(1), position(2)' }
+    },
+    {
+      from: 'emb', to: 'attn', label: 'Q, K, V per head (8 heads × 64)', pc: ['Q, K, V = x@Wq', 'scores = Q @ K.T'],
+      title: 'Queries meet keys',
+      caption: 'For " is", its query is compared (dot product) with the keys of "The", " gate" and itself. Scores are divided by √64 = 8 so they stay in a range where softmax still gives useful gradients.',
+      text: [],
+      payloadKind: 'Scores for token " is" (head 3)',
+      payload: { query_token: ' is', raw_scores: { The: 1.6, ' gate': 6.4, ' is': 2.4 }, scaled_by: 8, scaled: { The: 0.2, ' gate': 0.8, ' is': 0.3 } }
+    },
+    {
+      from: 'attn', to: 'attn', label: 'mask future, softmax → weights, mix V', pc: ['scores[j > i] = -inf', 'x = x + softmax(scores) @ V'],
+      title: 'Mask, softmax, mix the values',
+      caption: 'Positions after the current token are set to −∞ so a token can never peek ahead. Softmax turns scores into weights that sum to 1, and the output for " is" is the weighted mix of the three value vectors. In this head " is" attends mostly to " gate": it has learned what the sentence is about.',
+      text: ['Eight heads do this in parallel with different learned projections, so different heads can track different relations (subject, previous word, and so on). Their outputs are concatenated.'],
+      payloadKind: 'Attention weights (head 3)',
+      payload: { The: 0.27, ' gate': 0.4, ' is': 0.33, sum: 1.0, masked_positions: 'none after " is" yet' }
+    },
+    {
+      from: 'attn', to: 'ffn', label: 'residual + feed-forward (2048 hidden)', pc: ['x = x + ffn(x)'],
+      title: 'Feed-forward, then the next layer',
+      caption: 'Each token\'s vector goes through a small two-layer network. The result is added back (residual connection). This attention + feed-forward block repeats for every layer: 6 in the original base model, dozens in modern LLMs.',
+      text: [],
+      payloadKind: 'Layer',
+      payload: { layer: '1 of 6', d_model: 512, d_ff: 2048, residual: true, norm: 'layer norm' }
+    },
+    {
+      from: 'ffn', to: 'head', label: 'last vector → scores for every token', pc: ['probs = softmax'],
+      title: 'Scores over the whole vocabulary',
+      caption: 'Only the last position\'s vector is needed to predict what comes next. It is projected to one score per vocabulary token; softmax turns them into probabilities.',
+      text: [],
+      payloadKind: 'Top probabilities',
+      payload: { ' open': 0.31, ' closed': 0.22, ' locked': 0.09, ' made': 0.04, '…': '…' },
+      branch: { q: 'How is the token chosen?', options: [ { label: 'sampling (temperature 0.7)', goto: 'samp' }, { label: 'greedy (always the top one)', goto: 'greedy' } ] }
+    },
+    {
+      id: 'greedy', path: 'greedy', from: 'head', to: 'out', label: 'argmax → " open"', pc: ['next = sample'],
+      title: 'Other outcome: greedy decoding',
+      caption: 'Always taking the most likely token is deterministic. It is fine for short factual answers but tends to repeat itself in long text.',
+      text: [],
+      payloadKind: 'Choice',
+      payload: { method: 'greedy', token: ' open', p: 0.31 },
+      next: 'loop'
+    },
+    {
+      id: 'samp', from: 'head', to: 'out', label: 'sample → " open"', pc: ['next = sample'],
+      title: 'Sample the next token',
+      caption: 'Temperature reshapes the distribution (lower = more focused) and a token is drawn at random from it. This time it is " open"; another run might say " closed".',
+      text: [],
+      payloadKind: 'Choice',
+      payload: { method: 'sampling', temperature: 0.7, token: ' open' }
+    },
+    {
+      id: 'loop', from: 'out', to: 'tok', label: 'append → "The gate is open" → repeat', pc: ['ids = tokenizer.encode'],
+      title: 'Append and repeat',
+      caption: 'The new token is appended and the model runs again for the next one. In serving, the keys and values of earlier tokens are kept in a KV cache so only the new token is computed (see the LLM inference serving flow).',
+      text: [],
+      payloadKind: 'Generation',
+      payload: { text: 'The gate is open', ids: [791, 18618, 374, 1825], next_step: 'predict token 5' }
+    }
+  ],
+  decisions: [
+    { q: 'Why attention instead of recurrence (RNNs)?', options: [
+      { name: 'Attention', verdict: 'good', why: 'Every position is processed in parallel during training, and any two tokens are one step apart.' },
+      { name: 'RNN', verdict: 'ok', why: 'Constant memory per step, but sequential and weak on long-range dependencies.' } ] }
+  ],
+  refs: [
+    { label: 'Vaswani et al., Attention Is All You Need (arXiv 1706.03762)', url: 'https://arxiv.org/abs/1706.03762' },
+    { label: 'Jay Alammar: The Illustrated Transformer', url: 'https://jalammar.github.io/illustrated-transformer/' },
+    { label: 'Hugging Face LLM Course: How do Transformers work?', url: 'https://huggingface.co/learn/llm-course/chapter1/4' },
+    { label: 'Su et al., RoFormer: Rotary Position Embedding (arXiv 2104.09864)', url: 'https://arxiv.org/abs/2104.09864' }
+  ],
+  verify: {
+    checked: ['Attention(Q,K,V) = softmax(QKᵀ/√d_k)V, h = 8 heads, d_k = 64, d_model = 512, d_ff = 2048, 6 layers, masking future positions with −∞: Attention Is All You Need.', 'Rotary position embeddings: RoFormer paper.'],
+    uncertain: ['Token ids, scores, weights and probabilities are made-up examples for readability (the ids are not from a specific tokenizer).']
+  }
+});
+
+flow({
+  id: 'context-engineering',
+  title: 'Context engineering for long-running agents',
+  category: 'AI & machine learning',
+  tags: ['Context as a finite budget', 'System prompt + tools', 'Just-in-time retrieval', 'Tool result trimming', 'Compaction', 'Structured notes', 'Sub-agents'],
+  summary: 'An agent working for an hour would overflow any context window if it kept everything. Context engineering decides, at each turn, which tokens the model sees: a stable system prompt and tool list, only the files it fetched just in time, trimmed tool outputs, a compacted summary of old turns, notes it wrote to itself, and short reports from sub-agents. Follow one coding task as its context fills up.',
+  requirements: {
+    functional: ['Keep the agent on task across many tool calls.', 'Recall decisions made long ago.'],
+    nonFunctional: ['Stay within the context window with room to spare.', 'Fewer, more relevant tokens: quality drops as context grows ("context rot").']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Developer', sub: 'task', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks: "Add pagination to the chapter list."' },
+    { id: 'harness', label: 'Agent harness', sub: 'builds each prompt', kind: 'service', icon: 'split', x: 1, y: 1, desc: 'Assembles the context for every model call and decides what to keep, trim or summarise.' },
+    { id: 'llm', label: 'LLM', sub: '200k window', kind: 'ai', icon: 'brain', x: 2, y: 1, desc: 'Sees only what the harness puts in front of it.' },
+    { id: 'tools', label: 'Tools', sub: 'grep, read, run tests', kind: 'service', icon: 'tool', x: 2, y: 0, desc: 'Load data on demand by reference (paths, queries) instead of pasting everything up front.' },
+    { id: 'notes', label: 'Notes file', sub: 'NOTES.md', kind: 'storage', icon: 'pen', x: 3, y: 2, desc: 'Persistent memory outside the window: progress, decisions, open questions.' },
+    { id: 'sub', label: 'Sub-agent', sub: 'clean context', kind: 'ai', icon: 'robot', x: 3, y: 0, desc: 'Explores a side question with its own fresh window and returns a short summary.' },
+    { id: 'budget', label: 'Context budget', sub: 'token counter', kind: 'service', icon: 'gauge', x: 1, y: 2, desc: 'Tracks how full the window is and triggers compaction.' }
+  ],
+  pseudo: `
+ctx = [system_prompt, tool_defs, NOTES.md, user_task]
+loop:
+    reply = llm(ctx)
+    if reply.tool_call: out = run(reply.tool_call); ctx += trim(out, max=2k tokens)
+    if side_question: summary = sub_agent(question); ctx += summary   # ~1k tokens
+    if decision_made: notes.append(decision)
+    if tokens(ctx) > 0.8 * window:
+        ctx = [system_prompt, tool_defs, NOTES.md, user_task, summarize(old_turns), last_5_turns]`,
+  steps: [
+    {
+      from: 'user', to: 'harness', label: '"Add pagination to the chapter list"', pc: ['ctx = [system_prompt'],
+      title: 'Start small',
+      caption: 'The first context holds a clear system prompt, a compact set of tools with distinct purposes, the notes file and the task. Not the whole repository.',
+      text: [],
+      payloadKind: 'Context at turn 1',
+      payload: { system_prompt: 1800, tool_defs: 2400, notes: 300, task: 40, total_tokens: 4540, window: 200000 }
+    },
+    {
+      from: 'llm', to: 'tools', label: 'grep "getChapters" → 3 paths', pc: ['if reply.tool_call'],
+      title: 'Load just in time, by reference',
+      caption: 'Instead of pre-loading every file, the agent searches and gets file paths, then reads only the two files that matter. Anthropic describes this as the "just in time" approach, the way Claude Code explores codebases.',
+      text: [],
+      payloadKind: 'Tool result',
+      payload: { tool: 'grep', query: 'getChapters', results: ['backend/routes/series.py:41', 'frontend/lib/api.ts:88', 'frontend/app/series/[id]/page.tsx:23'] }
+    },
+    {
+      from: 'tools', to: 'harness', label: 'test log 38 000 tokens → trimmed to 1 200', pc: ['ctx += trim(out'],
+      title: 'Trim noisy tool output',
+      caption: 'Running the test suite prints 38 000 tokens. The harness keeps the failing test names, the assertion and the last lines; the full log stays on disk if needed.',
+      text: [],
+      payloadKind: 'Trimmed result',
+      payload: { raw_tokens: 38000, kept_tokens: 1200, kept: ['FAILED test_pagination_offset', 'AssertionError: expected 50 got 63', 'last 20 lines'], full_log: '/tmp/test.log' }
+    },
+    {
+      from: 'llm', to: 'sub', label: '"How does Mealie paginate?" → 1k summary', pc: ['if side_question'],
+      title: 'Delegate a side question to a sub-agent',
+      caption: 'Reading another codebase would burn 60 000 tokens. A sub-agent does it in its own clean window and returns a 1 000-token summary.',
+      text: [],
+      payloadKind: 'Sub-agent report',
+      payload: { spent_tokens_in_subagent: 61000, returned_tokens: 950, summary: 'Uses page + perPage query params, returns total and next URL…' }
+    },
+    {
+      from: 'llm', to: 'notes', label: 'append decision to NOTES.md', pc: ['notes.append'],
+      title: 'Write decisions to notes',
+      caption: 'Decisions and progress go to a file outside the window, so they survive compaction and even a restart.',
+      text: [],
+      payloadKind: 'Note',
+      payload: { file: 'NOTES.md', added: '- Chosen: limit/offset, 50 per page, newest first. Done: API. Todo: tabs UI, tests.' }
+    },
+    {
+      from: 'budget', to: 'harness', label: '164 000 / 200 000 tokens (82%)', pc: ['if tokens(ctx) > 0.8 * window'],
+      title: 'The window is filling up',
+      caption: 'After 40 tool calls the context is at 82%. Past the threshold, the harness compacts instead of waiting to overflow.',
+      text: [],
+      payloadKind: 'Budget',
+      payload: { used: 164000, window: 200000, threshold: 0.8 },
+      branch: { q: 'Over the threshold?', options: [ { label: 'yes: compact', goto: 'compact' }, { label: 'no: keep going', goto: 'cont' } ] }
+    },
+    {
+      id: 'cont', path: 'cont', from: 'harness', to: 'llm', label: 'next turn with full history', pc: ['reply = llm(ctx)'],
+      title: 'Other outcome: under budget',
+      caption: 'Below the threshold, nothing is dropped and the next turn sees the full history.',
+      text: [],
+      payloadKind: 'Context',
+      payload: { used: 92000, action: 'none' },
+      next: 'end'
+    },
+    {
+      id: 'compact', from: 'harness', to: 'llm', label: 'summarize turns 1–35 → 3 000 tokens', pc: ['ctx = [system_prompt, tool_defs, NOTES.md'],
+      title: 'Compact: summarise and restart the window',
+      caption: 'The model writes a summary of old turns that keeps decisions, open bugs and file names and drops raw tool outputs. The new context is system prompt + tools + notes + task + summary + the last 5 turns.',
+      text: [],
+      payloadKind: 'Context after compaction',
+      payload: { before: 164000, after: 21000, kept: ['decisions', 'failing test', 'files touched'], dropped: ['old tool outputs', 'superseded plans'] }
+    },
+    {
+      id: 'end', from: 'llm', to: 'user', label: 'PR ready: pagination + tests pass', pc: ['loop:'],
+      title: 'The task finishes coherently',
+      caption: 'Because decisions lived in notes and the summary, the agent still remembers "50 per page, newest first" two hours in.',
+      text: [],
+      payloadKind: 'Result',
+      payload: { files_changed: 6, tests: '47 passed', total_model_calls: 58, peak_context: 164000 }
+    }
+  ],
+  decisions: [
+    { q: 'Load everything up front or just in time?', options: [
+      { name: 'Just in time via tools', verdict: 'good', why: 'Only relevant tokens; the agent navigates like a person.' },
+      { name: 'Pre-load whole repo / all docs', verdict: 'bad', why: 'Fills the window with noise and degrades attention.' },
+      { name: 'Hybrid (a few key files up front)', verdict: 'ok', why: 'Faster start for small, known contexts.' } ] }
+  ],
+  refs: [
+    { label: 'Anthropic Engineering: Effective context engineering for AI agents', url: 'https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents' },
+    { label: 'Anthropic Engineering: Building effective agents', url: 'https://www.anthropic.com/engineering/building-effective-agents' },
+    { label: 'Liu et al., Lost in the Middle: How Language Models Use Long Contexts (arXiv 2307.03172)', url: 'https://arxiv.org/abs/2307.03172' }
+  ],
+  verify: {
+    checked: ['Context as a finite resource, context rot, just-in-time loading by reference, compaction, structured note-taking and sub-agents: Anthropic context engineering post.', 'Models use information in the middle of long contexts less well: Lost in the Middle.'],
+    uncertain: ['Token counts, the 80% threshold and the task details are illustrative; harnesses choose their own thresholds.']
+  }
+});
+
+flow({
+  id: 'llm-search-ranking',
+  title: 'LLM-powered search ranking (retrieve, rerank, answer)',
+  category: 'AI & machine learning',
+  tags: ['Query understanding', 'Hybrid retrieval (BM25 + vectors)', 'Cross-encoder rerank', 'LLM listwise rerank', 'Distillation to small ranker', 'Generated answer with citations'],
+  summary: 'Modern search keeps the classic cheap first stage (find 1 000 candidates fast) and adds expensive learned stages on fewer and fewer results: a cross-encoder scores the top 100, an LLM can reorder the top 20 by reading them together, and an answer is written from the best few with citations. Because LLM ranking is slow, it is often distilled into a small model for production. Follow one query down the funnel.',
+  requirements: {
+    functional: ['Return the most relevant documents for a query.', 'Optionally write a short answer with citations.'],
+    nonFunctional: ['Total latency within a few hundred milliseconds for the ranking part.', 'Cost per query bounded: expensive models only see a few candidates.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Searcher', sub: 'query', kind: 'client', icon: 'search', x: 0, y: 1, desc: 'Types "why does my manga reader not scroll".' },
+    { id: 'qu', label: 'Query understanding', sub: 'rewrite + embed', kind: 'service', icon: 'brain', x: 1, y: 1, desc: 'Spelling fix, synonyms, and a query embedding for vector search.' },
+    { id: 'bm25', label: 'Keyword index', sub: 'BM25', kind: 'db', icon: 'search', x: 2, y: 0, desc: 'Inverted index; great at exact terms and rare words.' },
+    { id: 'ann', label: 'Vector index', sub: 'ANN (HNSW)', kind: 'db', icon: 'vector', x: 2, y: 2, desc: 'Finds semantically similar documents even without shared words.' },
+    { id: 'ce', label: 'Cross-encoder', sub: 'reranker, top 100', kind: 'ai', icon: 'filter', x: 3, y: 1, desc: 'Reads query and document together and outputs a relevance score. Much more accurate than the first stage, much slower.' },
+    { id: 'llm', label: 'LLM ranker', sub: 'listwise, top 20', kind: 'ai', icon: 'robot', x: 3, y: 0, desc: 'Reads several candidates at once and outputs an ordering (e.g. [3] > [1] > [7]).' },
+    { id: 'ans', label: 'Answer writer', sub: 'LLM + citations', kind: 'ai', icon: 'spark', x: 4, y: 1, desc: 'Writes a short answer from the top 5 and cites them.' }
+  ],
+  pseudo: `
+q = rewrite(query); qv = embed(q)
+cands = rrf(bm25.search(q, 500), ann.search(qv, 500))        # ~1000 -> fused
+top100 = sorted(cands[:100], key=lambda d: cross_encoder(q, d), reverse=True)
+# listwise LLM rerank with a sliding window, back to front
+for window in sliding(top100[:20], size=8, step=4, reverse=True):
+    window.reorder(llm_rank(q, window))   # "[3] > [1] > [7] ..."
+answer = llm_answer(q, top5, cite=True)
+offline: distill(llm_rank -> small_ranker)  # serve the small one at scale`,
+  steps: [
+    {
+      from: 'user', to: 'qu', label: '"why does my manga reader not scroll"', pc: ['q = rewrite(query)'],
+      title: 'Understand the query',
+      caption: 'The query is normalised and expanded ("scroll" → "scrolling, wheel, overflow") and turned into an embedding.',
+      text: [],
+      payloadKind: 'Query',
+      payload: { raw: 'why does my manga reader not scroll', rewritten: 'manga reader page not scrolling wheel overflow', embedding_dims: 1024 }
+    },
+    {
+      from: 'qu', to: 'bm25', label: 'BM25 top 500', pc: ['bm25.search'],
+      title: 'Cheap first stage: keywords',
+      caption: 'BM25 finds documents containing the words, ranked by term frequency and rarity. Milliseconds over millions of documents.',
+      text: [],
+      payloadKind: 'Candidates',
+      payload: { engine: 'BM25', returned: 500, top: ['css overflow hidden blocks scroll', 'react scroll container height…'] }
+    },
+    {
+      from: 'qu', to: 'ann', label: 'vector top 500 → fuse with RRF', pc: ['ann.search', 'rrf('],
+      title: 'Cheap first stage: meaning',
+      caption: 'Vector search adds results that share meaning without sharing words. The two lists are merged with reciprocal rank fusion.',
+      text: [],
+      payloadKind: 'Fused list',
+      payload: { bm25: 500, vector: 500, overlap: 180, fused: 820, kept_for_rerank: 100 }
+    },
+    {
+      from: 'ann', to: 'ce', label: 'score 100 (query, doc) pairs', pc: ['top100 = sorted'],
+      title: 'Rerank the top 100 with a cross-encoder',
+      caption: 'A cross-encoder reads the query and each document together, which catches things like negation and exact intent. Doing this for 100 documents is affordable; for a million it would not be.',
+      text: [],
+      payloadKind: 'Scores',
+      payload: [{ doc: 'd_4410 "Scroll stops after removing vertical mode"', score: 0.93 }, { doc: 'd_1187 "overflow: hidden on body"', score: 0.88 }, { doc: 'd_9020 "Manga reader app review"', score: 0.12 }]
+    },
+    {
+      from: 'ce', to: 'llm', label: 'top 20, windows of 8, step 4', pc: ['for window in sliding', 'window.reorder'],
+      title: 'Optional: LLM listwise rerank of the top 20',
+      caption: 'The LLM sees a numbered window of candidates and outputs a permutation. Windows slide from the bottom of the list to the top so good documents can bubble up. RankGPT showed this beats supervised rerankers on standard benchmarks.',
+      text: ['The RankGPT paper reranked BM25\'s top 100 with a window of 20 and a step of 10; the sizes here are smaller for the example.'],
+      payloadKind: 'LLM output',
+      payload: { prompt_end: 'Rank the 8 passages by relevance to the query. Output: [a] > [b] > …', output: '[2] > [1] > [5] > [3] > [8] > [4] > [7] > [6]' },
+      branch: { q: 'Is the LLM step affordable at this traffic?', options: [ { label: 'yes: keep it for hard queries', goto: 'answer' }, { label: 'no: distil it', goto: 'distil' } ] }
+    },
+    {
+      id: 'distil', path: 'distil', from: 'llm', to: 'ce', label: 'LLM orderings → train small ranker', pc: ['offline: distill'],
+      title: 'Other outcome: distil the LLM into a small ranker',
+      caption: 'Offline, the LLM ranks many queries; a small model is trained to reproduce those orderings and is served instead. RankGPT reports a distilled 440M-parameter model beating a 3B supervised model.',
+      text: [],
+      payloadKind: 'Distillation',
+      payload: { teacher: 'LLM listwise ranker', student: 'cross-encoder 440M', training_queries: 10000, served: 'student' }
+    },
+    {
+      id: 'answer', from: 'llm', to: 'ans', label: 'top 5 → answer with [1][2]', pc: ['answer = llm_answer'],
+      title: 'Write an answer from the best results',
+      caption: 'For queries that deserve it, an LLM writes a short answer grounded only in the top 5 documents, each claim with a citation the user can click.',
+      text: [],
+      payloadKind: 'Answer',
+      payload: { answer: 'If you removed the vertical reading mode, the reader may show one fitted page with nothing to scroll [1]. Also check that the body does not have overflow: hidden [2].', citations: ['d_4410', 'd_1187'] }
+    },
+    {
+      from: 'ans', to: 'user', label: 'answer + 10 ranked links', pc: ['answer = llm_answer'],
+      title: 'Results page',
+      caption: 'The funnel: ~1 000 candidates → 100 reranked → 20 reordered → 5 used for the answer → 10 shown.',
+      text: [],
+      payloadKind: 'Response',
+      payload: { answer: true, results: 10, latency_ms: { retrieval: 25, cross_encoder: 60, llm_rank: 400, answer_stream_first_token: 350 } }
+    }
+  ],
+  decisions: [
+    { q: 'Where to spend the expensive model?', options: [
+      { name: 'Only on the top of a funnel', verdict: 'good', why: 'Cost and latency grow with candidates; quality is decided at the top.' },
+      { name: 'LLM over the whole index', verdict: 'bad', why: 'Impossible cost and latency.' } ] }
+  ],
+  refs: [
+    { label: 'Sun et al., Is ChatGPT Good at Search? LLMs as Re-Ranking Agents (RankGPT, arXiv 2304.09542)', url: 'https://arxiv.org/abs/2304.09542' },
+    { label: 'Nogueira & Cho, Passage Re-ranking with BERT (arXiv 1901.04085)', url: 'https://arxiv.org/abs/1901.04085' },
+    { label: 'Cormack et al., Reciprocal Rank Fusion (SIGIR 2009, PDF)', url: 'https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf' },
+    { label: 'Cohere docs: Rerank overview', url: 'https://docs.cohere.com/docs/rerank-overview' }
+  ],
+  verify: {
+    checked: ['Listwise permutation generation with sliding windows (window 20, step 10 in their experiments) over BM25 top 100, and a distilled 440M model outperforming a 3B supervised model: RankGPT paper.', 'Cross-encoder reranking of BM25 candidates: Nogueira & Cho.', 'Reciprocal rank fusion: Cormack et al.'],
+    uncertain: ['Candidate counts, scores, latencies and window sizes in the example are illustrative.']
+  }
+});
+
+flow({
+  id: 'coding-agent-eval',
+  title: 'Evaluating AI coding agents (SWE-bench style)',
+  category: 'AI & machine learning',
+  tags: ['Real GitHub issues', 'Isolated Docker environment', 'Agent produces a patch', 'Hidden tests', 'FAIL_TO_PASS / PASS_TO_PASS', '% resolved', 'Human-verified subset'],
+  summary: 'How do labs measure whether a coding agent can actually fix bugs? SWE-bench takes real GitHub issues whose fix came with tests. The agent gets the repository at the commit before the fix and the issue text, works in a sandbox, and produces a patch. Hidden tests decide: the tests the real fix made pass must now pass, and the tests that already passed must still pass. Follow one task through the harness.',
+  requirements: {
+    functional: ['Run an agent on hundreds of real repository tasks.', 'Score each task automatically and report % resolved.'],
+    nonFunctional: ['Reproducible: same environment every run.', 'Agent never sees the tests used to grade it.', 'Tasks must be solvable and fairly specified.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'ds', label: 'Task dataset', sub: 'issue + repo + tests', kind: 'db', icon: 'db', x: 0, y: 1, desc: 'Each task: repository, base commit, issue text, the real fix (hidden), and its tests (hidden).' },
+    { id: 'harness', label: 'Eval harness', sub: 'orchestrator', kind: 'service', icon: 'split', x: 1, y: 1, desc: 'Starts a container per task, runs the agent, applies its patch, runs the tests, records the result.' },
+    { id: 'box', label: 'Sandbox', sub: 'Docker image per repo', kind: 'storage', icon: 'box', x: 2, y: 0, desc: 'The repository checked out at the base commit with dependencies installed.' },
+    { id: 'agent', label: 'Coding agent', sub: 'LLM + tools', kind: 'ai', icon: 'robot', x: 2, y: 2, desc: 'Reads the issue, explores, edits files, may run its own tests, and outputs a diff.' },
+    { id: 'tests', label: 'Hidden tests', sub: 'FAIL_TO_PASS + PASS_TO_PASS', kind: 'worker', icon: 'check', x: 3, y: 1, desc: 'Run after the agent finishes. Never shown to the agent.' },
+    { id: 'board', label: 'Results', sub: '% resolved', kind: 'client', icon: 'chart', x: 4, y: 0, desc: 'Aggregates pass/fail across all tasks into a score.' }
+  ],
+  pseudo: `
+for task in dataset:                          # e.g. 500 human-verified tasks
+    box = docker.run(image_for(task.repo), checkout=task.base_commit)
+    patch = agent.solve(box, task.issue_text, step_limit=250)
+    box.apply(patch)
+    f2p = box.run(task.FAIL_TO_PASS)   # tests the real fix made pass
+    p2p = box.run(task.PASS_TO_PASS)   # tests that must keep passing
+    resolved[task] = all(f2p) and all(p2p)
+score = mean(resolved)`,
+  steps: [
+    {
+      from: 'ds', to: 'harness', label: 'task astropy__astropy-12907', pc: ['for task in dataset'],
+      title: 'Pick a task built from a real issue',
+      caption: 'Each SWE-bench task comes from a resolved GitHub issue in one of 12 popular Python repositories. The pull request that fixed it included tests that failed before the fix and pass after.',
+      text: ['The original SWE-bench has 2,294 tasks. OpenAI and the SWE-bench authors released SWE-bench Verified, 500 tasks that human annotators checked were well specified and fairly tested.'],
+      payloadKind: 'Task',
+      payload: { instance_id: 'astropy__astropy-12907', repo: 'astropy/astropy', base_commit: 'd16bfe0…', issue: 'Modeling\'s separability_matrix does not compute separability correctly for nested CompoundModels', hidden: ['patch', 'tests'] }
+    },
+    {
+      from: 'harness', to: 'box', label: 'docker run, checkout base commit', pc: ['box = docker.run'],
+      title: 'Start an isolated, reproducible sandbox',
+      caption: 'A pre-built image has the repository at the base commit with the exact dependencies, so every agent is graded in the same environment.',
+      text: [],
+      payloadKind: 'Container',
+      payload: { image: 'sweb.eval.x86_64.astropy__astropy-12907', network: 'restricted', cpu: 2, mem_gb: 8 }
+    },
+    {
+      from: 'harness', to: 'agent', label: 'issue text + shell in the sandbox', pc: ['patch = agent.solve'],
+      title: 'The agent works on the issue',
+      caption: 'The agent reads the issue, searches the code, reproduces the bug with a small script, edits the function and re-runs its script. It never sees the hidden tests.',
+      text: [],
+      payloadKind: 'Agent trajectory (excerpt)',
+      payload: [{ step: 3, action: 'grep -rn "def separability_matrix" astropy/modeling' }, { step: 7, action: 'python repro.py → wrong matrix' }, { step: 12, action: 'edit separable.py _cstack' }, { step: 14, action: 'python repro.py → correct' }]
+    },
+    {
+      from: 'agent', to: 'harness', label: 'diff: 1 file, +1 −1', pc: ['box.apply(patch)'],
+      title: 'The output is a patch',
+      caption: 'Only the diff is graded, not the explanation. The harness applies it to a clean checkout.',
+      text: [],
+      payloadKind: 'Patch',
+      payload: { files: ['astropy/modeling/separable.py'], diff: '-        cright[-right.shape[0]:, -right.shape[1]:] = 1\n+        cright[-right.shape[0]:, -right.shape[1]:] = right' },
+      branch: { q: 'Does the patch apply cleanly?', options: [ { label: 'yes: run tests', goto: 'run' }, { label: 'no: task fails', goto: 'noapply' } ] }
+    },
+    {
+      id: 'noapply', path: 'noapply', from: 'harness', to: 'board', label: 'patch failed to apply → unresolved', pc: ['resolved[task] ='],
+      title: 'Other outcome: broken patch',
+      caption: 'A malformed diff, or one against the wrong lines, counts as unresolved. No partial credit.',
+      text: [],
+      payloadKind: 'Result',
+      payload: { instance_id: 'django__django-11099', resolved: false, reason: 'patch_apply_failed' },
+      next: 'score'
+    },
+    {
+      id: 'run', from: 'harness', to: 'tests', label: 'run FAIL_TO_PASS (2) + PASS_TO_PASS (13)', pc: ['f2p = box.run', 'p2p = box.run'],
+      title: 'Run the hidden tests',
+      caption: 'FAIL_TO_PASS tests failed before the real fix and passed after: they check the bug is fixed. PASS_TO_PASS tests passed before and after: they check nothing else broke.',
+      text: [],
+      payloadKind: 'Test results',
+      payload: { FAIL_TO_PASS: { total: 2, passed: 2 }, PASS_TO_PASS: { total: 13, passed: 13 } },
+      branch: { q: 'All tests pass?', options: [ { label: 'yes: resolved', goto: 'ok' }, { label: 'no: a regression', goto: 'reg' } ] }
+    },
+    {
+      id: 'reg', path: 'reg', from: 'tests', to: 'board', label: 'F2P 2/2 but P2P 12/13 → unresolved', pc: ['all(f2p) and all(p2p)'],
+      title: 'Other outcome: fixed the bug, broke something else',
+      caption: 'Another agent\'s patch fixes the bug but breaks an existing test. That counts as unresolved, just like a real reviewer would reject it.',
+      text: [],
+      payloadKind: 'Result',
+      payload: { FAIL_TO_PASS: '2/2', PASS_TO_PASS: '12/13', resolved: false },
+      next: 'score'
+    },
+    {
+      id: 'ok', from: 'tests', to: 'board', label: 'resolved ✓', pc: ['resolved[task] ='],
+      title: 'Resolved',
+      caption: 'Both groups pass: this task counts as resolved.',
+      text: [],
+      payloadKind: 'Result',
+      payload: { instance_id: 'astropy__astropy-12907', resolved: true }
+    },
+    {
+      id: 'score', from: 'harness', to: 'board', label: '500 tasks → % resolved', pc: ['score = mean(resolved)'],
+      title: 'Aggregate into a score',
+      caption: 'The headline number is the share of tasks resolved. Results depend on the whole agent (model, tools, step limit), so leaderboards list the scaffold too.',
+      text: [],
+      payloadKind: 'Score',
+      payload: { tasks: 500, resolved: 311, score: '62.2%', note: 'illustrative number, not a real model\'s result' }
+    }
+  ],
+  decisions: [
+    { q: 'How to grade a coding agent?', options: [
+      { name: 'Hidden execution tests (fail-to-pass + pass-to-pass)', verdict: 'good', why: 'Objective and close to what a reviewer checks.' },
+      { name: 'Compare text with the reference patch', verdict: 'bad', why: 'Many correct fixes look different.' },
+      { name: 'LLM-as-judge on the diff', verdict: 'ok', why: 'Useful for style and tasks without tests; less reliable for correctness.' } ] }
+  ],
+  refs: [
+    { label: 'Jimenez et al., SWE-bench: Can Language Models Resolve Real-World GitHub Issues? (arXiv 2310.06770)', url: 'https://arxiv.org/abs/2310.06770' },
+    { label: 'OpenAI: Introducing SWE-bench Verified', url: 'https://openai.com/index/introducing-swe-bench-verified/' },
+    { label: 'SWE-bench site and leaderboards', url: 'https://www.swebench.com/' },
+    { label: 'SWE-bench GitHub repository (harness, Docker images)', url: 'https://github.com/SWE-bench/SWE-bench' },
+    { label: 'Hugging Face: SWE-bench Verified dataset', url: 'https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified' }
+  ],
+  verify: {
+    checked: ['2,294 tasks from real GitHub issues and PRs: SWE-bench paper.', '500 human-verified tasks, 12 Python repositories, FAIL_TO_PASS and PASS_TO_PASS tests hidden from the agent: OpenAI SWE-bench Verified post.'],
+    uncertain: ['The task, base commit, one-line fix and test counts (2 FAIL_TO_PASS, 13 PASS_TO_PASS) are the real astropy__astropy-12907 instance from the SWE-bench Verified dataset; the agent trajectory, the other two tasks\' outcomes and the final score are illustrative.']
+  }
+});
+
+flow({
   id: 'distributed-cache',
   title: 'Distributed cache (Redis cache-aside with invalidation)',
   category: 'Infrastructure foundations',
@@ -14301,6 +15143,1365 @@ with tracer.start_as_current_span("invoke_agent support") as root:
   verify: {
     checked: ['Span name {gen_ai.operation.name} {gen_ai.request.model}; gen_ai.provider.name, gen_ai.request.model, gen_ai.usage.input_tokens/output_tokens, gen_ai.response.finish_reasons, gen_ai.input.messages; status Development: OTel GenAI inference conventions source file (read).'],
     uncertain: ['invoke_agent / execute_tool span names follow the agent and tool conventions in the same repo, not re-read in detail; values and timings are illustrative.']
+  }
+});
+
+flow({
+  id: 'file-sync',
+  title: 'File sync service (Google Drive / Dropbox)',
+  category: 'Product systems',
+  tags: ['Block-level chunking', 'Content hashing / dedup', 'Metadata DB', 'Upload only changed blocks', 'Sync notifications', 'Conflict copies'],
+  summary: 'You edit a 40 MB file on your laptop and it appears on your phone a few seconds later. The client splits the file into blocks, uploads only the blocks that changed, commits a new version in the metadata database, and every other device is told to pull the new block list. Follow an edit, the dedup shortcut, and a conflict when two devices edit offline.',
+  requirements: {
+    functional: ['Add, edit and delete files; changes show up on every device of the user.', 'Keep a version history.', 'Share a folder with other users.'],
+    nonFunctional: ['Never lose data: a block is durable before the version that uses it is committed.', 'Save bandwidth: send only changed blocks.', 'A change reaches other online devices in a few seconds.']
+  },
+  estimates: ['Illustrative: 50 M users, 10 M daily active, 2 edits/day each ≈ 230 edits/s average.', '4 MB blocks: a one-line change in a 40 MB file re-sends one block, not ten.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'laptop', label: 'Laptop client', sub: 'watcher + chunker', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Watches the sync folder, splits changed files into blocks, hashes them and uploads what the server does not have.' },
+    { id: 'api', label: 'Sync API', sub: 'metadata service', kind: 'service', icon: 'server', x: 2, y: 1, desc: 'Answers "which blocks do you need?", commits new file versions and tells other devices.' },
+    { id: 'block', label: 'Block service', sub: 'upload / download', kind: 'service', icon: 'box', x: 1, y: 0, desc: 'Receives block bytes, checks the hash matches, writes them to object storage.' },
+    { id: 's3', label: 'Block storage', sub: 'object store, by hash', kind: 'storage', icon: 'storage', x: 2, y: 0, desc: 'Immutable blocks keyed by their SHA-256. Two users with the same block store it once.' },
+    { id: 'meta', label: 'Metadata DB', sub: 'files, versions, blocks', kind: 'db', icon: 'db', x: 3, y: 1, desc: 'Strongly consistent (relational). file_id → version → ordered list of block hashes.' },
+    { id: 'notify', label: 'Notification service', sub: 'long poll / websocket', kind: 'service', icon: 'bell', x: 3, y: 2, desc: 'Holds an open connection per online device and pushes "namespace changed, cursor 812".' },
+    { id: 'phone', label: 'Phone client', sub: 'same account', kind: 'client', icon: 'phone', x: 4, y: 1, desc: 'Gets the change signal, asks for the new block list and downloads only the blocks it lacks.' }
+  ],
+  pseudo: `
+# client
+blocks = split(file, 4*MB); hashes = [sha256(b) for b in blocks]
+need = api.commit_request(file_id, base_rev=7, hashes)
+for h in need.missing: block_service.put(h, blocks[h])
+res = api.commit(file_id, base_rev=7, hashes)
+if res.conflict: save_as("report (laptop's conflicted copy).docx")
+# server
+def commit(file_id, base_rev, hashes):
+    if any(not s3.exists(h) for h in hashes): return {missing: ...}
+    with tx: if meta.rev(file_id) != base_rev: return CONFLICT
+             meta.insert_version(file_id, base_rev+1, hashes)
+    notify.publish(namespace, cursor+1)
+# other device
+on_signal: changes = api.list_changes(cursor); download(missing_blocks)`,
+  steps: [
+    {
+      from: 'laptop', to: 'laptop', label: 'report.docx → 10 blocks, 1 changed', pc: ['blocks = split'],
+      title: 'The client notices an edit and chunks the file',
+      caption: 'A file watcher sees report.docx change. The client splits it into 4 MB blocks and hashes each one. Only block 3 has a new hash.',
+      text: ['Fixed-size blocks are the simple version. Content-defined chunking (cut where a rolling hash hits a pattern) keeps boundaries stable when bytes are inserted at the start of a file.'],
+      payloadKind: 'Local block list',
+      payload: { file: 'report.docx', size_mb: 38.2, block_size_mb: 4, hashes: ['a91f…', '0c3e…', '77d2… (new)', '…'], base_rev: 7 }
+    },
+    {
+      from: 'laptop', to: 'api', label: 'POST /commit_request {base_rev 7, 10 hashes}', pc: ['need = api.commit_request'],
+      title: 'Ask which blocks the server is missing',
+      caption: 'The client sends the full new block list. The server answers with the hashes it does not have yet: just 77d2….',
+      text: [],
+      payloadKind: 'Request / response',
+      payload: { request: { file_id: 'f_5521', base_rev: 7, hashes: 10 }, response: { missing: ['77d2…'] } },
+      branch: { q: 'Is any block missing?', options: [ { label: 'yes: upload it', goto: 'up' }, { label: 'no: dedup, commit directly', goto: 'dedup' } ] }
+    },
+    {
+      id: 'up', from: 'laptop', to: 'block', label: 'PUT /block/77d2… (4 MB, gzip)', pc: ['block_service.put'],
+      title: 'Upload only the changed block',
+      caption: 'One 4 MB block goes up instead of 38 MB. The block service recomputes the hash; if it does not match, the upload is rejected.',
+      text: [],
+      payloadKind: 'Block upload',
+      payload: { hash: '77d2…', bytes: 4194304, compressed: 1310720, verified: true }
+    },
+    {
+      from: 'block', to: 's3', label: 'put blocks/77/d2… (immutable)', pc: ['block_service.put'],
+      title: 'Store the block by its hash',
+      caption: 'The key is the hash, so the same bytes are never stored twice and a block never changes after it is written.',
+      text: [],
+      payloadKind: 'Object write',
+      payload: { bucket: 'blocks', key: 'blocks/77/d2…', storage_class: 'standard', replicas: 3 }
+    },
+    {
+      id: 'dedup', path: 'dedup', from: 'api', to: 's3', label: 'all 10 hashes already exist', pc: ['if any(not s3.exists(h)'],
+      title: 'Other outcome: nothing to upload',
+      caption: 'You copy a 2 GB video someone already uploaded (or you renamed a file). Every hash already exists, so the commit is instant and zero bytes move.',
+      text: [],
+      payloadKind: 'Existence check',
+      payload: { hashes_checked: 512, missing: 0, bytes_uploaded: 0 }
+    },
+    {
+      from: 'api', to: 'meta', label: 'BEGIN; rev 7 → 8; COMMIT', pc: ['if meta.rev(file_id) != base_rev', 'meta.insert_version'],
+      title: 'Commit the new version',
+      caption: 'Inside one transaction the server checks the file is still at rev 7, then writes rev 8 with the new block list. Blocks first, metadata second: a version never points at a missing block.',
+      text: [],
+      payloadKind: 'Version row',
+      payload: { file_id: 'f_5521', rev: 8, parent_rev: 7, blocks: ['a91f…', '0c3e…', '77d2…', '…'], modified_by: 'laptop', ts: '2026-11-26T15:02:11Z' },
+      branch: { q: 'Is the file still at rev 7?', options: [ { label: 'yes: commit rev 8', goto: 'push' }, { label: 'no: another device won', goto: 'conflict' } ] }
+    },
+    {
+      id: 'conflict', path: 'conflict', from: 'api', to: 'laptop', reply: true, label: '409 conflict: current rev is 8 (from phone)', pc: ['return CONFLICT', 'save_as'],
+      title: 'Other outcome: both devices edited offline',
+      caption: 'The phone already committed rev 8 while the laptop was on a plane. The server refuses rev 7 → 8 from the laptop; the laptop keeps its edit as a separate "conflicted copy" file so nothing is lost.',
+      text: ['Dropbox describes exactly this behaviour: it creates a conflicted copy rather than trying to merge arbitrary binary files.'],
+      payloadKind: 'Conflict',
+      payload: { status: 409, current_rev: 8, your_base: 7, action: "save as report (laptop's conflicted copy 2026-11-26).docx" },
+      next: 'end'
+    },
+    {
+      id: 'push', from: 'api', to: 'notify', label: 'namespace ns_88 changed, cursor 812', pc: ['notify.publish'],
+      title: 'Tell the other devices',
+      caption: 'The commit bumps the namespace cursor. The notification service pushes a tiny signal to every connected device of the user (and of people the folder is shared with).',
+      text: [],
+      payloadKind: 'Signal',
+      payload: { namespace: 'ns_88', cursor: 812 }
+    },
+    {
+      id: 'end', from: 'notify', to: 'phone', label: 'changed → list_changes(811) → GET 77d2…', pc: ['on_signal'],
+      title: 'The phone pulls the change',
+      caption: 'The signal carries no file data. The phone asks for changes since its cursor, sees the new block list, and downloads only block 77d2…. Offline devices catch up the same way when they reconnect.',
+      text: [],
+      payloadKind: 'Change list',
+      payload: { since: 811, changes: [{ file_id: 'f_5521', rev: 8, blocks_to_fetch: ['77d2…'] }], cursor: 812 }
+    }
+  ],
+  decisions: [
+    { q: 'Where does metadata live?', options: [
+      { name: 'Relational DB (sharded by user/namespace)', verdict: 'good', why: 'Versions and folder moves need transactions and strong consistency.' },
+      { name: 'Eventually consistent NoSQL', verdict: 'bad', why: 'Two devices can see different "latest" versions; conflicts become silent overwrites.' } ] },
+    { q: 'How do clients learn about changes?', options: [
+      { name: 'Long poll / websocket signal + pull', verdict: 'good', why: 'Seconds of delay, tiny messages, works for offline catch-up via cursor.' },
+      { name: 'Clients poll every few seconds', verdict: 'bad', why: 'Huge wasted load for millions of idle devices.' } ] }
+  ],
+  refs: [
+    { label: 'Dropbox Tech: Streaming file synchronization', url: 'https://dropbox.tech/infrastructure/streaming-file-synchronization' },
+    { label: 'Dropbox Tech: Rewriting the heart of our sync engine', url: 'https://dropbox.tech/infrastructure/rewriting-the-heart-of-our-sync-engine' },
+    { label: 'Dropbox Help: Conflicted copies', url: 'https://help.dropbox.com/organize/conflicted-copy' },
+    { label: 'ByteByteGo: System Design Interview Vol. 1, chapter "Design Google Drive" (book)', url: 'https://bytebytego.com/courses/system-design-interview/design-google-drive' }
+  ],
+  verify: {
+    checked: ['4 MB blocks, hashing, uploading only blocks the server lacks, and a separate notification channel: Dropbox Tech sync posts.', 'Conflicted copies instead of merges: Dropbox Help.'],
+    uncertain: ['User counts, edit rates, cursor numbers and timings are illustrative.', 'The commit API is a simplified model, not Dropbox\'s or Google\'s real API.']
+  }
+});
+
+flow({
+  id: 'nearby-friends',
+  title: 'Nearby friends (live location sharing)',
+  category: 'Real-time',
+  tags: ['WebSocket servers', 'Redis pub/sub channel per user', 'Location cache with TTL', 'Distance filter', 'Fan-out to friends', 'Location history'],
+  summary: 'Friends who opted in see each other on a map when they are within 5 km, updated every 30 seconds. Each phone keeps a WebSocket open; every location update is published on the sender\'s own channel, and each friend\'s WebSocket server, subscribed to that channel, checks the distance before pushing it. Follow one update, a friend who is too far, and a friend who just went offline.',
+  requirements: {
+    functional: ['See friends within 5 km on a map with their distance and last-updated time.', 'Location updates every 30 s.', 'Friends who are inactive for 10 min disappear.'],
+    nonFunctional: ['Updates reach friends in a few seconds.', 'Location is only shared with opted-in friends.', 'Losing an occasional update is fine.']
+  },
+  estimates: ['Illustrative: 10 M concurrent users × 1 update / 30 s ≈ 334 k updates/s.', 'Average 400 friends, ~10% online and nearby → ~40 pushes per update.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'alice', label: 'Alice\'s phone', sub: 'sends location', kind: 'client', icon: 'phone', x: 0, y: 1, desc: 'Sends {lat, lng} every 30 s over its WebSocket.' },
+    { id: 'ws1', label: 'WebSocket server A', sub: 'stateful', kind: 'service', icon: 'plug', x: 1, y: 1, desc: 'Holds Alice\'s connection. Writes her location, then publishes it on her channel.' },
+    { id: 'cache', label: 'Location cache', sub: 'Redis, TTL 10 min', kind: 'cache', icon: 'pin', x: 1, y: 0, desc: 'Latest location per user. The TTL makes inactive users expire on their own.' },
+    { id: 'hist', label: 'Location history', sub: 'Cassandra', kind: 'db', icon: 'db', x: 1, y: 2, desc: 'Append-only history for other features (and ML). Not on the hot path.' },
+    { id: 'pubsub', label: 'Redis pub/sub', sub: 'channel per user', kind: 'queue', icon: 'route', x: 2, y: 1, desc: 'One lightweight channel per user. Fire-and-forget: if nobody is subscribed, the message is dropped.' },
+    { id: 'ws2', label: 'WebSocket server B', sub: 'holds Bob', kind: 'service', icon: 'plug', x: 3, y: 1, desc: 'Subscribed to the channels of all of Bob\'s online friends. Filters by distance before pushing.' },
+    { id: 'bob', label: 'Bob\'s phone', sub: 'friend, 1.8 km away', kind: 'client', icon: 'phone', x: 4, y: 1, desc: 'Moves Alice\'s pin on the map.' }
+  ],
+  pseudo: `
+on_ws_message(user, loc):
+    redis.set(f"loc:{user}", loc, ex=600)
+    history.append(user, loc)
+    redis.publish(f"ch:{user}", loc)
+on_connect(user):          # on Bob's server
+    for f in online_friends(user): redis.subscribe(f"ch:{f}")
+on_channel_message(friend, loc, subscriber):
+    d = haversine(loc, last_loc(subscriber))
+    if d <= 5_000: ws.send(subscriber, {friend, loc, d})
+    else: skip`,
+  steps: [
+    {
+      from: 'alice', to: 'ws1', label: 'WS {lat 50.668, lng 4.612, ts}', pc: ['on_ws_message'],
+      title: 'Alice\'s phone sends its location',
+      caption: 'Every 30 seconds the app sends a tiny message over the WebSocket it keeps open. No HTTP request per update.',
+      text: [],
+      payloadKind: 'Location update',
+      payload: { type: 'loc', user_id: 'u_alice', lat: 50.6681, lng: 4.6118, ts: 1764169330 }
+    },
+    {
+      from: 'ws1', to: 'cache', label: 'SET loc:u_alice … EX 600', pc: ['redis.set'],
+      title: 'Save the latest location with a TTL',
+      caption: 'Only the latest point matters for the map. The 10-minute TTL means a user who stops sending simply disappears; no clean-up job needed.',
+      text: [],
+      payloadKind: 'Cache write',
+      payload: { key: 'loc:u_alice', value: { lat: 50.6681, lng: 4.6118, ts: 1764169330 }, ttl_s: 600 }
+    },
+    {
+      from: 'ws1', to: 'hist', label: 'append (u_alice, ts, lat, lng)', pc: ['history.append'],
+      title: 'Append to history (off the hot path)',
+      caption: 'A write-heavy, append-only table partitioned by user. Friends never read from it.',
+      text: [],
+      payloadKind: 'History row',
+      payload: { user_id: 'u_alice', ts: 1764169330, lat: 50.6681, lng: 4.6118 }
+    },
+    {
+      from: 'ws1', to: 'pubsub', label: 'PUBLISH ch:u_alice {…}', pc: ['redis.publish'],
+      title: 'Publish on Alice\'s own channel',
+      caption: 'One publish, regardless of how many friends she has. Redis delivers it to every server subscribed to ch:u_alice.',
+      text: ['Redis pub/sub is at-most-once: a message published while nobody is subscribed is gone. That is fine here, because the next update arrives in 30 seconds.'],
+      payloadKind: 'Publish',
+      payload: { channel: 'ch:u_alice', subscribers_reached: 37 }
+    },
+    {
+      from: 'pubsub', to: 'ws2', label: 'message on ch:u_alice → subscriber u_bob', pc: ['on_channel_message', 'd = haversine'],
+      title: 'Bob\'s server receives it and checks the distance',
+      caption: 'When Bob connected, his server subscribed to the channels of his online friends. It now computes the distance between Alice\'s new point and Bob\'s last point.',
+      text: [],
+      payloadKind: 'Distance check',
+      payload: { friend: 'u_alice', subscriber: 'u_bob', distance_m: 1820, radius_m: 5000 },
+      branch: { q: 'Within 5 km?', options: [ { label: 'yes: push to Bob', goto: 'push' }, { label: 'no: drop it', goto: 'far' } ] }
+    },
+    {
+      id: 'far', path: 'far', from: 'ws2', to: 'ws2', label: 'u_carol is 48 km away → skip', pc: ['else: skip'],
+      title: 'Other outcome: friend too far',
+      caption: 'Carol is also Alice\'s friend, but she is in Brussels. Her server gets the same message and drops it: no push, no battery wasted on her phone.',
+      text: [],
+      payloadKind: 'Filtered',
+      payload: { friend: 'u_alice', subscriber: 'u_carol', distance_m: 48200, pushed: false },
+      next: 'offline'
+    },
+    {
+      id: 'push', from: 'ws2', to: 'bob', label: 'WS {friend alice, 1.8 km, just now}', pc: ['ws.send'],
+      title: 'Bob\'s map moves Alice\'s pin',
+      caption: 'Total time from Alice\'s phone to Bob\'s screen: well under a second inside one region.',
+      text: [],
+      payloadKind: 'Push',
+      payload: { type: 'friend_loc', friend: 'u_alice', lat: 50.6681, lng: 4.6118, distance_m: 1820, updated: 'just now' }
+    },
+    {
+      id: 'offline', path: 'offline', from: 'cache', to: 'ws2', label: 'loc:u_dan expired (TTL)', pc: ['ex=600', 'online_friends(user)'],
+      title: 'Other outcome: a friend goes quiet',
+      caption: 'Dan closed the app 10 minutes ago. His cache key has expired, so he is not in the online-friends list any more and disappears from Bob\'s map.',
+      text: [],
+      payloadKind: 'Expiry',
+      payload: { key: 'loc:u_dan', last_ts: 1764168700, status: 'expired', shown_on_map: false }
+    }
+  ],
+  decisions: [
+    { q: 'How to route updates to friends?', options: [
+      { name: 'Pub/sub channel per user', verdict: 'good', why: 'One publish per update; subscriptions follow the friend graph; channels are cheap in Redis.' },
+      { name: 'Geohash grid channels', verdict: 'ok', why: 'Good for "anyone nearby" (strangers), but friends-only needs the friend graph anyway.' } ] },
+    { q: 'Stateful WebSocket servers?', options: [
+      { name: 'Yes, with draining on deploy', verdict: 'good', why: 'Needed for push; remove a node by marking it draining and letting clients reconnect elsewhere.' } ] }
+  ],
+  refs: [
+    { label: 'Redis docs: Pub/Sub (delivery semantics)', url: 'https://redis.io/docs/latest/develop/pubsub/' },
+    { label: 'Redis docs: Key expiration (EXPIRE)', url: 'https://redis.io/docs/latest/commands/expire/' },
+    { label: 'MDN: The WebSocket API', url: 'https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Nearby Friends" (book)', url: 'https://bytebytego.com/courses/system-design-interview/nearby-friends' }
+  ],
+  verify: {
+    checked: ['Pub/sub is at-most-once and messages with no subscriber are lost: Redis Pub/Sub docs.', 'Keys with an expiry are removed automatically: Redis EXPIRE docs.'],
+    uncertain: ['User counts, friend counts, the 5 km radius and the 30 s interval are illustrative design choices.']
+  }
+});
+
+flow({
+  id: 'maps-routing',
+  title: 'Maps: tiles, routing and ETA (Google Maps)',
+  category: 'Product systems',
+  tags: ['Map tiles z/x/y', 'CDN for tiles', 'Geocoding', 'Road graph', 'Precomputed shortcuts (CH / MLD)', 'Live-traffic ETA'],
+  summary: 'Opening a map and asking for directions is three systems: pre-rendered tiles served from a CDN, a geocoder that turns an address into coordinates, and a routing engine that searches a huge road graph with precomputed shortcuts, then adjusts the time with live traffic. Follow a route request, a tile cache miss, and a reroute when traffic changes.',
+  requirements: {
+    functional: ['Show the map at any zoom level.', 'Turn an address into a point (geocoding).', 'Return the fastest route with an ETA, and reroute when traffic changes.'],
+    nonFunctional: ['Tiles load instantly anywhere in the world.', 'Route answers in well under a second for a continental road graph.', 'ETA accuracy matters more than finding the theoretically shortest path.']
+  },
+  estimates: ['At zoom z the world is 2^z × 2^z tiles: zoom 18 is about 68.7 billion tiles, so deep zooms are rendered on demand and cached.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Maps app', sub: 'phone', kind: 'client', icon: 'phone', x: 0, y: 1, desc: 'Draws tiles, sends searches and route requests, reports its own GPS speed (anonymised) while navigating.' },
+    { id: 'cdn', label: 'Tile CDN', sub: '/tiles/z/x/y', kind: 'edge', icon: 'cdn', x: 1, y: 0, desc: 'Caches static tiles close to users. Tile URLs never change for a given map version.' },
+    { id: 'tiles', label: 'Tile service', sub: 'render / vector tiles', kind: 'storage', icon: 'map', x: 2, y: 0, desc: 'Pre-renders popular zoom levels; renders rare tiles on demand from map data.' },
+    { id: 'geo', label: 'Geocoding', sub: 'address → lat/lng', kind: 'service', icon: 'pin', x: 1, y: 2, desc: 'Parses the text, matches it against an address index, returns coordinates.' },
+    { id: 'route', label: 'Routing engine', sub: 'graph + shortcuts', kind: 'service', icon: 'route', x: 2, y: 1, desc: 'Bidirectional search on a road graph that has precomputed shortcut edges, so it explores thousands of nodes instead of millions.' },
+    { id: 'eta', label: 'ETA model', sub: 'traffic + ML', kind: 'ai', icon: 'brain', x: 3, y: 1, desc: 'Predicts travel time per road segment from live speeds and history.' },
+    { id: 'traffic', label: 'Live traffic', sub: 'stream of GPS speeds', kind: 'queue', icon: 'car', x: 3, y: 2, desc: 'Aggregates anonymised speed reports into current speed per road segment.' }
+  ],
+  pseudo: `
+tile = cdn.get(f"/tiles/{z}/{x}/{y}.pbf") or tiles.render(z, x, y)
+origin = gps(); dest = geocode("Grand-Place, Brussels")
+snap origin, dest to nearest road nodes
+path = bidirectional_search(graph_with_shortcuts, origin, dest)
+eta = sum(eta_model(segment, now, live_speed[segment]) for segment in path)
+return {polyline, eta, steps}
+while navigating:
+    if live_eta(remaining) > best_alternative + 3*min: reroute()`,
+  steps: [
+    {
+      from: 'app', to: 'cdn', label: 'GET /tiles/14/8401/5508.pbf', pc: ['tile = cdn.get'],
+      title: 'The map loads as tiles',
+      caption: 'The screen is covered by 256-pixel squares. Each tile has an address: zoom, column, row. At zoom 14 Louvain-la-Neuve is in a handful of tiles.',
+      text: ['The z/x/y scheme (Web Mercator, 2^z tiles per side) is the common "slippy map" standard documented by OpenStreetMap.'],
+      payloadKind: 'Tile request',
+      payload: { z: 14, x: 8401, y: 5508, format: 'vector (protobuf)', cache: 'HIT', bytes: 41200 },
+      branch: { q: 'Is the tile in the CDN?', options: [ { label: 'yes: served from the edge', goto: 'geo1' }, { label: 'no: render it', goto: 'miss' } ] }
+    },
+    {
+      id: 'miss', path: 'miss', from: 'cdn', to: 'tiles', label: 'MISS /tiles/18/134430/88142', pc: ['tiles.render'],
+      title: 'Other outcome: a rare deep-zoom tile',
+      caption: 'Nobody has looked at this field at zoom 18 recently. The tile service renders it from map data, and the CDN keeps it for next time.',
+      text: [],
+      payloadKind: 'Render',
+      payload: { z: 18, rendered_ms: 120, cache_control: 'public, max-age=604800' }
+    },
+    {
+      id: 'geo1', from: 'app', to: 'geo', label: '"Grand-Place, Brussels" → 50.8467, 4.3525', pc: ['dest = geocode'],
+      title: 'Turn the destination into coordinates',
+      caption: 'The geocoder normalises the text and matches it to a place in its index. The phone already knows the origin from GPS.',
+      text: [],
+      payloadKind: 'Geocode',
+      payload: { q: 'Grand-Place, Brussels', result: { lat: 50.8467, lng: 4.3525, place_id: 'pl_grandplace', confidence: 0.98 } }
+    },
+    {
+      from: 'app', to: 'route', label: 'route(50.668,4.612 → 50.847,4.353, car)', pc: ['snap origin', 'path = bidirectional_search'],
+      title: 'Search the road graph',
+      caption: 'Both points are snapped to the nearest road. Then the engine searches forward from the origin and backward from the destination on a graph that has precomputed shortcut edges.',
+      text: ['Plain Dijkstra on a continent-sized graph is far too slow per request. Engines like OSRM preprocess the graph (contraction hierarchies or multi-level partitions) so each query touches only a small part of it.'],
+      payloadKind: 'Route query',
+      payload: { origin_node: 88123401, dest_node: 10234455, profile: 'car', nodes_settled: 3200, ms: 6 }
+    },
+    {
+      from: 'route', to: 'eta', label: '214 segments → time per segment', pc: ['eta = sum'],
+      title: 'Predict the travel time',
+      caption: 'The shortest path by distance is not the answer. The ETA model predicts each segment\'s time from live speed, time of day and history.',
+      text: ['Google and DeepMind described grouping road segments into "supersegments" and using graph neural networks to improve ETA predictions.'],
+      payloadKind: 'ETA',
+      payload: { segments: 214, distance_km: 31.4, free_flow_min: 29, predicted_min: 38 }
+    },
+    {
+      from: 'traffic', to: 'eta', label: 'E411 km 12: 34 km/h (usually 110)', pc: ['live_speed[segment]'],
+      title: 'Live traffic feeds the model',
+      caption: 'Anonymised speeds from phones that are driving are aggregated per segment every minute.',
+      text: [],
+      payloadKind: 'Segment speed',
+      payload: { segment: 'E411_km12_N', speed_kmh: 34, typical_kmh: 110, samples: 57, window: '1 min' }
+    },
+    {
+      from: 'route', to: 'app', reply: true, label: '38 min via E411, polyline + 14 steps', pc: ['return {polyline, eta, steps}'],
+      title: 'The route comes back',
+      caption: 'The app gets an encoded line to draw, the ETA and turn-by-turn steps.',
+      text: [],
+      payloadKind: 'Route',
+      payload: { eta_min: 38, distance_km: 31.4, polyline: 'u{~vHk~p[…', steps: 14, alternatives: 2 },
+      branch: { q: 'Traffic changes while driving?', options: [ { label: 'yes: check for a faster route', goto: 'reroute' }, { label: 'no: keep going', goto: 'end' } ] }
+    },
+    {
+      id: 'reroute', path: 'reroute', from: 'eta', to: 'app', label: 'new route saves 7 min → reroute', pc: ['reroute()'],
+      title: 'Other outcome: reroute',
+      caption: 'An accident slows the E411. The remaining ETA jumps to 49 min; an alternative via the N4 is 42 min. Above the threshold, so the app offers the new route.',
+      text: [],
+      payloadKind: 'Reroute',
+      payload: { old_remaining_min: 49, new_remaining_min: 42, via: 'N4', accepted: true }
+    },
+    {
+      id: 'end', from: 'app', to: 'traffic', label: 'anonymised speed reports while driving', pc: ['while navigating'],
+      title: 'The trip improves everyone else\'s ETA',
+      caption: 'While navigating, the phone reports its speed per segment, which becomes live traffic for the next drivers.',
+      text: [],
+      payloadKind: 'Probe report',
+      payload: { segment: 'N4_km3', speed_kmh: 72, anonymised: true }
+    }
+  ],
+  decisions: [
+    { q: 'Raster or vector tiles?', options: [
+      { name: 'Vector tiles', verdict: 'good', why: 'Smaller, styled on the device, rotate and change language without new downloads.' },
+      { name: 'Raster (PNG) tiles', verdict: 'ok', why: 'Simple, but a new image per style and per screen density.' } ] },
+    { q: 'Routing algorithm?', options: [
+      { name: 'Precomputed shortcuts (CH/MLD)', verdict: 'good', why: 'Millisecond queries; MLD can update traffic weights faster than full CH.' },
+      { name: 'Plain Dijkstra / A*', verdict: 'bad', why: 'Explores millions of nodes per request on real road graphs.' } ] }
+  ],
+  refs: [
+    { label: 'OpenStreetMap Wiki: Slippy map tilenames (z/x/y)', url: 'https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames' },
+    { label: 'OSRM: Running OSRM (CH and MLD pipelines)', url: 'https://github.com/Project-OSRM/osrm-backend/wiki/Running-OSRM' },
+    { label: 'Google DeepMind: Traffic prediction with advanced graph neural networks', url: 'https://deepmind.google/discover/blog/traffic-prediction-with-advanced-graph-neural-networks/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Google Maps" (book)', url: 'https://bytebytego.com/courses/system-design-interview/google-maps' }
+  ],
+  verify: {
+    checked: ['Tile addressing z/x/y with 2^z tiles per side: OpenStreetMap wiki (2^18 squared ≈ 68.7 billion computed from it).', 'CH and MLD preprocessing pipelines: OSRM wiki.', 'Supersegments and graph neural networks for ETA: DeepMind blog.'],
+    uncertain: ['Coordinates are real places, but tile numbers, timings, speeds and the reroute threshold are illustrative.', 'Google\'s internal routing system is not public; OSRM is used as the open example.']
+  }
+});
+
+flow({
+  id: 'message-queue',
+  title: 'Distributed message queue (Kafka-style log)',
+  category: 'Messaging & events',
+  tags: ['Topic partitions', 'Append-only log', 'Leader + in-sync replicas', 'acks=all', 'Consumer groups', 'Committed offsets', 'Idempotent producer'],
+  summary: 'A distributed message queue is a replicated, append-only log split into partitions. Producers append to a partition leader, followers copy it, and a write counts as committed once all in-sync replicas have it. Consumers in a group each own some partitions and remember their position as an offset. Follow one order event, a broker crash, and a consumer that restarts.',
+  requirements: {
+    functional: ['Producers publish to a topic; many independent consumer groups read it.', 'Messages in one partition are read in order.', 'Consumers can replay from an earlier offset.'],
+    nonFunctional: ['No loss of committed messages when one broker dies.', 'Hundreds of thousands of messages per second per cluster.', 'Retention by time or size (e.g. 7 days).']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'prod', label: 'Order service', sub: 'producer', kind: 'service', icon: 'cart', x: 0, y: 1, desc: 'Publishes OrderPlaced events, keyed by order_id so one order\'s events stay in one partition (in order).' },
+    { id: 'leader', label: 'Broker 1', sub: 'leader of orders-3', kind: 'queue', icon: 'log', x: 2, y: 1, desc: 'Appends the record to the end of partition 3\'s log file on disk and serves reads.' },
+    { id: 'f1', label: 'Broker 2', sub: 'follower', kind: 'queue', icon: 'log', x: 2, y: 0, desc: 'Fetches new records from the leader and appends them to its own copy.' },
+    { id: 'f2', label: 'Broker 3', sub: 'follower', kind: 'queue', icon: 'log', x: 2, y: 2, desc: 'Second follower. Together the three form the in-sync replica set (ISR).' },
+    { id: 'ctrl', label: 'Controller', sub: 'KRaft quorum', kind: 'service', icon: 'vote', x: 1, y: 0, desc: 'Keeps cluster metadata (who leads which partition, who is in sync) and elects a new leader when a broker dies.' },
+    { id: 'cons', label: 'Email consumer', sub: 'group "emails"', kind: 'worker', icon: 'worker', x: 4, y: 1, desc: 'One of 3 consumers in its group; it owns partitions 3 and 4.' },
+    { id: 'offs', label: 'Offsets topic', sub: '__consumer_offsets', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'Where each group commits "I have processed up to offset N" per partition.' }
+  ],
+  pseudo: `
+producer(acks="all", enable_idempotence=True)
+p = hash("ord_9921") % 12            # -> partition 3
+leader(orders-3).append(record)       # gets offset 48211
+followers fetch from leader; leader tracks ISR
+if all ISR have offset 48211: high_watermark = 48212; ack producer
+if ISR shrinks below min.insync.replicas=2: reject writes
+consumer: records = poll(orders-3, from=committed+1)
+process(records); commit(group="emails", orders-3, 48211)`,
+  steps: [
+    {
+      from: 'prod', to: 'leader', label: 'produce orders key=ord_9921 → partition 3', pc: ['producer(acks', 'p = hash'],
+      title: 'The producer picks a partition by key',
+      caption: 'The key is hashed to one of 12 partitions. Every event for ord_9921 lands in partition 3, so they are consumed in order. The producer asks for acks=all and is idempotent (sequence numbers stop retries from creating duplicates).',
+      text: [],
+      payloadKind: 'Produce request',
+      payload: { topic: 'orders', partition: 3, key: 'ord_9921', value: { type: 'OrderPlaced', total_eur: 49.9 }, producer_id: 7301, seq: 912, acks: 'all' }
+    },
+    {
+      from: 'leader', to: 'leader', label: 'append at offset 48211', pc: ['leader(orders-3).append'],
+      title: 'Append to the end of the log',
+      caption: 'The leader writes the record to the end of its segment file. Appends are sequential disk writes, which is why a log is fast.',
+      text: [],
+      payloadKind: 'Log entry',
+      payload: { partition: 'orders-3', offset: 48211, segment: '00000000000048000.log', bytes: 212 }
+    },
+    {
+      from: 'f1', to: 'leader', label: 'Fetch(orders-3, from 48211)', pc: ['followers fetch from leader'],
+      title: 'Followers pull the new record',
+      caption: 'Followers continuously fetch from the leader, like consumers. Broker 2 and Broker 3 both copy offset 48211.',
+      text: [],
+      payloadKind: 'Replica fetch',
+      payload: { replica: 'broker-2', partition: 'orders-3', fetch_offset: 48211, isr: [1, 2, 3] }
+    },
+    {
+      from: 'f2', to: 'leader', label: 'Fetch(orders-3, from 48211)', pc: ['followers fetch from leader'],
+      title: 'The second follower catches up too',
+      caption: 'Now every in-sync replica has the record.',
+      text: [],
+      payloadKind: 'Replica fetch',
+      payload: { replica: 'broker-3', partition: 'orders-3', fetch_offset: 48211 }
+    },
+    {
+      from: 'leader', to: 'prod', reply: true, label: 'ack: offset 48211 committed', pc: ['high_watermark = 48212'],
+      title: 'Committed: the producer gets its ack',
+      caption: 'Because all in-sync replicas have it, the high watermark moves past 48211. Only now can consumers see it, and only now does the producer get success.',
+      text: [],
+      payloadKind: 'Produce response',
+      payload: { partition: 3, base_offset: 48211, error: null },
+      branch: { q: 'Does a broker crash now?', options: [ { label: 'no: consumers read it', goto: 'read' }, { label: 'yes: leader dies', goto: 'crash' } ] }
+    },
+    {
+      id: 'crash', path: 'crash', from: 'ctrl', to: 'f1', label: 'broker-1 gone → broker-2 leads orders-3', pc: ['leader tracks ISR'],
+      title: 'Other outcome: the leader crashes',
+      caption: 'The controller notices broker 1 stopped heartbeating and makes broker 2, which is in the ISR, the new leader. It already has offset 48211, so no committed record is lost. Producers and consumers refresh metadata and continue.',
+      text: ['If too few replicas are in sync (fewer than min.insync.replicas), the leader rejects acks=all writes instead of accepting data it could lose.'],
+      payloadKind: 'Leader election',
+      payload: { partition: 'orders-3', old_leader: 1, new_leader: 2, isr: [2, 3], leader_epoch: 15, committed_lost: 0 }
+    },
+    {
+      id: 'read', from: 'cons', to: 'leader', label: 'poll(orders-3, from 48211)', pc: ['consumer: records = poll'],
+      title: 'A consumer in the group reads it',
+      caption: 'In group "emails", partitions are split across 3 consumers; this one owns partitions 3 and 4. Other groups (analytics, fraud) read the same record independently.',
+      text: [],
+      payloadKind: 'Fetch response',
+      payload: { group: 'emails', partition: 3, records: [{ offset: 48211, key: 'ord_9921', type: 'OrderPlaced' }] }
+    },
+    {
+      from: 'cons', to: 'offs', label: 'commit emails/orders-3 = 48212', pc: ['process(records); commit'],
+      title: 'Commit the position after processing',
+      caption: 'After the confirmation email is sent, the consumer commits its offset. Commit after processing gives at-least-once: a crash before the commit means the record is read again, so processing must be idempotent.',
+      text: [],
+      payloadKind: 'Offset commit',
+      payload: { group: 'emails', partition: 'orders-3', committed_offset: 48212 }
+    },
+    {
+      id: 'restart', from: 'offs', to: 'cons', label: 'rebalance → resume orders-3 at 48212', pc: ['from=committed+1'],
+      title: 'A restart resumes from the committed offset',
+      caption: 'When a consumer joins or leaves, the group rebalances partitions. Whoever owns orders-3 next starts from the committed offset, not from the beginning.',
+      text: [],
+      payloadKind: 'Resume',
+      payload: { group: 'emails', partition: 'orders-3', resume_at: 48212, retention: '7 days' }
+    }
+  ],
+  decisions: [
+    { q: 'acks setting?', options: [
+      { name: 'acks=all + min.insync.replicas=2', verdict: 'good', why: 'A committed write survives one broker loss.' },
+      { name: 'acks=1', verdict: 'ok', why: 'Faster, but a leader crash before followers copy it loses the record.' } ] },
+    { q: 'Log or classic queue?', options: [
+      { name: 'Log (Kafka, Pulsar)', verdict: 'good', why: 'Replay, many independent consumer groups, ordering per partition.' },
+      { name: 'Queue with per-message ack (RabbitMQ, SQS)', verdict: 'ok', why: 'Simpler work distribution and per-message retry; no replay after delete.' } ] }
+  ],
+  refs: [
+    { label: 'Apache Kafka docs: Design (log, replication, ISR, delivery semantics)', url: 'https://kafka.apache.org/41/design/design/' },
+    { label: 'Confluent docs: Kafka replication', url: 'https://docs.confluent.io/kafka/design/replication.html' },
+    { label: 'Confluent docs: Message delivery guarantees', url: 'https://docs.confluent.io/kafka/design/delivery-semantics.html' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Distributed Message Queue" (book)', url: 'https://bytebytego.com/courses/system-design-interview/distributed-message-queue' }
+  ],
+  verify: {
+    checked: ['Partitioned replicated log, leader and in-sync replicas, committed = all ISR have it, min.insync.replicas, idempotent producer: Kafka design docs and Confluent replication docs.', 'Committing after processing gives at-least-once: Confluent delivery semantics.'],
+    uncertain: ['Offsets, partition counts and broker numbers are illustrative.']
+  }
+});
+
+flow({
+  id: 'metrics-monitoring',
+  title: 'Metrics monitoring and alerting (Prometheus-style)',
+  category: 'Infrastructure foundations',
+  tags: ['Pull (scrape) model', 'Time-series DB', 'WAL + 2 h blocks', 'Compression', 'Downsampling', 'Alert rules', 'Grouping / silences'],
+  summary: 'Every service exposes counters like http_requests_total. A collector scrapes them every 15 s, stores them in a time-series database built for append-heavy numbers, evaluates alert rules, and pages someone when a rule stays true. Follow one scrape, a firing alert, and the downsampling that keeps a year of data cheap.',
+  requirements: {
+    functional: ['Collect metrics from thousands of hosts.', 'Query them for dashboards (rates, percentiles).', 'Alert on rules and route alerts to the right team.'],
+    nonFunctional: ['Writes vastly outnumber reads.', 'Recent data is queried most; old data can be lower resolution.', 'Monitoring must stay up when the system it watches is down.']
+  },
+  estimates: ['Illustrative: 5 000 hosts × 1 000 series × 1 sample / 15 s ≈ 333 k samples/s.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'svc', label: 'Checkout service', sub: '/metrics endpoint', kind: 'service', icon: 'server', x: 0, y: 1, desc: 'Keeps counters and histograms in memory and prints them as text on GET /metrics.' },
+    { id: 'disc', label: 'Service discovery', sub: 'Kubernetes / Consul', kind: 'service', icon: 'search', x: 1, y: 0, desc: 'Tells the collector which targets exist right now.' },
+    { id: 'prom', label: 'Collector', sub: 'Prometheus server', kind: 'worker', icon: 'pulse', x: 1, y: 1, desc: 'Scrapes targets on a schedule, writes samples, evaluates rules.' },
+    { id: 'tsdb', label: 'Time-series DB', sub: 'WAL + blocks', kind: 'db', icon: 'chart', x: 2, y: 1, desc: 'Recent samples in memory and a write-ahead log; every 2 hours they are compacted into an immutable block on disk.' },
+    { id: 'long', label: 'Long-term store', sub: 'object storage', kind: 'storage', icon: 'storage', x: 3, y: 2, desc: 'Old blocks uploaded to cheap object storage and downsampled (e.g. Thanos).' },
+    { id: 'alert', label: 'Alertmanager', sub: 'group, dedupe, route', kind: 'service', icon: 'bell', x: 3, y: 0, desc: 'Groups related alerts, removes duplicates, applies silences, routes to the right receiver.' },
+    { id: 'oncall', label: 'On-call engineer', sub: 'pager / Slack', kind: 'client', icon: 'phone', x: 4, y: 0, desc: 'Gets one page for the incident, not 200.' },
+    { id: 'dash', label: 'Dashboard', sub: 'Grafana', kind: 'client', icon: 'laptop', x: 2, y: 2, desc: 'Runs queries like rate() and histogram_quantile() over a time range.' }
+  ],
+  pseudo: `
+targets = discovery.list(job="checkout")
+every 15s: samples = http_get(target + "/metrics")
+tsdb.append(samples)          # WAL first, then in-memory head
+every 2h: compact head -> immutable block; later upload + downsample (5m, 1h)
+rule: rate(http_requests_total{code=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05 for 10m
+if rule true for 10m: alertmanager.send(alert)
+alertmanager: group_by [service], wait 30s, apply silences, route -> pager`,
+  steps: [
+    {
+      from: 'prom', to: 'disc', label: 'list targets job=checkout → 12 pods', pc: ['targets = discovery.list'],
+      title: 'Find what to scrape',
+      caption: 'Pods come and go. The collector asks service discovery for the current list instead of using a fixed config.',
+      text: [],
+      payloadKind: 'Targets',
+      payload: { job: 'checkout', targets: ['10.2.0.14:9100', '10.2.0.15:9100', '…'], count: 12 }
+    },
+    {
+      from: 'prom', to: 'svc', label: 'GET /metrics (every 15 s)', pc: ['every 15s'],
+      title: 'Scrape: the collector pulls',
+      caption: 'In the pull model the collector decides the pace, and a target that stops answering is itself a signal (up = 0). Short batch jobs that cannot be scraped push to a gateway instead.',
+      text: [],
+      payloadKind: 'Scrape response (text format)',
+      payload: { body: 'http_requests_total{code="200",route="/pay"} 1027331\nhttp_requests_total{code="500",route="/pay"} 6120\nhttp_request_duration_seconds_bucket{le="0.25"} 990120', series: 1043 }
+    },
+    {
+      from: 'prom', to: 'tsdb', label: 'append 1 043 samples @ 15:20:15', pc: ['tsdb.append'],
+      title: 'Write to the time-series DB',
+      caption: 'Each series is a metric name plus labels. Samples are (timestamp, float). They go to a write-ahead log for crash safety, then to an in-memory head block.',
+      text: ['Facebook\'s Gorilla paper showed how timestamps and values compress very well with delta-of-delta and XOR encoding, about 1.37 bytes per sample instead of 16. Prometheus uses a similar approach.'],
+      payloadKind: 'Samples',
+      payload: { series: 'http_requests_total{code="500",route="/pay",pod="checkout-7"}', ts: 1764170415000, value: 6120 }
+    },
+    {
+      from: 'tsdb', to: 'long', label: 'block 13:00–15:00 → object store', pc: ['every 2h'],
+      title: 'Compact and ship old data',
+      caption: 'Every 2 hours the head becomes an immutable block with an index. Long-term setups upload blocks to object storage and downsample them to 5-minute and 1-hour resolution for year-long dashboards.',
+      text: [],
+      payloadKind: 'Block',
+      payload: { block: '01JDX…', range: '13:00–15:00', samples: 2400000000, size_mb: 3100, downsampled: ['5m', '1h'] }
+    },
+    {
+      from: 'prom', to: 'prom', label: 'error ratio /pay = 7.8% (>5%)', pc: ['rule: rate'],
+      title: 'Evaluate the alert rule',
+      caption: 'Every evaluation interval the collector runs the rule query. 5xx share on /pay is 7.8%, above 5%. The alert becomes "pending" until it has been true for 10 minutes, so short blips do not page anyone.',
+      text: [],
+      payloadKind: 'Rule result',
+      payload: { alert: 'CheckoutHighErrorRate', value: 0.078, state: 'pending', for: '10m' },
+      branch: { q: 'Still true after 10 minutes?', options: [ { label: 'yes: fire', goto: 'fire' }, { label: 'no: resolves, nobody paged', goto: 'dash1' } ] }
+    },
+    {
+      id: 'fire', from: 'prom', to: 'alert', label: 'FIRING CheckoutHighErrorRate × 12 pods', pc: ['alertmanager.send'],
+      title: 'Fire: send to Alertmanager',
+      caption: 'Twelve pods each produce an alert. Alertmanager groups them by service, waits 30 s for more to arrive, and checks silences (none: no maintenance window).',
+      text: [],
+      payloadKind: 'Alerts',
+      payload: { labels: { alertname: 'CheckoutHighErrorRate', service: 'checkout', severity: 'page' }, count: 12, group_wait: '30s', silenced: false }
+    },
+    {
+      from: 'alert', to: 'oncall', label: '1 page: checkout 5xx 7.8% for 10 min', pc: ['route -> pager'],
+      title: 'One page reaches the right person',
+      caption: 'The route for severity=page sends it to the checkout team\'s pager with a link to the dashboard and runbook.',
+      text: [],
+      payloadKind: 'Notification',
+      payload: { receiver: 'checkout-pager', summary: 'Checkout 5xx rate 7.8% (>5%) for 10m', runbook: 'wiki/runbooks/checkout-5xx', grouped_alerts: 12 }
+    },
+    {
+      id: 'dash1', from: 'dash', to: 'tsdb', label: 'histogram_quantile(0.99, …[5m])', pc: ['tsdb.append'],
+      title: 'Dashboards read the same data',
+      caption: 'The engineer opens Grafana: p99 latency and error rate over the last 6 hours, computed from the stored histograms and counters.',
+      text: [],
+      payloadKind: 'Query',
+      payload: { query: 'histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job="checkout"}[5m])))', range: '6h', step: '30s', p99_s: 1.84 }
+    }
+  ],
+  decisions: [
+    { q: 'Pull or push?', options: [
+      { name: 'Pull (scrape)', verdict: 'good', why: 'Collector controls load; missing target is visible; easy to scrape by hand when debugging.' },
+      { name: 'Push', verdict: 'ok', why: 'Better for short-lived jobs and across firewalls; needs auth and back-pressure on the receiver.' } ] },
+    { q: 'General DB or TSDB?', options: [
+      { name: 'Purpose-built TSDB', verdict: 'good', why: 'Append-only, compressed, time-range queries and retention built in.' },
+      { name: 'Relational table', verdict: 'bad', why: 'Hundreds of thousands of inserts/s and rollups become painful.' } ] }
+  ],
+  refs: [
+    { label: 'Prometheus docs: Overview (pull model, Pushgateway)', url: 'https://prometheus.io/docs/introduction/overview/' },
+    { label: 'Prometheus docs: Storage (WAL, 2-hour blocks, compaction)', url: 'https://prometheus.io/docs/prometheus/latest/storage/' },
+    { label: 'Prometheus docs: Alertmanager (grouping, inhibition, silences)', url: 'https://prometheus.io/docs/alerting/latest/alertmanager/' },
+    { label: 'Pelkonen et al., Gorilla: A Fast, Scalable, In-Memory Time Series Database (VLDB 2015)', url: 'https://www.vldb.org/pvldb/vol8/p1816-teller.pdf' },
+    { label: 'Thanos docs: Compactor and downsampling', url: 'https://thanos.io/tip/components/compact.md/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Metrics Monitoring and Alerting System" (book)', url: 'https://bytebytego.com/courses/system-design-interview/metrics-monitoring-and-alerting-system' }
+  ],
+  verify: {
+    checked: ['Pull model and Pushgateway for short jobs: Prometheus overview.', 'WAL and 2-hour blocks: Prometheus storage docs.', 'Grouping, silences, routing: Alertmanager docs.', '1.37 bytes per point: Gorilla paper.', '5m and 1h downsampling: Thanos compactor docs.'],
+    uncertain: ['Host counts, values, the 5% threshold and block sizes are illustrative.']
+  }
+});
+
+flow({
+  id: 'ad-click-aggregation',
+  title: 'Ad click event aggregation',
+  category: 'Data at scale',
+  tags: ['Click log to Kafka', 'Event-time windows', 'Watermarks / late events', 'Deduplication', 'Exactly-once sinks', 'Batch reconciliation', 'Top-N ads'],
+  summary: 'Advertisers are billed per click, so click counts must be correct, not just fast. Clicks flow into a log, a stream job deduplicates them and counts per ad per minute using the time the click happened, results go to an OLAP store for dashboards, and a nightly batch job recomputes from the raw log to catch any drift. Follow a click, a duplicate, and a late event.',
+  requirements: {
+    functional: ['Count clicks per ad per minute; return the last M minutes for an ad.', 'Top 100 most-clicked ads in the last minute.', 'Filter by country, device, etc.'],
+    nonFunctional: ['Correct counts: billing depends on them.', 'Dashboards a few minutes behind real time at most.', 'Handle duplicates and late events.']
+  },
+  estimates: ['Illustrative: 1 billion clicks/day ≈ 11.6 k/s average, peaks of ~5×.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User clicks an ad', sub: 'browser', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Clicks a sponsored link; the click goes through a redirect that records it.' },
+    { id: 'track', label: 'Click tracker', sub: 'redirect + log', kind: 'service', icon: 'server', x: 1, y: 1, desc: 'Logs the click with a unique click_id and redirects to the advertiser.' },
+    { id: 'kafka', label: 'Raw click log', sub: 'Kafka topic', kind: 'queue', icon: 'log', x: 2, y: 1, desc: 'Immutable record of every click; also archived to object storage for replay.' },
+    { id: 'flink', label: 'Stream aggregator', sub: 'Flink job', kind: 'worker', icon: 'cpu', x: 3, y: 1, desc: 'Deduplicates by click_id, counts per (ad, minute) by event time, and computes the top 100.' },
+    { id: 'olap', label: 'Aggregates DB', sub: 'OLAP (Druid / ClickHouse)', kind: 'db', icon: 'chart', x: 4, y: 1, desc: 'Stores per-minute counts with filter columns; serves dashboards and billing queries.' },
+    { id: 'batch', label: 'Nightly batch', sub: 'Spark on archive', kind: 'worker', icon: 'clock', x: 3, y: 2, desc: 'Recomputes yesterday\'s counts from the raw archive and compares with the stream results.' },
+    { id: 'adv', label: 'Advertiser dashboard', sub: 'reads aggregates', kind: 'client', icon: 'laptop', x: 4, y: 0, desc: 'Shows clicks per minute and spend.' }
+  ],
+  pseudo: `
+kafka.produce("clicks", key=ad_id, {click_id, ad_id, ts_event, country})
+stream = read("clicks").assign_watermark(ts_event - 30s)
+dedup: keep first row per click_id (ROW_NUMBER() = 1)
+counts = TUMBLE(ts_event, 1 min) GROUP BY ad_id, country -> count(*)
+top100 = counts per window ORDER BY count DESC LIMIT 100
+events later than watermark + allowed_lateness -> side output for batch
+sink to OLAP with exactly-once (checkpoint + transactional/upsert writes)
+nightly: batch_counts = recompute(archive); diff vs stream; fix + alert`,
+  steps: [
+    {
+      from: 'user', to: 'track', label: 'GET /c?ad=ad_7781 → 302', pc: ['kafka.produce'],
+      title: 'A click is recorded and redirected',
+      caption: 'The tracker gives the click a unique id and records the time on the user\'s side of the event, then sends the user on to the advertiser.',
+      text: [],
+      payloadKind: 'Click event',
+      payload: { click_id: 'c_01JDXK7Q', ad_id: 'ad_7781', ts_event: '2026-11-26T15:31:07.420Z', country: 'BE', device: 'mobile', ip_hash: 'a3f…' }
+    },
+    {
+      from: 'track', to: 'kafka', label: 'produce clicks key=ad_7781', pc: ['kafka.produce'],
+      title: 'Append to the raw log',
+      caption: 'The raw log is the source of truth. Everything downstream can be recomputed from it.',
+      text: [],
+      payloadKind: 'Kafka record',
+      payload: { topic: 'clicks', partition: 17, offset: 9921043, key: 'ad_7781' }
+    },
+    {
+      from: 'kafka', to: 'flink', label: 'consume, watermark = max ts − 30 s', pc: ['assign_watermark', 'dedup: keep first row'],
+      title: 'Deduplicate by click_id',
+      caption: 'Retries and double-clicks produce the same click_id twice. The job keeps only the first row per click_id (Flink SQL\'s deduplication pattern with ROW_NUMBER).',
+      text: [],
+      payloadKind: 'Dedup state',
+      payload: { click_id: 'c_01JDXK7Q', seen_before: false },
+      branch: { q: 'Seen this click_id before?', options: [ { label: 'no: count it', goto: 'count' }, { label: 'yes: drop the duplicate', goto: 'dup' } ] }
+    },
+    {
+      id: 'dup', path: 'dup', from: 'flink', to: 'flink', label: 'c_01JDXK7Q again (retry) → dropped', pc: ['dedup: keep first row'],
+      title: 'Other outcome: a duplicate',
+      caption: 'The tracker retried after a timeout and the same click arrived twice. It is dropped; the advertiser is not billed twice.',
+      text: [],
+      payloadKind: 'Dropped',
+      payload: { click_id: 'c_01JDXK7Q', reason: 'duplicate', counted: false },
+      next: 'late'
+    },
+    {
+      id: 'count', from: 'flink', to: 'flink', label: 'window 15:31–15:32 ad_7781 BE += 1', pc: ['counts = TUMBLE', 'top100 ='],
+      title: 'Count in one-minute event-time windows',
+      caption: 'The click goes into the 15:31 window because that is when it happened, not when it arrived. When the watermark passes 15:32, the window closes and emits its counts plus the top 100.',
+      text: [],
+      payloadKind: 'Window result',
+      payload: { window: '15:31:00–15:32:00', ad_id: 'ad_7781', country: 'BE', clicks: 412, top100_rank: 37 }
+    },
+    {
+      id: 'late', path: 'late', from: 'kafka', to: 'flink', label: 'click from 15:24 arrives at 15:33 (phone was offline)', pc: ['events later than watermark'],
+      title: 'Other outcome: a late event',
+      caption: 'The window for 15:24 already closed. Small lateness can update the window; very late events go to a side output and the nightly batch includes them.',
+      text: [],
+      payloadKind: 'Late event',
+      payload: { click_id: 'c_01JDXH2M', ts_event: '15:24:51', arrived: '15:33:10', handled_by: 'side output → batch' }
+    },
+    {
+      from: 'flink', to: 'olap', label: 'upsert (ad_7781, 15:31, BE) = 412', pc: ['sink to OLAP with exactly-once'],
+      title: 'Write aggregates exactly once',
+      caption: 'Flink checkpoints its state and Kafka offsets together. Writes are idempotent upserts keyed by (ad, minute, filters), so a replay after a crash overwrites instead of double-counting.',
+      text: [],
+      payloadKind: 'Aggregate row',
+      payload: { ad_id: 'ad_7781', minute: '2026-11-26T15:31Z', country: 'BE', device: 'mobile', clicks: 412 }
+    },
+    {
+      from: 'adv', to: 'olap', label: 'clicks ad_7781 last 30 min', pc: ['sink to OLAP'],
+      title: 'The advertiser sees it',
+      caption: 'The dashboard query reads 30 pre-aggregated rows instead of scanning raw clicks.',
+      text: [],
+      payloadKind: 'Query',
+      payload: { ad_id: 'ad_7781', from: '15:02', to: '15:32', total_clicks: 11840 }
+    },
+    {
+      from: 'batch', to: 'olap', label: 'nightly diff: stream 1 000 214 vs batch 1 000 397', pc: ['nightly:'],
+      title: 'Reconcile with a nightly batch',
+      caption: 'A batch job recomputes yesterday from the raw archive, including very late events. Differences are corrected and, above a threshold, raise an alert. This is what makes the numbers billable.',
+      text: [],
+      payloadKind: 'Reconciliation',
+      payload: { date: '2026-11-25', ad_id: 'ad_7781', stream: 1000214, batch: 1000397, diff: 183, action: 'overwrite with batch' }
+    }
+  ],
+  decisions: [
+    { q: 'Event time or processing time?', options: [
+      { name: 'Event time + watermark', verdict: 'good', why: 'Counts land in the right minute even with delays and replays.' },
+      { name: 'Processing time', verdict: 'bad', why: 'A backlog or replay moves clicks into the wrong minute.' } ] },
+    { q: 'Stream only, or stream + batch?', options: [
+      { name: 'Stream for speed + batch for correctness', verdict: 'good', why: 'Fast dashboards and an auditable daily number.' },
+      { name: 'Stream only', verdict: 'ok', why: 'Simpler (Kappa), but needs perfect exactly-once and late-data handling.' } ] }
+  ],
+  refs: [
+    { label: 'Apache Flink docs: Deduplication (SQL)', url: 'https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/table/sql/queries/deduplication/' },
+    { label: 'Apache Flink docs: Windowing table-valued functions (TUMBLE)', url: 'https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/table/sql/queries/window-tvf/' },
+    { label: 'Apache Flink docs: Timely stream processing (event time, watermarks)', url: 'https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/concepts/time/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Ad Click Event Aggregation" (book)', url: 'https://bytebytego.com/courses/system-design-interview/ad-click-event-aggregation' }
+  ],
+  verify: {
+    checked: ['Deduplication with ROW_NUMBER keeping the first row: Flink deduplication docs.', 'TUMBLE windows: Flink window TVF docs.', 'Event time and watermarks: Flink timely stream processing docs.'],
+    uncertain: ['Click volumes, counts and the reconciliation diff are illustrative.', 'The exact sink strategy (upsert vs two-phase commit) depends on the OLAP store.']
+  }
+});
+
+flow({
+  id: 'hotel-reservation',
+  title: 'Hotel reservation system',
+  category: 'Commerce & money',
+  tags: ['Inventory per room type per night', 'Idempotent reserve', 'Optimistic locking / DB constraint', 'Overbooking %', 'Hold → pay → confirm', 'Cache for search, DB for truth'],
+  summary: 'Unlike concert seats, hotel inventory is a count: "12 Deluxe rooms left on 24 Dec". A reservation decrements the count for every night of the stay in one transaction, a database constraint makes overselling impossible, and an idempotency key makes double-clicks harmless. Follow a booking, a double click, and a race for the last room.',
+  requirements: {
+    functional: ['Search availability for dates and room types.', 'Reserve a room type for a date range, then pay.', 'Cancel; allow a configurable overbooking percentage.'],
+    nonFunctional: ['Never sell more than capacity × (1 + overbooking).', 'A retried request never creates two reservations.', 'Search can be slightly stale; booking must not.']
+  },
+  estimates: ['Illustrative: 5 000 hotels × 20 room types × 2 years of nights ≈ 73 M inventory rows: fits one sharded relational DB.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'guest', label: 'Guest', sub: 'booking page', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Picks Deluxe Double, 23–25 Dec, and presses Book.' },
+    { id: 'res', label: 'Reservation service', sub: 'stateless', kind: 'service', icon: 'building', x: 2, y: 1, desc: 'Validates, reserves inventory and creates the reservation in one transaction.' },
+    { id: 'cache', label: 'Availability cache', sub: 'Redis, for search', kind: 'cache', icon: 'cache', x: 1, y: 0, desc: 'Fast, slightly stale counts for search results. Never used to decide a booking.' },
+    { id: 'db', label: 'Inventory DB', sub: 'room_type_inventory', kind: 'db', icon: 'db', x: 3, y: 1, desc: 'One row per (hotel, room type, date) with total and reserved. A CHECK constraint stops overselling.' },
+    { id: 'pay', label: 'Payment service', sub: 'PSP', kind: 'external', icon: 'card', x: 3, y: 2, desc: 'Charges the card for the reservation id.' },
+    { id: 'timer', label: 'Expiry job', sub: 'unpaid holds', kind: 'worker', icon: 'clock', x: 2, y: 2, desc: 'Releases inventory for reservations still PENDING after 15 minutes.' },
+    { id: 'mail', label: 'Confirmation', sub: 'email', kind: 'service', icon: 'mail', x: 4, y: 0, desc: 'Sends the booking confirmation once payment succeeds.' }
+  ],
+  pseudo: `
+POST /reservations  Idempotency-Key: r_7f3c
+if reservations.exists(key): return existing   # double click
+BEGIN
+  UPDATE room_type_inventory SET reserved = reserved + 1
+   WHERE hotel=211 AND type='deluxe' AND date IN ('12-23','12-24')
+  -- CHECK (reserved <= total * 1.10) fails if no room left
+  INSERT reservations(id=key, status='PENDING', expires=now()+15min)
+COMMIT
+pay(key) -> on success status='CONFIRMED'; email
+expiry job: PENDING and expired -> release inventory`,
+  steps: [
+    {
+      from: 'guest', to: 'cache', label: 'search 23–25 Dec → Deluxe: 3 left', pc: ['POST /reservations'],
+      title: 'Search reads the cache',
+      caption: 'Search results come from a cache that may be a few seconds old. That is fine for browsing, and it keeps millions of searches off the database.',
+      text: [],
+      payloadKind: 'Search result',
+      payload: { hotel_id: 211, check_in: '2026-12-23', check_out: '2026-12-25', room_types: [{ type: 'deluxe', left: 3, price_eur: 189 }] }
+    },
+    {
+      from: 'guest', to: 'res', label: 'POST /reservations (Idempotency-Key r_7f3c)', pc: ['POST /reservations', 'if reservations.exists(key)'],
+      title: 'Book with an idempotency key',
+      caption: 'The page generated a key when it rendered the form. The service first checks whether a reservation with this key already exists.',
+      text: [],
+      payloadKind: 'Request',
+      payload: { headers: { 'Idempotency-Key': 'r_7f3c' }, body: { hotel_id: 211, room_type: 'deluxe', check_in: '2026-12-23', check_out: '2026-12-25', guest: 'Swampi' } },
+      branch: { q: 'Key seen before?', options: [ { label: 'no: reserve', goto: 'tx' }, { label: 'yes: double click', goto: 'dbl' } ] }
+    },
+    {
+      id: 'dbl', path: 'dbl', from: 'res', to: 'guest', reply: true, label: '200: same reservation r_7f3c', pc: ['return existing'],
+      title: 'Other outcome: a double click',
+      caption: 'The second click carries the same key. The service returns the reservation it already made instead of booking a second room.',
+      text: [],
+      payloadKind: 'Response',
+      payload: { status: 200, reservation_id: 'r_7f3c', state: 'PENDING', duplicate: true },
+      next: 'tx'
+    },
+    {
+      id: 'tx', from: 'res', to: 'db', label: 'UPDATE 2 nights + INSERT, one transaction', pc: ['BEGIN', 'UPDATE room_type_inventory', 'INSERT reservations'],
+      title: 'Reserve every night atomically',
+      caption: 'A two-night stay touches two inventory rows. Both are incremented and the reservation row inserted in one transaction: either all happen or none.',
+      text: ['The CHECK constraint (reserved <= total × 1.10) allows 10% overbooking, a common hotel practice because some guests cancel or do not show.'],
+      payloadKind: 'Rows',
+      payload: { inventory: [{ date: '2026-12-23', total: 20, reserved: '19 → 20' }, { date: '2026-12-24', total: 20, reserved: '21 → 22' }], max_allowed: 22, reservation: { id: 'r_7f3c', status: 'PENDING', expires_at: '15:52' } },
+      branch: { q: 'Room left on every night?', options: [ { label: 'yes: commit', goto: 'payit' }, { label: 'no: sold out', goto: 'race' } ] }
+    },
+    {
+      id: 'race', path: 'race', from: 'db', to: 'res', label: 'CHECK violated on 12-24 → ROLLBACK', pc: ['CHECK (reserved <= total * 1.10)'],
+      title: 'Other outcome: someone took the last room',
+      caption: 'Another guest committed a millisecond earlier and 24 Dec is at 22. The constraint fails, the whole transaction rolls back (23 Dec is untouched), and the guest sees "sold out" even though the cache said 3 left.',
+      text: [],
+      payloadKind: 'Error',
+      payload: { error: 'check_violation', constraint: 'reserved_le_cap', date: '2026-12-24', http: 409 },
+      next: 'exp'
+    },
+    {
+      id: 'payit', from: 'res', to: 'pay', label: 'charge €378 for r_7f3c', pc: ['pay(key)'],
+      title: 'Pay for the held room',
+      caption: 'The reservation id is also the payment idempotency key, so a retried charge is not taken twice.',
+      text: [],
+      payloadKind: 'Charge',
+      payload: { amount_eur: 378, idempotency_key: 'r_7f3c', result: 'succeeded' }
+    },
+    {
+      from: 'res', to: 'mail', label: 'CONFIRMED → send confirmation', pc: ["status='CONFIRMED'"],
+      title: 'Confirm',
+      caption: 'The reservation becomes CONFIRMED and the guest gets an email.',
+      text: [],
+      payloadKind: 'Email',
+      payload: { to: 'guest@example.com', subject: 'Your stay at Hôtel 211, 23–25 Dec, is confirmed', reservation_id: 'r_7f3c' }
+    },
+    {
+      id: 'exp', from: 'timer', to: 'db', label: 'PENDING > 15 min → reserved − 1 per night', pc: ['expiry job'],
+      title: 'Unpaid holds give the room back',
+      caption: 'If a guest abandons payment, the expiry job cancels the reservation and decrements the nights again, so the room returns to sale.',
+      text: [],
+      payloadKind: 'Release',
+      payload: { reservation_id: 'r_8a01', status: 'PENDING → EXPIRED', nights_released: ['2026-12-23', '2026-12-24'] }
+    }
+  ],
+  decisions: [
+    { q: 'How to prevent overselling?', options: [
+      { name: 'DB constraint / conditional UPDATE in a transaction', verdict: 'good', why: 'The database enforces the rule even under races; simple to reason about.' },
+      { name: 'Check in cache, then write', verdict: 'bad', why: 'Two requests read "1 left" at the same time and both book.' },
+      { name: 'Distributed lock per hotel', verdict: 'ok', why: 'Works but adds a component and contention; not needed at this write rate.' } ] }
+  ],
+  refs: [
+    { label: 'PostgreSQL docs: Constraints (CHECK)', url: 'https://www.postgresql.org/docs/current/ddl-constraints.html' },
+    { label: 'Stripe docs: Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Hotel Reservation System" (book)', url: 'https://bytebytego.com/courses/system-design-interview/hotel-reservation-system' }
+  ],
+  verify: {
+    checked: ['CHECK constraints reject rows that break the condition: PostgreSQL constraints docs.', 'Idempotency keys return the original result on retry: Stripe idempotent requests docs.'],
+    uncertain: ['Hotel ids, counts, prices, the 10% overbooking and the 15-minute hold are illustrative.']
+  }
+});
+
+flow({
+  id: 'distributed-email',
+  title: 'Distributed email service (Gmail-style mailbox)',
+  category: 'Messaging & events',
+  tags: ['SMTP inbound', 'Spam / virus checks', 'Attachments in object storage', 'Mailbox metadata DB', 'Search index', 'Push sync (JMAP / IMAP IDLE)'],
+  summary: 'This is the receiving side of email: how a message from another provider lands in your inbox and on all your devices. Inbound SMTP servers accept it, filters check it, attachments go to object storage, metadata goes to a database partitioned by user, a search index is updated, and your devices are told to sync. Follow a normal email, a spam message, and the search afterwards.',
+  requirements: {
+    functional: ['Receive email for billions of mailboxes.', 'Folders/labels, read/unread, threads.', 'Full-text search over your own mail.', 'Sync to web and phone in near real time.'],
+    nonFunctional: ['Never lose an accepted email.', 'Strict isolation: one user\'s mail is never visible to another.', 'Storage dominated by attachments.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'ext', label: 'Sender\'s mail server', sub: 'other provider', kind: 'external', icon: 'globe', x: 0, y: 1, desc: 'Looks up the MX record for madgate.be and connects over SMTP.' },
+    { id: 'smtp', label: 'Inbound SMTP', sub: 'MX servers', kind: 'edge', icon: 'inbox', x: 1, y: 1, desc: 'Accepts the message and only replies "250 OK" after it is durably queued.' },
+    { id: 'filter', label: 'Filters', sub: 'SPF/DKIM/DMARC, spam, virus', kind: 'service', icon: 'shield', x: 1, y: 0, desc: 'Checks sender authentication and scores the message for spam and malware.' },
+    { id: 'store', label: 'Mail store service', sub: 'writes mailbox', kind: 'service', icon: 'server', x: 2, y: 1, desc: 'Splits the message into metadata, body and attachments and writes each to the right store.' },
+    { id: 'blob', label: 'Attachment store', sub: 'object storage', kind: 'storage', icon: 'storage', x: 2, y: 2, desc: 'Large bodies and attachments by content hash.' },
+    { id: 'meta', label: 'Mailbox DB', sub: 'partitioned by user_id', kind: 'db', icon: 'db', x: 3, y: 1, desc: 'Per-user rows: message id, thread, labels, flags, snippet, blob pointers.' },
+    { id: 'idx', label: 'Search index', sub: 'per-user inverted index', kind: 'db', icon: 'search', x: 3, y: 2, desc: 'Lets the user search their own mail by words, sender and date.' },
+    { id: 'push', label: 'Sync / push', sub: 'JMAP push, IMAP IDLE', kind: 'service', icon: 'bell', x: 3, y: 0, desc: 'Tells the user\'s connected clients that the mailbox state changed.' },
+    { id: 'client', label: 'Your devices', sub: 'web + phone', kind: 'client', icon: 'phone', x: 4, y: 1, desc: 'Fetch the changes since their last state and show the new message.' }
+  ],
+  pseudo: `
+smtp: MAIL FROM, RCPT TO <swampi@madgate.be>, DATA
+queue.durable_write(msg); reply "250 OK"
+verdict = filters(spf, dkim, dmarc, spam_score, av_scan)
+if verdict.spam: label = "Spam" else label = "Inbox"
+for a in msg.attachments: blob.put(sha256(a), a)
+mailbox.insert(user_id, msg_id, thread_id, label, flags, snippet, blob_refs)
+search.index(user_id, msg_id, words)
+state = mailbox.bump_state(user_id); push.notify(user_id, state)
+client: Email/changes(sinceState) -> Email/get(ids)`,
+  steps: [
+    {
+      from: 'ext', to: 'smtp', label: 'SMTP RCPT TO:<swampi@madgate.be>', pc: ['smtp: MAIL FROM'],
+      title: 'Another server delivers over SMTP',
+      caption: 'The sender\'s server found our MX record in DNS and connects. The message has a 2.4 MB PDF attached.',
+      text: [],
+      payloadKind: 'SMTP envelope',
+      payload: { mail_from: 'prof@uclouvain.be', rcpt_to: 'swampi@madgate.be', size_bytes: 2540000, subject: 'Graph theory: exam room' }
+    },
+    {
+      from: 'smtp', to: 'smtp', label: 'durably queued → "250 OK"', pc: ['queue.durable_write'],
+      title: 'Accept only once it is safe',
+      caption: 'After "250 OK" the sender deletes its copy, so the message must be on replicated disk first. Otherwise a crash would lose mail.',
+      text: [],
+      payloadKind: 'SMTP reply',
+      payload: { code: 250, text: '2.0.0 OK queued as q_88a1' }
+    },
+    {
+      from: 'smtp', to: 'filter', label: 'SPF pass, DKIM pass, spam 0.4', pc: ['verdict = filters'],
+      title: 'Authenticate and filter',
+      caption: 'SPF checks the sending IP is allowed for the domain, DKIM checks the signature, DMARC says what to do on failure. Then spam and virus scoring.',
+      text: [],
+      payloadKind: 'Verdict',
+      payload: { spf: 'pass', dkim: 'pass', dmarc: 'pass', spam_score: 0.4, virus: 'clean' },
+      branch: { q: 'Spam?', options: [ { label: 'no: Inbox', goto: 'att' }, { label: 'yes: Spam folder', goto: 'spam' } ] }
+    },
+    {
+      id: 'spam', path: 'spam', from: 'filter', to: 'store', label: 'DKIM fail, score 9.1 → label Spam', pc: ['if verdict.spam'],
+      title: 'Other outcome: spam',
+      caption: 'A message claiming to be from your bank fails DKIM and scores 9.1. It is still stored (users check spam folders), but labelled Spam and no notification is sent.',
+      text: [],
+      payloadKind: 'Spam verdict',
+      payload: { from: 'security@bank-be-verify.com', dkim: 'fail', spam_score: 9.1, label: 'Spam', notify: false }
+    },
+    {
+      id: 'att', from: 'store', to: 'blob', label: 'PUT att/9c2e… (2.4 MB PDF)', pc: ['blob.put'],
+      title: 'Attachments go to object storage',
+      caption: 'Big bytes do not belong in the mailbox database. They are stored by hash; a newsletter attachment sent to a million users can be stored once.',
+      text: [],
+      payloadKind: 'Blob',
+      payload: { key: 'att/9c2e…', size_bytes: 2410000, content_type: 'application/pdf' }
+    },
+    {
+      from: 'store', to: 'meta', label: 'insert msg into user u_8812 partition', pc: ['mailbox.insert'],
+      title: 'Write the mailbox row',
+      caption: 'Everything for one user lives in one partition, so listing the inbox is one partition read. The row holds labels, flags, thread id, a snippet and blob pointers.',
+      text: [],
+      payloadKind: 'Mailbox row',
+      payload: { user_id: 'u_8812', msg_id: 'm_01JDY…', thread_id: 't_4410', labels: ['Inbox'], unread: true, snippet: 'The exam will take place in room A.10…', blobs: ['att/9c2e…'] }
+    },
+    {
+      from: 'store', to: 'idx', label: 'index words for u_8812', pc: ['search.index'],
+      title: 'Index it for search',
+      caption: 'Words from subject, body and sender go into the user\'s own index.',
+      text: [],
+      payloadKind: 'Index entry',
+      payload: { user_id: 'u_8812', msg_id: 'm_01JDY…', terms: ['graph', 'theory', 'exam', 'room', 'a.10'] }
+    },
+    {
+      from: 'meta', to: 'push', label: 'state s_771 → s_772', pc: ['push.notify'],
+      title: 'Mailbox state changes, devices are told',
+      caption: 'Each change bumps a per-user state string. Connected clients get a push with the new state, not the email itself.',
+      text: [],
+      payloadKind: 'Push',
+      payload: { '@type': 'StateChange', changed: { u_8812: { Email: 's_772' } } }
+    },
+    {
+      from: 'push', to: 'client', label: 'Email/changes since s_771 → 1 created', pc: ['client: Email/changes'],
+      title: 'Each device fetches only what changed',
+      caption: 'The phone asks "what changed since s_771?", gets one new id, and fetches it. This is how JMAP (RFC 8620/8621) works; IMAP IDLE is the older equivalent.',
+      text: [],
+      payloadKind: 'JMAP',
+      payload: { request: ['Email/changes', { sinceState: 's_771' }], response: { created: ['m_01JDY…'], newState: 's_772' } }
+    }
+  ],
+  decisions: [
+    { q: 'Where to store bodies and attachments?', options: [
+      { name: 'Metadata in DB, blobs in object storage', verdict: 'good', why: 'DB stays small and fast; blobs are cheap and deduplicated.' },
+      { name: 'Everything in the DB', verdict: 'bad', why: 'Huge rows, expensive replication and backups.' } ] },
+    { q: 'Partition key?', options: [
+      { name: 'user_id', verdict: 'good', why: 'All mailbox queries are per user; strong isolation.' } ] }
+  ],
+  refs: [
+    { label: 'RFC 5321: Simple Mail Transfer Protocol', url: 'https://www.rfc-editor.org/rfc/rfc5321' },
+    { label: 'RFC 8620: The JSON Meta Application Protocol (JMAP)', url: 'https://www.rfc-editor.org/rfc/rfc8620' },
+    { label: 'RFC 8621: JMAP for Mail', url: 'https://www.rfc-editor.org/rfc/rfc8621' },
+    { label: 'RFC 7489: DMARC', url: 'https://www.rfc-editor.org/rfc/rfc7489' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Distributed Email Service" (book)', url: 'https://bytebytego.com/courses/system-design-interview/distributed-email-service' }
+  ],
+  verify: {
+    checked: ['SMTP envelope and 250 reply: RFC 5321.', 'State strings, Email/changes and push StateChange: RFC 8620 and RFC 8621.', 'DMARC builds on SPF and DKIM: RFC 7489.'],
+    uncertain: ['Addresses, sizes, scores and ids are illustrative. Gmail\'s internal storage design is not public; the split shown is the common design.']
+  }
+});
+
+flow({
+  id: 'object-storage',
+  title: 'S3-like object storage',
+  category: 'Data at scale',
+  tags: ['Buckets and keys', 'Metadata vs data path', 'Erasure coding 8+4', 'Placement across zones', 'Strong read-after-write', 'Multipart upload'],
+  summary: 'Object storage keeps trillions of immutable blobs. A PUT goes through an API layer that authenticates, a placement service picks storage nodes in different zones, the data is split into erasure-coded fragments, and only then is the key recorded in the metadata store. Follow an upload, a GET while a disk is dead, and a multipart upload.',
+  requirements: {
+    functional: ['PUT / GET / DELETE objects by bucket + key.', 'List keys by prefix.', 'Multipart upload for large files.'],
+    nonFunctional: ['Very high durability (designed for 11 nines at AWS).', 'A GET right after a successful PUT returns the new object.', 'Cost per GB as low as possible.']
+  },
+  estimates: ['Erasure coding 8 data + 4 parity fragments: 1.5× storage overhead and survives any 4 lost fragments. Three full copies cost 3× and survive 2.'],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'cli', label: 'Client', sub: 'SDK', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Signs requests with its access key (SigV4-style).' },
+    { id: 'api', label: 'API service', sub: 'auth + routing', kind: 'service', icon: 'server', x: 1, y: 1, desc: 'Checks signature and bucket policy, then coordinates the write or read.' },
+    { id: 'place', label: 'Placement service', sub: 'cluster map', kind: 'service', icon: 'split', x: 2, y: 0, desc: 'Knows every storage node, its zone and free space; picks 12 nodes for the fragments.' },
+    { id: 'ec', label: 'Data service', sub: 'erasure coder', kind: 'worker', icon: 'cpu', x: 2, y: 1, desc: 'Splits the object into 8 data fragments, computes 4 parity fragments, writes all 12.' },
+    { id: 'nodes', label: 'Storage nodes', sub: '3 zones', kind: 'storage', icon: 'storage', x: 3, y: 1, desc: 'Disks that store fragments in large append-only files.' },
+    { id: 'meta', label: 'Metadata store', sub: 'bucket/key → fragments', kind: 'db', icon: 'db', x: 2, y: 2, desc: 'Strongly consistent map from (bucket, key, version) to fragment locations, size, ETag.' },
+    { id: 'repair', label: 'Repair service', sub: 'background', kind: 'worker', icon: 'tool', x: 4, y: 1, desc: 'Finds missing fragments (dead disks) and rebuilds them elsewhere from the survivors.' }
+  ],
+  pseudo: `
+PUT /madgate-pages/static-bloom/050/01.webp  (auth: SigV4)
+nodes = placement.pick(12, spread_across=3 zones)
+frags = reed_solomon.encode(object, k=8, m=4)
+write frags[i] -> nodes[i] in parallel; wait for all 12 (or quorum + repair)
+meta.put(bucket, key, version, frag_locations, etag)   # commit point
+return 200 ETag
+GET: locs = meta.get(bucket, key); read any 8 of 12; decode
+background: if fragment missing: rebuild from 8 survivors`,
+  steps: [
+    {
+      from: 'cli', to: 'api', label: 'PUT /madgate-pages/static-bloom/050/01.webp', pc: ['PUT /madgate-pages'],
+      title: 'An object is uploaded',
+      caption: 'The key looks like a path, but it is just a string: there are no real folders. The API checks the signature and the bucket policy.',
+      text: [],
+      payloadKind: 'PUT',
+      payload: { bucket: 'madgate-pages', key: 'static-bloom/050/01.webp', bytes: 412000, content_type: 'image/webp', auth: 'AWS4-HMAC-SHA256 Credential=AKIA…' }
+    },
+    {
+      from: 'api', to: 'place', label: 'pick 12 nodes across 3 zones', pc: ['nodes = placement.pick'],
+      title: 'Choose where the fragments go',
+      caption: 'Four fragments per zone: losing a whole zone (4 fragments) still leaves 8, enough to read the object.',
+      text: [],
+      payloadKind: 'Placement',
+      payload: { zone_a: ['n12', 'n31', 'n44', 'n58'], zone_b: ['n103', 'n118', 'n121', 'n150'], zone_c: ['n207', 'n219', 'n233', 'n240'] }
+    },
+    {
+      from: 'api', to: 'ec', label: 'encode 412 KB → 8 + 4 fragments', pc: ['frags = reed_solomon.encode'],
+      title: 'Erasure-code the data',
+      caption: 'Reed–Solomon coding splits the object into 8 pieces and computes 4 parity pieces. Any 8 of the 12 are enough to rebuild it.',
+      text: ['Backblaze describes the same idea with 17 data + 3 parity shards in its Vaults.'],
+      payloadKind: 'Fragments',
+      payload: { k: 8, m: 4, fragment_bytes: 51500, overhead: '1.5×' }
+    },
+    {
+      from: 'ec', to: 'nodes', label: 'write 12 fragments in parallel', pc: ['write frags[i]'],
+      title: 'Write the fragments',
+      caption: 'Each node appends its fragment to a large file and fsyncs. Small objects are packed together so the disk does not hold billions of tiny files.',
+      text: [],
+      payloadKind: 'Writes',
+      payload: { acked: 12, slowest_ms: 18 }
+    },
+    {
+      from: 'api', to: 'meta', label: 'commit key → fragment list (version v3)', pc: ['meta.put'],
+      title: 'Commit the metadata last',
+      caption: 'Only after the data is safe is the key written. That metadata write is the moment the object exists; a crash before it leaves orphan fragments that garbage collection removes.',
+      text: ['Amazon S3 gives strong read-after-write consistency: after a successful write, overwrite or delete, any later read gets the latest version, and listings reflect it too.'],
+      payloadKind: 'Metadata row',
+      payload: { bucket: 'madgate-pages', key: 'static-bloom/050/01.webp', version: 'v3', size: 412000, etag: '"9b2cf535f27731c974343645a3985328"', fragments: 12 }
+    },
+    {
+      from: 'api', to: 'cli', reply: true, label: '200 OK, ETag "9b2c…"', pc: ['return 200 ETag'],
+      title: 'Success, and immediately readable',
+      caption: 'A GET from anywhere right now returns this version.',
+      text: [],
+      payloadKind: 'Response',
+      payload: { status: 200, ETag: '"9b2cf535f27731c974343645a3985328"' },
+      branch: { q: 'What can happen next?', options: [ { label: 'a disk with a fragment dies', goto: 'dead' }, { label: 'a 3.2 GB file is uploaded', goto: 'multi' } ] }
+    },
+    {
+      id: 'dead', path: 'dead', from: 'nodes', to: 'repair', label: 'n118 disk failed → rebuild fragment 6', pc: ['GET: locs = meta.get', 'background: if fragment missing'],
+      title: 'Other outcome: a dead disk',
+      caption: 'A GET still works: it reads any 8 of the 11 remaining fragments and decodes. In the background the repair service rebuilds fragment 6 on a new node so the object is back to full protection.',
+      text: [],
+      payloadKind: 'Repair',
+      payload: { failed_node: 'n118', fragment: 6, rebuilt_on: 'n162', read_latency_ms: 31, durability_restored: true },
+      next: 'end'
+    },
+    {
+      id: 'multi', path: 'multi', from: 'cli', to: 'api', label: 'multipart: 3.2 GB in 100 MB parts', pc: ['PUT /madgate-pages'],
+      title: 'Other outcome: a big file uses multipart upload',
+      caption: 'A 3.2 GB video is uploaded as 33 parts in parallel; a failed part is retried alone. CompleteMultipartUpload stitches the part list into one object.',
+      text: [],
+      payloadKind: 'Multipart',
+      payload: { upload_id: 'u_7Qx…', parts: 33, part_size_mb: 100, complete: { parts: [{ n: 1, etag: '"a1…"' }, '…'] } }
+    },
+    {
+      id: 'end', from: 'cli', to: 'api', label: 'GET …/050/01.webp → 412 KB', pc: ['read any 8 of 12; decode'],
+      title: 'Reads use the metadata, then the fastest 8',
+      caption: 'The API looks up the fragment list and reads from the fastest 8 nodes; slow ones are ignored.',
+      text: [],
+      payloadKind: 'GET',
+      payload: { status: 200, bytes: 412000, fragments_read: 8, ms: 24 }
+    }
+  ],
+  decisions: [
+    { q: 'Replication or erasure coding?', options: [
+      { name: 'Erasure coding', verdict: 'good', why: '1.5× cost and tolerates more failures; reads cost some CPU.' },
+      { name: '3 full copies', verdict: 'ok', why: 'Simpler and faster to read, but 3× the disks.' } ] }
+  ],
+  refs: [
+    { label: 'Amazon S3: Strong read-after-write consistency', url: 'https://aws.amazon.com/s3/consistency/' },
+    { label: 'Amazon S3 User Guide: Data protection (11 nines, 3 Availability Zones)', url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/DataDurability.html' },
+    { label: 'Amazon S3 User Guide: Multipart upload', url: 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html' },
+    { label: 'Backblaze: Reed-Solomon erasure coding explained', url: 'https://www.backblaze.com/blog/reed-solomon/' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "S3-like Object Storage" (book)', url: 'https://bytebytego.com/courses/system-design-interview/s3-like-object-storage' }
+  ],
+  verify: {
+    checked: ['Strong read-after-write and list consistency: AWS S3 consistency page.', 'Designed for 99.999999999% durability, stored across at least three Availability Zones: S3 data protection docs.', 'Erasure coding idea and Backblaze 17+3: Backblaze post.', 'Multipart upload and CompleteMultipartUpload: S3 multipart docs.'],
+    uncertain: ['The 8+4 scheme, node names and timings are illustrative; AWS does not publish S3\'s internal coding scheme.']
+  }
+});
+
+flow({
+  id: 'payment-reconciliation',
+  title: 'Payment system: PSP webhooks, ledger and reconciliation',
+  category: 'Commerce & money',
+  tags: ['Idempotency keys', 'PSP webhook', 'Double-entry ledger', 'Settlement file', 'Nightly reconciliation', 'Payouts to sellers', 'Mismatch queue'],
+  summary: 'Taking a payment is only half of a payment system. The money has to be recorded in a ledger, matched against what the payment provider actually settled to your bank, and paid out to sellers. This flow follows a charge confirmed by webhook, the nightly reconciliation that compares three sources, a mismatch that goes to a human, and the seller payout.',
+  requirements: {
+    functional: ['Record every money movement in a double-entry ledger.', 'Match internal records with the PSP\'s settlement report every day.', 'Pay sellers their balance minus fees on a schedule.'],
+    nonFunctional: ['Never charge or pay twice.', 'Every cent explainable: an audit can trace any balance to entries.', 'Mismatches are found within a day, not at the end of the quarter.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'pay', label: 'Payment service', sub: 'payment orders', kind: 'service', icon: 'card', x: 1, y: 1, desc: 'Tracks each payment order: CREATED → PENDING → SUCCEEDED / FAILED. Calls the PSP with an idempotency key.' },
+    { id: 'psp', label: 'PSP', sub: 'Stripe / Adyen', kind: 'external', icon: 'external', x: 0, y: 0, desc: 'Charges the card and later settles the money (minus fees) to the platform\'s bank account.' },
+    { id: 'ledger', label: 'Ledger', sub: 'double-entry, append-only', kind: 'db', icon: 'doc', x: 2, y: 1, desc: 'Every movement is two entries that sum to zero. Balances are sums of entries.' },
+    { id: 'recon', label: 'Reconciliation job', sub: 'nightly', kind: 'worker', icon: 'check', x: 2, y: 0, desc: 'Loads the PSP settlement report and compares it line by line with payment orders and ledger entries.' },
+    { id: 'ops', label: 'Finance ops', sub: 'mismatch queue', kind: 'client', icon: 'user', x: 4, y: 0, desc: 'Investigates lines that do not match and fixes them with adjusting entries, never by editing history.' },
+    { id: 'payout', label: 'Payout service', sub: 'weekly', kind: 'worker', icon: 'wallet', x: 3, y: 1, desc: 'Pays each seller\'s available balance to their bank account.' },
+    { id: 'bank', label: 'Seller\'s bank', sub: 'SEPA transfer', kind: 'external', icon: 'building', x: 4, y: 1, desc: 'Receives the payout.' },
+    { id: 'shop', label: 'Checkout', sub: 'buyer', kind: 'client', icon: 'cart', x: 0, y: 2, desc: 'Where the payment order started.' }
+  ],
+  pseudo: `
+order = create_payment_order(id=po_551, amount=4990, idempotency_key=po_551)
+psp.charge(order)  ->  webhook payment_intent.succeeded (may arrive twice)
+on_webhook(evt): if processed(evt.id): return 200
+    order.status = SUCCEEDED
+    ledger.post([(buyer_clearing, -4990), (seller_balance, +4490), (platform_fees, +500)])
+nightly: report = psp.settlement_report(date)
+for line in report: match(line, orders[line.ref], ledger[line.ref])
+    if mismatch: open_case(line)
+weekly: for seller: amount = available_balance(seller); bank.transfer(seller, amount, key=payout_id)
+    ledger.post([(seller_balance, -amount), (bank_out, +amount)])`,
+  steps: [
+    {
+      from: 'shop', to: 'pay', label: 'create payment order po_551 €49.90', pc: ['order = create_payment_order'],
+      title: 'A payment order is created',
+      caption: 'The buyer pays €49.90 to a seller on the marketplace. The order id doubles as the idempotency key for every call to the PSP.',
+      text: [],
+      payloadKind: 'Payment order',
+      payload: { id: 'po_551', amount_cents: 4990, currency: 'EUR', buyer: 'u_88', seller: 's_12', status: 'CREATED' }
+    },
+    {
+      from: 'pay', to: 'psp', label: 'charge (Idempotency-Key: po_551)', pc: ['psp.charge(order)'],
+      title: 'Charge through the PSP',
+      caption: 'If the call times out, the service retries with the same key and the PSP returns the first result instead of charging again.',
+      text: ['Airbnb\'s engineering team described building an idempotency library for exactly this reason: retries in a distributed payment flow must never double-charge.'],
+      payloadKind: 'Charge request',
+      payload: { amount: 4990, currency: 'eur', idempotency_key: 'po_551', metadata: { payment_order: 'po_551' } }
+    },
+    {
+      from: 'psp', to: 'pay', label: 'webhook payment_intent.succeeded (evt_9a)', pc: ['on_webhook(evt)', 'order.status = SUCCEEDED'],
+      title: 'The PSP confirms by webhook',
+      caption: 'Webhooks are at-least-once: the same event can arrive twice. The handler stores processed event ids and ignores repeats.',
+      text: [],
+      payloadKind: 'Webhook',
+      payload: { id: 'evt_9a', type: 'payment_intent.succeeded', data: { id: 'pi_3Q…', amount: 4990, metadata: { payment_order: 'po_551' } } }
+    },
+    {
+      from: 'pay', to: 'ledger', label: 'post 3 entries, sum = 0', pc: ['ledger.post([(buyer_clearing'],
+      title: 'Record it in the double-entry ledger',
+      caption: 'Money is never created or lost: −€49.90 from clearing, +€44.90 to the seller\'s balance, +€5.00 platform fee. The entries sum to zero.',
+      text: [],
+      payloadKind: 'Ledger entries',
+      payload: { tx: 'tx_551', entries: [{ account: 'buyer_clearing', cents: -4990 }, { account: 'seller:s_12', cents: 4490 }, { account: 'platform_fees', cents: 500 }], sum: 0 }
+    },
+    {
+      from: 'recon', to: 'psp', label: 'download settlement report 2026-11-26', pc: ['nightly: report = psp.settlement_report'],
+      title: 'Nightly: get what the PSP really settled',
+      caption: 'The PSP\'s report lists every charge, refund and fee that made up the money transferred to the platform\'s bank, each with its reference.',
+      text: [],
+      payloadKind: 'Settlement line',
+      payload: { ref: 'po_551', gross: 4990, psp_fee: 87, net: 4903, payout_id: 'po_psp_771', type: 'charge' }
+    },
+    {
+      from: 'recon', to: 'ledger', label: 'match 18 204 lines vs orders + ledger', pc: ['for line in report: match'],
+      title: 'Match three sources line by line',
+      caption: 'For each settlement line: is there a SUCCEEDED payment order with this reference and amount, and ledger entries for it? 18 203 match.',
+      text: [],
+      payloadKind: 'Recon summary',
+      payload: { date: '2026-11-26', lines: 18204, matched: 18203, mismatched: 1 },
+      branch: { q: 'Any mismatch?', options: [ { label: 'yes: open a case', goto: 'case' }, { label: 'no: close the day', goto: 'payout1' } ] }
+    },
+    {
+      id: 'case', path: 'case', from: 'recon', to: 'ops', label: 'po_602: PSP settled, our order says FAILED', pc: ['if mismatch: open_case'],
+      title: 'Other outcome: a mismatch',
+      caption: 'The PSP settled €12.00 for po_602, but our order is FAILED: the success webhook was lost during an outage. Finance ops confirms it and posts an adjusting entry; history is never edited.',
+      text: [],
+      payloadKind: 'Case',
+      payload: { ref: 'po_602', psp: 'succeeded 1200', internal: 'FAILED', fix: 'mark SUCCEEDED + adjusting ledger entry adj_77', resolved_by: 'finance-ops' }
+    },
+    {
+      id: 'payout1', from: 'payout', to: 'ledger', label: 'seller s_12 available: €1 284.10', pc: ['weekly: for seller', 'available_balance'],
+      title: 'Weekly payout: compute available balances',
+      caption: 'The available balance is the sum of the seller\'s ledger entries, minus funds still in a refund-hold window.',
+      text: [],
+      payloadKind: 'Balance',
+      payload: { seller: 's_12', balance_cents: 141210, on_hold_cents: 12800, available_cents: 128410 }
+    },
+    {
+      from: 'payout', to: 'bank', label: 'SEPA €1 284.10 (key payout_2026w48_s12)', pc: ['bank.transfer', '(seller_balance, -amount)'],
+      title: 'Pay the seller, idempotently',
+      caption: 'The transfer uses a key per seller per week so a retry cannot pay twice, and the payout is posted to the ledger like every other movement.',
+      text: [],
+      payloadKind: 'Payout',
+      payload: { seller: 's_12', iban: 'BE71 0961 2345 6769', amount_cents: 128410, key: 'payout_2026w48_s12', ledger: [{ account: 'seller:s_12', cents: -128410 }, { account: 'bank_out', cents: 128410 }] }
+    }
+  ],
+  decisions: [
+    { q: 'Trust webhooks alone?', options: [
+      { name: 'Webhooks + nightly reconciliation', verdict: 'good', why: 'Webhooks are fast; reconciliation catches the ones that were lost or mis-processed.' },
+      { name: 'Webhooks only', verdict: 'bad', why: 'A lost webhook becomes a silent money discrepancy.' } ] },
+    { q: 'Fix errors how?', options: [
+      { name: 'Adjusting entries', verdict: 'good', why: 'Append-only history stays auditable.' },
+      { name: 'UPDATE the wrong row', verdict: 'bad', why: 'Destroys the audit trail.' } ] }
+  ],
+  refs: [
+    { label: 'Stripe docs: Payout reconciliation report', url: 'https://docs.stripe.com/reports/payout-reconciliation' },
+    { label: 'Stripe docs: Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' },
+    { label: 'Stripe docs: Webhooks (duplicate events)', url: 'https://docs.stripe.com/webhooks' },
+    { label: 'Airbnb Engineering: Avoiding double payments in a distributed payments system', url: 'https://medium.com/airbnb-engineering/avoiding-double-payments-in-a-distributed-payments-system-2981f6b070bb' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Payment System" (book)', url: 'https://bytebytego.com/courses/system-design-interview/payment-system' }
+  ],
+  verify: {
+    checked: ['Settlement report that matches payouts to the underlying transactions: Stripe payout reconciliation docs.', 'Idempotency keys and duplicate webhook events: Stripe docs.', 'Idempotency to avoid double payments: Airbnb engineering post.'],
+    uncertain: ['Amounts, fees, line counts and the IBAN (a published example format) are illustrative.']
+  }
+});
+
+flow({
+  id: 'digital-wallet',
+  title: 'Digital wallet: transfers across shards',
+  category: 'Commerce & money',
+  tags: ['Accounts sharded by id', 'Two-phase transfer (reserve / post)', 'Pending → posted / voided', 'Event sourcing', 'Idempotent commands', 'Replay to rebuild state'],
+  summary: 'Alice sends Bob €20 in an app. Their balances live on different database shards, so one local transaction cannot cover both. The wallet reserves the money on Alice\'s shard, credits Bob\'s, then finalises, and every step is an event in an append-only log that can rebuild any balance. Follow a transfer, a failure that voids the reservation, and a replay.',
+  requirements: {
+    functional: ['Transfer money between any two accounts.', 'Show balance and history.', 'Audit: explain any balance at any point in time.'],
+    nonFunctional: ['Money is never created or lost, even if a service crashes mid-transfer.', 'A retried transfer request happens once.', 'Thousands of transfers per second.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Alice\'s app', sub: 'send €20', kind: 'client', icon: 'phone', x: 0, y: 1, desc: 'Sends a transfer command with a client-generated id.' },
+    { id: 'coord', label: 'Transfer coordinator', sub: 'state machine', kind: 'service', icon: 'split', x: 1, y: 1, desc: 'Drives the transfer through RESERVED → CREDITED → POSTED (or VOIDED) and persists each state.' },
+    { id: 'shA', label: 'Shard A', sub: 'Alice\'s account', kind: 'db', icon: 'wallet', x: 2, y: 0, desc: 'Holds Alice\'s balance and pending amounts.' },
+    { id: 'shB', label: 'Shard B', sub: 'Bob\'s account', kind: 'db', icon: 'wallet', x: 2, y: 2, desc: 'Holds Bob\'s balance.' },
+    { id: 'log', label: 'Event log', sub: 'append-only', kind: 'queue', icon: 'log', x: 3, y: 1, desc: 'Every command result as an event: TransferReserved, Credited, Posted, Voided. The source of truth.' },
+    { id: 'view', label: 'Balance views', sub: 'projections', kind: 'cache', icon: 'chart', x: 4, y: 1, desc: 'Read models built by replaying events: balances, history, statements.' }
+  ],
+  pseudo: `
+cmd = Transfer(id=t_301, from=alice, to=bob, amount=2000)
+if log.has(t_301): return log.state(t_301)          # idempotent
+shardA: if available(alice) >= 2000: pending(alice) += 2000 -> TransferReserved
+shardB: balance(bob) += 2000 -> Credited
+shardA: pending(alice) -= 2000; balance(alice) -= 2000 -> Posted
+if credit fails: shardA: pending(alice) -= 2000 -> Voided
+views: balance(acct) = fold(events for acct)
+rebuild: replay(log from 0) -> same balances`,
+  steps: [
+    {
+      from: 'app', to: 'coord', label: 'Transfer t_301: alice → bob €20', pc: ['cmd = Transfer', 'if log.has(t_301)'],
+      title: 'A transfer command arrives',
+      caption: 'The app generates t_301 before sending. If the network drops and the app retries, the coordinator sees t_301 already exists and returns its current state.',
+      text: [],
+      payloadKind: 'Command',
+      payload: { id: 't_301', from: 'acct_alice', to: 'acct_bob', amount_cents: 2000, currency: 'EUR' }
+    },
+    {
+      from: 'coord', to: 'shA', label: 'reserve €20 on Alice (pending)', pc: ['shardA: if available'],
+      title: 'Phase 1: reserve on Alice\'s shard',
+      caption: 'A local transaction on shard A checks Alice can afford it and moves €20 to "pending". She cannot spend it twice, but it has not left yet.',
+      text: ['TigerBeetle, a financial database, has this exact primitive: a pending transfer that is later posted or voided.'],
+      payloadKind: 'Shard A',
+      payload: { account: 'acct_alice', balance: 15000, pending: '0 → 2000', available: '15000 → 13000' }
+    },
+    {
+      from: 'shA', to: 'log', label: 'TransferReserved t_301', pc: ['-> TransferReserved'],
+      title: 'Record the event',
+      caption: 'The state change is appended to the log. If the coordinator crashes now, a new one reads the log and continues from RESERVED.',
+      text: [],
+      payloadKind: 'Event',
+      payload: { seq: 88120, type: 'TransferReserved', transfer: 't_301', account: 'acct_alice', amount: 2000 }
+    },
+    {
+      from: 'coord', to: 'shB', label: 'credit Bob €20', pc: ['shardB: balance(bob)'],
+      title: 'Phase 2: credit Bob\'s shard',
+      caption: 'A local transaction on shard B adds €20 to Bob, keyed by t_301 so a retry does not credit twice.',
+      text: [],
+      payloadKind: 'Shard B',
+      payload: { account: 'acct_bob', balance: '4200 → 6200', applied_transfer: 't_301' },
+      branch: { q: 'Did the credit succeed?', options: [ { label: 'yes: post', goto: 'post' }, { label: 'no: void the reservation', goto: 'void' } ] }
+    },
+    {
+      id: 'void', path: 'void', from: 'coord', to: 'shA', label: 'acct_bob frozen → void, release €20', pc: ['if credit fails'],
+      title: 'Other outcome: void',
+      caption: 'Bob\'s account is frozen by compliance, so the credit is rejected. The coordinator voids the reservation: Alice\'s pending €20 becomes available again. No money moved.',
+      text: [],
+      payloadKind: 'Void',
+      payload: { transfer: 't_301', event: 'TransferVoided', reason: 'destination_frozen', alice_available: '13000 → 15000' },
+      next: 'proj'
+    },
+    {
+      id: 'post', from: 'coord', to: 'shA', label: 'post: pending −€20, balance −€20', pc: ['shardA: pending(alice) -= 2000; balance'],
+      title: 'Phase 3: post on Alice\'s shard',
+      caption: 'The pending amount becomes a real debit. The transfer is complete, and the total across both shards is unchanged.',
+      text: [],
+      payloadKind: 'Shard A',
+      payload: { account: 'acct_alice', balance: '15000 → 13000', pending: '2000 → 0', event: 'TransferPosted' }
+    },
+    {
+      id: 'proj', from: 'log', to: 'view', label: 'fold events → balances + history', pc: ['views: balance(acct) = fold'],
+      title: 'Views are built from events',
+      caption: 'The app\'s history screen and balances are projections of the log. Adding a new view (monthly statement) means replaying old events into it.',
+      text: ['This is event sourcing: state is derived from an append-only sequence of events rather than stored as the only copy.'],
+      payloadKind: 'Projection',
+      payload: { acct_alice: { balance: 13000, last_event: 88122 }, acct_bob: { balance: 6200, last_event: 88121 } }
+    },
+    {
+      from: 'view', to: 'log', label: 'replay from seq 0 → same balances', pc: ['rebuild: replay'],
+      title: 'Audit or recover by replaying',
+      caption: 'Lose a view, or need "Alice\'s balance on 1 Nov"? Replay events up to that point. Same events in the same order always give the same result.',
+      text: [],
+      payloadKind: 'Replay',
+      payload: { from_seq: 0, to_seq: 88122, accounts: 1200000, matches_live: true }
+    }
+  ],
+  decisions: [
+    { q: 'Cross-shard transfer method?', options: [
+      { name: 'Reserve / post (TC/C style) with a persisted state machine', verdict: 'good', why: 'Each step is a local transaction; crashes resume from the log.' },
+      { name: '2PC across shards', verdict: 'ok', why: 'Atomic, but holds locks during the protocol and blocks if the coordinator dies.' },
+      { name: 'Two independent updates', verdict: 'bad', why: 'A crash between them creates or destroys money.' } ] }
+  ],
+  refs: [
+    { label: 'TigerBeetle docs: Two-phase transfers (pending, post, void)', url: 'https://docs.tigerbeetle.com/coding/two-phase-transfers/' },
+    { label: 'Martin Fowler: Event Sourcing', url: 'https://martinfowler.com/eaaDev/EventSourcing.html' },
+    { label: 'microservices.io: Saga pattern', url: 'https://microservices.io/patterns/data/saga.html' },
+    { label: 'ByteByteGo: System Design Interview Vol. 2, chapter "Digital Wallet" (book)', url: 'https://bytebytego.com/courses/system-design-interview/digital-wallet' }
+  ],
+  verify: {
+    checked: ['Pending transfers that are later posted or voided: TigerBeetle docs.', 'State rebuilt by replaying events: Fowler, Event Sourcing.'],
+    uncertain: ['Balances, sequence numbers and account counts are illustrative. Real wallets also need fraud checks and limits not shown.']
   }
 });
 
