@@ -2,7 +2,7 @@
   --bg:#f7f5f0; --panel:#ffffff; --panel2:#fbfaf7; --ink:#1d1c1a; --ink2:#3d3b37; --muted:#77736b; --rule:#e6e2d9; --rule2:#d8d3c7;
   --code-bg:#f3f1ea; --code-ink:#2a2925; --shadow:0 1px 2px rgba(40,30,10,.06),0 4px 14px rgba(40,30,10,.06);
   --accent:#e0911a; --accent-ink:#8a5200;
-  --k-client:#2f6fde; --k-edge:#7c5cd6; --k-service:#0f8f84; --k-worker:#3f9b4f; --k-db:#c98a12; --k-cache:#d9453b; --k-queue:#e07b24; --k-storage:#9a6b3f; --k-external:#c2477f;
+  --k-client:#2f6fde; --k-edge:#7c5cd6; --k-service:#0f8f84; --k-worker:#3f9b4f; --k-db:#c98a12; --k-cache:#d9453b; --k-queue:#e07b24; --k-storage:#9a6b3f; --k-external:#c2477f; --k-ai:#b5179e;
   --add-bg:rgba(63,155,79,.13); --add-ink:#2c7a3b; --chg-bg:rgba(224,145,26,.15); --chg-ink:#9a5d00; --del-ink:#b4443b;
   --serif:"Iowan Old Style","Charter","Source Serif Pro",Georgia,serif;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -13,14 +13,14 @@
   --bg:#151513; --panel:#1e1d1b; --panel2:#232220; --ink:#efece6; --ink2:#d6d2ca; --muted:#9c978d; --rule:#2f2d29; --rule2:#3b3934;
   --code-bg:#191816; --code-ink:#e6e2da; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
   --accent:#f0a53a; --accent-ink:#f6c37a;
-  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa;
+  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa; --k-ai:#e46fd0;
   --add-bg:rgba(108,196,123,.16); --add-ink:#8fdc9c; --chg-bg:rgba(240,165,58,.17); --chg-ink:#f6c37a; --del-ink:#f0897f;
 }}
 :root[data-theme=dark]{
   --bg:#151513; --panel:#1e1d1b; --panel2:#232220; --ink:#efece6; --ink2:#d6d2ca; --muted:#9c978d; --rule:#2f2d29; --rule2:#3b3934;
   --code-bg:#191816; --code-ink:#e6e2da; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
   --accent:#f0a53a; --accent-ink:#f6c37a;
-  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa;
+  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa; --k-ai:#e46fd0;
   --add-bg:rgba(108,196,123,.16); --add-ink:#8fdc9c; --chg-bg:rgba(240,165,58,.17); --chg-ink:#f6c37a; --del-ink:#f0897f;
 }
 *{box-sizing:border-box}
@@ -33,7 +33,7 @@ code,pre,kbd{font-family:var(--mono)}
 
 /* top bar */
 .sd-top{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--rule)}
-.sd-top-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px}
+.sd-top-in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px}
 .sd-brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:650;letter-spacing:-.01em}
 .sd-logo{width:28px;height:28px;display:grid;grid-template-columns:1fr 1fr;gap:2px}
 .sd-logo i{border-radius:4px}
@@ -44,7 +44,7 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-nav a.on{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
 .sd-progressbar{position:absolute;left:0;bottom:-1px;height:2px;background:var(--accent);width:0;transition:width .25s}
 
-.sd-main{max-width:1240px;margin:0 auto;padding:22px 18px 120px}
+.sd-main{max-width:1440px;margin:0 auto;padding:22px 18px 120px}
 
 /* home */
 .sd-hero{padding:26px 0 12px;max-width:760px}
@@ -90,8 +90,35 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-jump a{flex:none;font-size:13px;text-decoration:none;border:1px solid var(--rule);background:var(--panel);padding:6px 11px;border-radius:999px;color:var(--ink2)}
 .sd-jump a:hover{border-color:var(--rule2);color:var(--ink)}
 
-.sd-sim{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:start}
-.sd-stage{position:sticky;top:66px;display:flex;flex-direction:column;gap:12px}
+.sd-sim{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);grid-template-areas:"stage cap" "panel panel";gap:16px;align-items:start}
+.sd-stage{grid-area:stage;display:flex;flex-direction:column;overflow:hidden}
+.sd-cappane{grid-area:cap;position:sticky;top:66px;display:flex;flex-direction:column;max-height:calc(100vh - 80px);overflow:auto}
+.sd-sim>.sd-panel{grid-area:panel}
+.sd-diagram{min-height:420px}
+.sd-pbadge{position:absolute;transform:translate(-50%,-50%);font:700 10px/16px var(--mono);min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--muted);color:var(--panel);text-align:center;font-style:normal;z-index:3;box-shadow:0 0 0 2px var(--panel2)}
+.sd-wire.alt{stroke:var(--muted);stroke-width:1.6;stroke-dasharray:1 4;stroke-linecap:round;opacity:.75}
+.sd-altlabel{position:absolute;transform:translate(-50%,-50%);font:600 10px var(--mono);color:var(--muted);background:var(--panel2);border:1px dashed var(--rule2);border-radius:7px;padding:1px 6px;white-space:nowrap;z-index:3;pointer-events:none}
+.sd-altlabel.on{color:var(--ink);border-style:solid;border-color:var(--ink2)}
+.sd-wlabel.above{transform:translate(-50%,calc(-100% - 8px));white-space:normal;text-overflow:clip}
+.sd-fork{display:none;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 16px 10px}
+.sd-fork.show{display:flex}
+.sd-fork .q{width:100%;font:600 12px var(--mono);color:var(--muted)}
+.sd-chip{font:600 12.5px var(--mono);border:1.5px solid var(--rule2);background:var(--panel2);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+.sd-chip:hover{border-color:var(--ink2)}
+.sd-chip.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.sd-pathtag{border-style:dashed}
+.sd-dot.alt{border-style:dashed}
+.sd-pseudo{border-top:1px solid var(--rule);padding:10px 12px 12px}
+.sd-phead{display:flex;flex-direction:column;gap:1px;margin:0 4px 8px}
+.sd-phead span{font:600 13px var(--mono)}
+.sd-phead small{font:11px var(--mono);color:var(--muted)}
+#pc{max-height:300px;overflow:auto;margin:0;padding:6px 0;font-size:12px;line-height:1.55}
+#pc code{display:block}
+#pc .pl{display:block;padding:0 10px 0 0;border-left:3px solid transparent;cursor:pointer;white-space:pre}
+#pc .pl i{display:inline-block;width:30px;text-align:right;padding-right:10px;font-style:normal;color:var(--muted);opacity:.7;user-select:none}
+#pc .pl.on{background:color-mix(in srgb,var(--kc) 18%,transparent);border-left-color:var(--kc)}
+#pc .pl.on i{color:var(--kc);opacity:1;font-weight:700}
+#pc .pl.done{opacity:.6}
 .sd-box{background:var(--panel);border:1px solid var(--rule);border-radius:var(--r);box-shadow:var(--shadow)}
 .sd-diagram{position:relative;margin:0;padding:14px;overflow:hidden;background:
   radial-gradient(circle,var(--rule2) 1px,transparent 1.2px) 0 0/18px 18px,var(--panel2);border-radius:var(--r) var(--r) 0 0}
@@ -272,8 +299,9 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-bar{display:none}
 
 @media (max-width:980px){
-  .sd-sim{grid-template-columns:1fr}
-  .sd-stage{position:static}
+  .sd-sim{grid-template-columns:1fr;grid-template-areas:"stage" "cap" "panel"}
+  .sd-cappane{position:static;max-height:none}
+  .sd-diagram{min-height:0}
   .sd-tabs{top:53px}
 }
 @media (max-width:720px){
@@ -301,5 +329,14 @@ code,pre,kbd{font-family:var(--mono)}
   .sd-bar .mid{flex:0 0 auto;min-width:72px;text-align:center;font:600 13px var(--mono)}
   .sd-bar svg{width:18px;height:18px}
   .sd-dots{display:none}
+  .sd-pbadge{font-size:9px;min-width:14px;height:14px;line-height:14px}
+  .sd-altlabel{font-size:9px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.sd-verify{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.sd-verify>div{border:1px solid var(--rule);border-radius:12px;padding:12px 16px;background:var(--panel)}
+.sd-verify h3{font-size:14px;margin:0 0 6px}
+.sd-verify .unc{border-style:dashed}
+@media (max-width:760px){.sd-verify{grid-template-columns:1fr}}
+#pc{position:relative}

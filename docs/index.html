@@ -11,7 +11,7 @@
   --bg:#f7f5f0; --panel:#ffffff; --panel2:#fbfaf7; --ink:#1d1c1a; --ink2:#3d3b37; --muted:#77736b; --rule:#e6e2d9; --rule2:#d8d3c7;
   --code-bg:#f3f1ea; --code-ink:#2a2925; --shadow:0 1px 2px rgba(40,30,10,.06),0 4px 14px rgba(40,30,10,.06);
   --accent:#e0911a; --accent-ink:#8a5200;
-  --k-client:#2f6fde; --k-edge:#7c5cd6; --k-service:#0f8f84; --k-worker:#3f9b4f; --k-db:#c98a12; --k-cache:#d9453b; --k-queue:#e07b24; --k-storage:#9a6b3f; --k-external:#c2477f;
+  --k-client:#2f6fde; --k-edge:#7c5cd6; --k-service:#0f8f84; --k-worker:#3f9b4f; --k-db:#c98a12; --k-cache:#d9453b; --k-queue:#e07b24; --k-storage:#9a6b3f; --k-external:#c2477f; --k-ai:#b5179e;
   --add-bg:rgba(63,155,79,.13); --add-ink:#2c7a3b; --chg-bg:rgba(224,145,26,.15); --chg-ink:#9a5d00; --del-ink:#b4443b;
   --serif:"Iowan Old Style","Charter","Source Serif Pro",Georgia,serif;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -22,14 +22,14 @@
   --bg:#151513; --panel:#1e1d1b; --panel2:#232220; --ink:#efece6; --ink2:#d6d2ca; --muted:#9c978d; --rule:#2f2d29; --rule2:#3b3934;
   --code-bg:#191816; --code-ink:#e6e2da; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
   --accent:#f0a53a; --accent-ink:#f6c37a;
-  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa;
+  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa; --k-ai:#e46fd0;
   --add-bg:rgba(108,196,123,.16); --add-ink:#8fdc9c; --chg-bg:rgba(240,165,58,.17); --chg-ink:#f6c37a; --del-ink:#f0897f;
 }}
 :root[data-theme=dark]{
   --bg:#151513; --panel:#1e1d1b; --panel2:#232220; --ink:#efece6; --ink2:#d6d2ca; --muted:#9c978d; --rule:#2f2d29; --rule2:#3b3934;
   --code-bg:#191816; --code-ink:#e6e2da; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
   --accent:#f0a53a; --accent-ink:#f6c37a;
-  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa;
+  --k-client:#6c9cf0; --k-edge:#a68cf0; --k-service:#3cc0b3; --k-worker:#6cc47b; --k-db:#e6ad3c; --k-cache:#f07a70; --k-queue:#f29a50; --k-storage:#c99a6c; --k-external:#e57aaa; --k-ai:#e46fd0;
   --add-bg:rgba(108,196,123,.16); --add-ink:#8fdc9c; --chg-bg:rgba(240,165,58,.17); --chg-ink:#f6c37a; --del-ink:#f0897f;
 }
 *{box-sizing:border-box}
@@ -42,7 +42,7 @@ code,pre,kbd{font-family:var(--mono)}
 
 /* top bar */
 .sd-top{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--rule)}
-.sd-top-in{max-width:1240px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px}
+.sd-top-in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px}
 .sd-brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:650;letter-spacing:-.01em}
 .sd-logo{width:28px;height:28px;display:grid;grid-template-columns:1fr 1fr;gap:2px}
 .sd-logo i{border-radius:4px}
@@ -53,7 +53,7 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-nav a.on{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
 .sd-progressbar{position:absolute;left:0;bottom:-1px;height:2px;background:var(--accent);width:0;transition:width .25s}
 
-.sd-main{max-width:1240px;margin:0 auto;padding:22px 18px 120px}
+.sd-main{max-width:1440px;margin:0 auto;padding:22px 18px 120px}
 
 /* home */
 .sd-hero{padding:26px 0 12px;max-width:760px}
@@ -99,8 +99,35 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-jump a{flex:none;font-size:13px;text-decoration:none;border:1px solid var(--rule);background:var(--panel);padding:6px 11px;border-radius:999px;color:var(--ink2)}
 .sd-jump a:hover{border-color:var(--rule2);color:var(--ink)}
 
-.sd-sim{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:start}
-.sd-stage{position:sticky;top:66px;display:flex;flex-direction:column;gap:12px}
+.sd-sim{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);grid-template-areas:"stage cap" "panel panel";gap:16px;align-items:start}
+.sd-stage{grid-area:stage;display:flex;flex-direction:column;overflow:hidden}
+.sd-cappane{grid-area:cap;position:sticky;top:66px;display:flex;flex-direction:column;max-height:calc(100vh - 80px);overflow:auto}
+.sd-sim>.sd-panel{grid-area:panel}
+.sd-diagram{min-height:420px}
+.sd-pbadge{position:absolute;transform:translate(-50%,-50%);font:700 10px/16px var(--mono);min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--muted);color:var(--panel);text-align:center;font-style:normal;z-index:3;box-shadow:0 0 0 2px var(--panel2)}
+.sd-wire.alt{stroke:var(--muted);stroke-width:1.6;stroke-dasharray:1 4;stroke-linecap:round;opacity:.75}
+.sd-altlabel{position:absolute;transform:translate(-50%,-50%);font:600 10px var(--mono);color:var(--muted);background:var(--panel2);border:1px dashed var(--rule2);border-radius:7px;padding:1px 6px;white-space:nowrap;z-index:3;pointer-events:none}
+.sd-altlabel.on{color:var(--ink);border-style:solid;border-color:var(--ink2)}
+.sd-wlabel.above{transform:translate(-50%,calc(-100% - 8px));white-space:normal;text-overflow:clip}
+.sd-fork{display:none;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 16px 10px}
+.sd-fork.show{display:flex}
+.sd-fork .q{width:100%;font:600 12px var(--mono);color:var(--muted)}
+.sd-chip{font:600 12.5px var(--mono);border:1.5px solid var(--rule2);background:var(--panel2);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+.sd-chip:hover{border-color:var(--ink2)}
+.sd-chip.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.sd-pathtag{border-style:dashed}
+.sd-dot.alt{border-style:dashed}
+.sd-pseudo{border-top:1px solid var(--rule);padding:10px 12px 12px}
+.sd-phead{display:flex;flex-direction:column;gap:1px;margin:0 4px 8px}
+.sd-phead span{font:600 13px var(--mono)}
+.sd-phead small{font:11px var(--mono);color:var(--muted)}
+#pc{max-height:300px;overflow:auto;margin:0;padding:6px 0;font-size:12px;line-height:1.55}
+#pc code{display:block}
+#pc .pl{display:block;padding:0 10px 0 0;border-left:3px solid transparent;cursor:pointer;white-space:pre}
+#pc .pl i{display:inline-block;width:30px;text-align:right;padding-right:10px;font-style:normal;color:var(--muted);opacity:.7;user-select:none}
+#pc .pl.on{background:color-mix(in srgb,var(--kc) 18%,transparent);border-left-color:var(--kc)}
+#pc .pl.on i{color:var(--kc);opacity:1;font-weight:700}
+#pc .pl.done{opacity:.6}
 .sd-box{background:var(--panel);border:1px solid var(--rule);border-radius:var(--r);box-shadow:var(--shadow)}
 .sd-diagram{position:relative;margin:0;padding:14px;overflow:hidden;background:
   radial-gradient(circle,var(--rule2) 1px,transparent 1.2px) 0 0/18px 18px,var(--panel2);border-radius:var(--r) var(--r) 0 0}
@@ -281,8 +308,9 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-bar{display:none}
 
 @media (max-width:980px){
-  .sd-sim{grid-template-columns:1fr}
-  .sd-stage{position:static}
+  .sd-sim{grid-template-columns:1fr;grid-template-areas:"stage" "cap" "panel"}
+  .sd-cappane{position:static;max-height:none}
+  .sd-diagram{min-height:0}
   .sd-tabs{top:53px}
 }
 @media (max-width:720px){
@@ -310,8 +338,17 @@ code,pre,kbd{font-family:var(--mono)}
   .sd-bar .mid{flex:0 0 auto;min-width:72px;text-align:center;font:600 13px var(--mono)}
   .sd-bar svg{width:18px;height:18px}
   .sd-dots{display:none}
+  .sd-pbadge{font-size:9px;min-width:14px;height:14px;line-height:14px}
+  .sd-altlabel{font-size:9px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.sd-verify{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.sd-verify>div{border:1px solid var(--rule);border-radius:12px;padding:12px 16px;background:var(--panel)}
+.sd-verify h3{font-size:14px;margin:0 0 6px}
+.sd-verify .unc{border-style:dashed}
+@media (max-width:760px){.sd-verify{grid-template-columns:1fr}}
+#pc{position:relative}
 
 </style>
 </head>
@@ -9379,7 +9416,7 @@ CREATE TABLE events_raw (
 flow({
   id: 'kv-store',
   title: 'Distributed key-value store (Dynamo-style)',
-  category: 'Data at scale',
+  category: 'Databases & replication',
   tags: ['Consistent hashing', 'Replication N=3', 'Quorum R/W', 'Vector clocks', 'Hinted handoff', 'Anti-entropy'],
   summary: 'A shopping-cart store must accept writes even while machines fail. Follow a PUT through a consistent-hash ring to three replicas, a quorum write that succeeds while one node is down, a hint that heals it later, a read that finds two versions and repairs the stale one, and background Merkle-tree sync.',
   requirements: {
@@ -9548,6 +9585,1791 @@ ring            24 nodes x 256 vnodes, N=3 across zones, R=2, W=2`,
   ]
 });
 
+flow({
+  id: 'dns-resolution',
+  title: 'DNS resolution: from a name to an IP address',
+  category: 'Web & networking',
+  tags: ['Stub resolver', 'Recursive resolver', 'Root / TLD / authoritative', 'TTL caching', 'NXDOMAIN'],
+  summary: 'Before a browser can open a connection to madgate.app it needs an IP address. Follow one lookup through the browser and OS caches, a recursive resolver, the root, the .app TLD and the authoritative name server, then see what a cache hit and an unknown name look like.',
+  requirements: {
+    functional: ['Turn a host name into one or more IP addresses (A / AAAA records).', 'Let the domain owner change the answer, and have the change reach users within the TTL.'],
+    nonFunctional: ['Most lookups answered from a cache in under 1 ms; a full cold lookup in tens of milliseconds.', 'No single server for the whole internet: the namespace is delegated level by level.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'browser', label: 'Browser', sub: 'Chrome on a laptop', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Needs the IP of madgate.app. Checks its own DNS cache first, then asks the operating system.' },
+    { id: 'os', label: 'OS stub resolver', sub: 'cache + /etc/hosts', kind: 'client', icon: 'server', x: 1, y: 1, desc: 'A small resolver in the OS. It has a cache and the hosts file, and forwards misses to the configured recursive resolver (from DHCP, e.g. the ISP or 1.1.1.1).' },
+    { id: 'rec', label: 'Recursive resolver', sub: 'ISP or 1.1.1.1', kind: 'edge', icon: 'globe', x: 2, y: 1, desc: 'Does the legwork: walks the hierarchy from the root down, caches every answer for its TTL, and returns the final answer to the stub.' },
+    { id: 'root', label: 'Root server', sub: '13 logical (a–m)', kind: 'external', icon: 'globe', x: 3, y: 0, desc: 'Knows where every top-level domain\'s name servers are. 13 logical names, each served by many anycast machines.' },
+    { id: 'tld', label: '.app TLD server', sub: 'run by the registry', kind: 'external', icon: 'globe', x: 3, y: 1, desc: 'Knows which authoritative name servers are responsible for each .app domain (the NS records the owner registered).' },
+    { id: 'auth', label: 'Authoritative NS', sub: 'ns1.dnshost.net', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'Holds the real records for madgate.app (A, AAAA, CNAME, MX…). Its answer is final, marked with the authoritative flag.' }
+  ],
+  pseudo: `
+def resolve(name):
+    if hit := browser_cache.get(name): return hit
+    if hit := os_cache.get(name) or hosts_file.get(name): return hit
+    return recursive_resolver.query(name, "A")
+
+# inside the recursive resolver
+def query(name, rtype):
+    if hit := cache.get((name, rtype)): return hit       # most queries end here
+    server = ROOT_HINTS                               # a.root-servers.net …
+    while True:
+        reply = ask(server, name, rtype)
+        if reply.rcode == NXDOMAIN: cache_negative(name); return NXDOMAIN
+        if reply.answer: cache.put(reply, ttl=reply.ttl); return reply.answer
+        server = reply.referral_ns                     # go one level down`,
+  steps: [
+    {
+      from: 'browser', to: 'os', label: 'getaddrinfo("madgate.app")', pc: ['def resolve', 'browser_cache', 'os_cache'],
+      title: 'The browser asks the operating system',
+      caption: 'The user types madgate.app. The browser\'s own DNS cache has nothing, so it asks the OS, which checks its cache and the hosts file.',
+      text: ['ByteByteGo lists the cache layers a lookup can hit before the network: browser, OS, local network (home router) and ISP. Each layer stores answers for as long as the record\'s TTL allows.'],
+      payloadKind: 'Lookup',
+      payload: { name: 'madgate.app', type: 'A', browser_cache: 'miss', os_cache: 'miss', hosts_file: 'no entry' }
+    },
+    {
+      from: 'os', to: 'rec', label: 'UDP :53  A? madgate.app (RD=1)', pc: ['recursive_resolver.query'],
+      title: 'The stub sends one recursive query',
+      caption: 'The OS sends a single UDP packet to its configured resolver, 1.1.1.1, with the "recursion desired" flag: "give me the final answer, do the work for me".',
+      text: ['The stub only ever talks to the recursive resolver. Classic DNS uses UDP port 53; large answers fall back to TCP, and many resolvers also accept encrypted DNS over HTTPS or TLS.'],
+      payloadKind: 'DNS query',
+      payload: { id: '0x3f2a', flags: { RD: 1 }, question: { name: 'madgate.app.', type: 'A', class: 'IN' }, to: '1.1.1.1:53' },
+      branch: { q: 'Does the resolver already have madgate.app cached?', options: [ { label: 'no: walk the hierarchy', goto: 'cold' }, { label: 'yes: cache hit', goto: 'hit' } ] }
+    },
+    {
+      id: 'cold', path: 'cache miss', from: 'rec', to: 'root', label: 'A? madgate.app → a.root-servers.net', pc: ['ROOT_HINTS', 'ask(server'],
+      title: 'Ask a root server',
+      caption: 'The resolver starts at the top. It ships with the root servers\' addresses (root hints) and asks one of them about madgate.app.',
+      text: ['The root does not know madgate.app. It answers with a referral: "I don\'t know, but here are the servers for .app". Resolvers cache that referral for two days, so real root traffic is rare.'],
+      payloadKind: 'Referral',
+      payload: { rcode: 'NOERROR', answer: [], authority: [{ name: 'app.', type: 'NS', value: 'ns-tld1.charlestonroadregistry.com.', ttl: 172800 }], additional: '(glue A records for the TLD servers)' },
+      fields: { authority: 'A referral: the NS records of the next level down, instead of an answer.' }
+    },
+    {
+      path: 'cache miss', from: 'rec', to: 'tld', label: 'A? madgate.app → .app TLD', pc: ['referral_ns', 'ask(server'],
+      title: 'Ask the .app TLD server',
+      caption: 'The TLD server knows every .app domain\'s delegation. It refers the resolver to the name servers the owner registered: ns1 and ns2.dnshost.net.',
+      text: ['This NS set is what you change at your registrar when you move DNS hosting. The TLD stores only the delegation, never your A records.'],
+      payloadKind: 'Referral',
+      payload: { rcode: 'NOERROR', answer: [], authority: [{ name: 'madgate.app.', type: 'NS', value: 'ns1.dnshost.net.', ttl: 3600 }, { name: 'madgate.app.', type: 'NS', value: 'ns2.dnshost.net.', ttl: 3600 }] }
+    },
+    {
+      path: 'cache miss', from: 'rec', to: 'auth', label: 'A? madgate.app → ns1.dnshost.net', pc: ['ask(server', 'reply.answer'],
+      title: 'Ask the authoritative server',
+      caption: 'Third hop: the authoritative name server holds the zone and answers with the A record, flagged as authoritative (AA). The resolver caches it for its TTL, 300 seconds.',
+      text: ['A short TTL like 300 s lets the owner move the site quickly; a long TTL means fewer lookups but slower changes. If the name did not exist, the server would reply NXDOMAIN, and resolvers cache that negative answer too.'],
+      payloadKind: 'Answer',
+      payload: { rcode: 'NOERROR', flags: { AA: 1 }, answer: [{ name: 'madgate.app.', type: 'A', value: '216.24.57.1', ttl: 300 }] },
+      failure: ['**Typo (madgte.app):** NXDOMAIN. The resolver caches the negative answer (for the zone\'s SOA minimum) and the browser shows "This site can\'t be reached".', '**Authoritative servers down:** the resolver tries ns2; if both fail it returns SERVFAIL. Running at least two name servers on separate networks avoids this.']
+    },
+    {
+      path: 'cache miss', from: 'rec', to: 'os', reply: true, label: 'madgate.app = 216.24.57.1 (ttl 300)', pc: ['return reply.answer'],
+      title: 'The answer travels back and is cached everywhere',
+      caption: 'The resolver returns the address to the OS, which caches it and hands it to the browser. A cold lookup took about 60 ms; the next one will take under 1 ms.',
+      text: ['Now the browser can open a TCP (or QUIC) connection to 216.24.57.1. See the HTTPS request flow for what happens next.'],
+      payloadKind: 'DNS response',
+      payload: { id: '0x3f2a', answer: [{ name: 'madgate.app.', type: 'A', value: '216.24.57.1', ttl: 300 }], total_ms: 61 },
+      next: 'done'
+    },
+    {
+      id: 'hit', path: 'cache hit', from: 'rec', to: 'rec', label: 'cache hit, ttl 212 s left', pc: ['if hit := cache.get'],
+      title: 'Cache hit: no hierarchy walk at all',
+      caption: 'Someone else using 1.1.1.1 looked up madgate.app 88 seconds ago. The cached A record still has 212 seconds to live, so the resolver answers at once.',
+      text: ['This is the normal case for popular names. The TTL counts down in the cache, and the remaining TTL is what the stub receives, so all caches expire together.'],
+      payloadKind: 'Cache entry',
+      payload: { key: ['madgate.app.', 'A'], value: '216.24.57.1', original_ttl: 300, remaining_ttl: 212 }
+    },
+    {
+      path: 'cache hit', from: 'rec', to: 'os', reply: true, label: 'madgate.app = 216.24.57.1 (ttl 212)', pc: ['return hit'],
+      title: 'Answer in about 4 ms',
+      caption: 'One round trip to the resolver and back. The stub caches the record for the remaining 212 seconds.',
+      text: ['Most DNS latency a user feels is this single round trip to the resolver, which is why resolvers like 1.1.1.1 and 8.8.8.8 run on anycast close to users.'],
+      payloadKind: 'DNS response',
+      payload: { id: '0x3f2a', answer: [{ name: 'madgate.app.', type: 'A', value: '216.24.57.1', ttl: 212 }], total_ms: 4 }
+    },
+    {
+      id: 'done', from: 'os', to: 'browser', reply: true, label: '216.24.57.1', pc: ['return recursive_resolver.query'],
+      title: 'The browser has its IP address',
+      caption: 'getaddrinfo returns 216.24.57.1. The browser caches it too (Chrome keeps entries about a minute) and moves on to connecting.',
+      text: ['If several A records come back, the client can try them in turn. DNS-based load balancing and GeoDNS work by returning different records to different resolvers.'],
+      payloadKind: 'Result',
+      payload: { host: 'madgate.app', addresses: ['216.24.57.1'], next: 'TCP connect 216.24.57.1:443' }
+    }
+  ],
+  decisions: [
+    { q: 'What TTL should your records use?', options: [
+      { name: 'Short (60–300 s)', verdict: 'good', why: 'Fast failover and migrations. More queries reach your authoritative servers.' },
+      { name: 'Long (hours–days)', verdict: 'good', why: 'Fewer queries and resilience if your DNS host has an outage, but changes take that long to reach everyone. Lower it a day before a planned move.' } ] }
+  ],
+  refs: [
+    { label: 'ByteByteGo newsletter: How does the Domain Name System (DNS) lookup work?', url: 'https://blog.bytebytego.com/p/how-does-the-domain-name-system-dns' },
+    { label: 'ByteByteGo newsletter: What happens when you type a URL into your browser?', url: 'https://blog.bytebytego.com/p/what-happens-when-you-type-a-url', note: 'cache layers.' },
+    { label: 'RFC 1034: Domain names, concepts and facilities', url: 'https://www.rfc-editor.org/rfc/rfc1034' },
+    { label: 'RFC 2308: Negative caching of DNS queries', url: 'https://www.rfc-editor.org/rfc/rfc2308' }
+  ],
+  verify: {
+    checked: ['Root → TLD → authoritative order, 13 logical root servers, cache layers: ByteByteGo posts above.', 'Referrals, recursion desired, TTL caching: RFC 1034. Negative caching of NXDOMAIN: RFC 2308.'],
+    uncertain: ['The .app TLD server name, IPs and timings are illustrative.', 'Chrome\'s own DNS cache duration varies by version; "about a minute" is approximate.']
+  }
+});
+
+flow({
+  id: 'tls-handshake',
+  title: 'HTTPS: TCP and the TLS 1.3 handshake',
+  category: 'Web & networking',
+  tags: ['TCP 3-way handshake', 'TLS 1.3', 'ECDHE key share', 'Certificate chain', 'Session resumption', 'HTTP/3'],
+  summary: 'How a browser and a server that have never met agree on a secret key in one round trip, and how the browser knows it is really talking to madgate.app. Follow TCP\'s SYN / SYN-ACK / ACK, the TLS 1.3 ClientHello and ServerHello with key shares, certificate checks, and the first encrypted request; then the faster resumed path.',
+  requirements: {
+    functional: ['Encrypt everything between browser and server.', 'Prove the server owns the name in the address bar.', 'Detect any tampering in transit.'],
+    nonFunctional: ['Add as few round trips as possible before the first byte of HTTP (TLS 1.3: one; resumed: zero for some data).', 'Forward secrecy: stealing the server\'s key later must not decrypt old traffic.']
+  },
+  grid: { cols: 3, rows: 3 },
+  nodes: [
+    { id: 'browser', label: 'Browser', sub: 'client', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Starts the connection, offers key shares and cipher suites, and checks the server\'s certificate against its trusted root store.' },
+    { id: 'server', label: 'madgate.app', sub: 'nginx :443', kind: 'service', icon: 'server', x: 2, y: 1, desc: 'Holds a certificate for madgate.app and the matching private key. Chooses the parameters and proves it owns the key.' },
+    { id: 'ca', label: 'Certificate authority', sub: 'trusted root in the OS', kind: 'external', icon: 'shield', x: 1, y: 0, desc: 'Signed the server\'s certificate (through an intermediate). The browser trusts it because its root is pre-installed in the OS or browser.' },
+    { id: 'keys', label: 'Session keys', sub: 'derived on both sides', kind: 'cache', icon: 'key', x: 1, y: 2, desc: 'Never sent over the network. Both sides compute the same secret from the ECDHE key shares, then derive traffic keys with HKDF.' }
+  ],
+  pseudo: `
+# client side
+tcp = connect(ip, 443)                         # SYN, SYN-ACK, ACK
+priv, pub = x25519_keypair()                   # fresh for this connection
+send(ClientHello(sni="madgate.app", key_share=pub, ciphers=[AES_128_GCM, CHACHA20]))
+sh = recv(ServerHello)                         # server's key_share + choice
+secret = x25519(priv, sh.key_share)            # same value on both sides
+keys = hkdf_expand(secret, transcript_hash)
+cert = decrypt(recv(Certificate), keys)
+verify_chain(cert, trusted_roots, host="madgate.app")
+verify_signature(recv(CertificateVerify), cert.public_key, transcript)
+check_mac(recv(Finished), keys); send(Finished)
+send(encrypt("GET / HTTP/1.1 ...", keys))       # first app data after 1 RTT of TLS`,
+  steps: [
+    {
+      from: 'browser', to: 'server', label: 'SYN → 216.24.57.1:443', pc: ['connect(ip, 443)'],
+      title: 'TCP: open a connection (SYN)',
+      caption: 'With the IP from DNS, the browser starts TCP\'s three-way handshake: SYN, then the server\'s SYN-ACK, then ACK. One round trip, about 20 ms here, before any TLS byte.',
+      text: ['TCP gives a reliable, ordered byte stream. The handshake agrees on starting sequence numbers in both directions. HTTP/3 replaces TCP + TLS with QUIC over UDP, merging the transport and TLS handshakes.'],
+      payloadKind: 'TCP segments',
+      payload: { '1_client': 'SYN seq=1000', '2_server': 'SYN-ACK seq=5000 ack=1001', '3_client': 'ACK ack=5001', rtt_ms: 20 },
+      branch: { q: 'Has this browser connected to madgate.app recently?', options: [ { label: 'no: full handshake', goto: 'full' }, { label: 'yes: resume with a ticket', goto: 'resume' } ] }
+    },
+    {
+      id: 'full', path: 'full', from: 'browser', to: 'server', label: 'ClientHello  sni=madgate.app  key_share=x25519', pc: ['x25519_keypair', 'ClientHello'],
+      title: 'ClientHello: "here is my half of a key"',
+      caption: 'The browser generates a one-time key pair and sends the public half in its ClientHello, with the server name (SNI) and the cipher suites it supports.',
+      text: ['In TLS 1.3 the client guesses the key-exchange group and sends its key share right away. That guess is why TLS 1.3 needs one round trip where TLS 1.2 needed two. Static RSA key exchange, where the client encrypted a secret with the server\'s public key (as in ByteByteGo\'s simplified diagram), was removed in TLS 1.3.'],
+      payloadKind: 'ClientHello',
+      payload: { version: 'TLS 1.3', sni: 'madgate.app', cipher_suites: ['TLS_AES_128_GCM_SHA256', 'TLS_CHACHA20_POLY1305_SHA256'], key_share: { group: 'x25519', public: '9f1c…e2' }, alpn: ['h2', 'http/1.1'] },
+      fields: { sni: 'Server Name Indication: lets one IP host many sites and pick the right certificate.', alpn: 'Which HTTP version to speak after the handshake.' }
+    },
+    {
+      path: 'full', from: 'server', to: 'browser', reply: true, label: 'ServerHello + {Certificate, CertificateVerify, Finished}', pc: ['recv(ServerHello)'],
+      title: 'ServerHello and the server\'s encrypted proof',
+      caption: 'The server picks AES-128-GCM, sends its own key share, and from that moment everything is encrypted: its certificate chain, a signature over the handshake, and Finished.',
+      text: ['CertificateVerify is a signature, made with the certificate\'s private key, over everything said so far. It proves the server holds that key without ever sending it.'],
+      payloadKind: 'Server flight',
+      payload: { ServerHello: { cipher: 'TLS_AES_128_GCM_SHA256', key_share: { group: 'x25519', public: '41ab…07' } }, encrypted: ['EncryptedExtensions (alpn=h2)', 'Certificate [madgate.app ← R11 intermediate]', 'CertificateVerify (ECDSA-P256 signature)', 'Finished (MAC)'] }
+    },
+    {
+      path: 'full', from: 'browser', to: 'keys', label: 'x25519(my_priv, server_pub)', pc: ['secret = x25519', 'hkdf_expand'],
+      title: 'Both sides compute the same secret',
+      caption: 'Each side combines its own private key with the other\'s public share (elliptic-curve Diffie-Hellman) and gets the same shared secret. An eavesdropper who saw both public shares cannot compute it.',
+      text: ['Because the key pairs are thrown away after the connection, stealing the server\'s certificate key later does not reveal this session: forward secrecy. Traffic keys are derived with HKDF from the secret and a hash of the handshake transcript.'],
+      payloadKind: 'Key schedule',
+      payload: { shared_secret: '(32 bytes, never sent)', handshake_traffic_keys: 'HKDF(secret, transcript)', application_traffic_keys: 'HKDF(…, after Finished)' }
+    },
+    {
+      path: 'full', from: 'browser', to: 'ca', label: 'verify chain → trusted root', pc: ['verify_chain', 'verify_signature'],
+      title: 'Is this certificate really madgate.app\'s?',
+      caption: 'The browser checks that the name matches, the dates are valid, and each certificate is signed by the next up the chain, ending at a root it already trusts. Then it checks the CertificateVerify signature.',
+      text: ['No network call to the CA is needed for the signature check: the root\'s public key is already in the trust store. Revocation status may be checked separately (OCSP stapling, CRLs).'],
+      payloadKind: 'Chain check',
+      payload: { leaf: { subject: 'madgate.app', valid: '2026-10-02 → 2026-12-31', signed_by: 'R11' }, intermediate: { subject: 'R11', signed_by: 'ISRG Root X1' }, root: 'ISRG Root X1 (in trust store)', name_match: true, signature_ok: true },
+      failure: ['**Name mismatch or expired:** the browser stops with a full-page warning (NET::ERR_CERT_COMMON_NAME_INVALID or _DATE_INVALID). No HTTP request is sent.']
+    },
+    {
+      path: 'full', from: 'browser', to: 'server', label: 'Finished + GET / (encrypted)', pc: ['check_mac', 'send(encrypt'],
+      title: 'Finished, then the first HTTP request',
+      caption: 'The browser checks the server\'s Finished MAC, sends its own, and sends the HTTP request in the same flight. TLS cost exactly one round trip.',
+      text: ['From here every record is encrypted and authenticated with AES-GCM. The server can also send a NewSessionTicket so that the next connection can resume faster.'],
+      payloadKind: 'Application data',
+      payload: { record: 'application_data', decrypted_view: 'GET / HTTP/2  :authority madgate.app', tls_rtts: 1, total_rtts_before_request: 2 },
+      end: true
+    },
+    {
+      id: 'resume', path: 'resumed', from: 'browser', to: 'server', label: 'ClientHello + PSK ticket (+ early data)', pc: ['ClientHello'],
+      title: 'Resumption: present a ticket from last time',
+      caption: 'The browser kept a session ticket from yesterday\'s visit. It sends it as a pre-shared key, plus a new key share, and may even send the GET request immediately as 0-RTT early data.',
+      text: ['0-RTT data can be replayed by an attacker, so the spec warns it must only carry requests that are safe to repeat, such as a plain GET. Many servers accept PSK resumption but disable 0-RTT.'],
+      payloadKind: 'ClientHello (resumed)',
+      payload: { pre_shared_key: { identity: 'ticket_7b2e…', age_ms: 81234000 }, key_share: { group: 'x25519', public: '1d77…' }, early_data: 'GET / (only if the server allows 0-RTT)' }
+    },
+    {
+      path: 'resumed', from: 'server', to: 'browser', reply: true, label: 'ServerHello (PSK accepted) + Finished', pc: ['recv(ServerHello)', 'check_mac'],
+      title: 'No certificate needed this time',
+      caption: 'The server recognises the ticket, skips the certificate and signature, and finishes. With a fresh key share the session still gets forward secrecy.',
+      text: ['Resumption saves CPU (no signature) and bytes (no certificate chain). With 0-RTT, the first response can arrive after a single round trip in total.'],
+      payloadKind: 'Server flight',
+      payload: { ServerHello: { pre_shared_key: 'accepted', key_share: 'x25519' }, encrypted: ['EncryptedExtensions (early_data accepted)', 'Finished'], certificate_sent: false }
+    }
+  ],
+  decisions: [
+    { q: 'Allow 0-RTT early data?', options: [
+      { name: 'Enable for idempotent GETs only', verdict: 'good', why: 'Saves a full round trip for returning visitors. Requires the app to reject or deduplicate replayed early requests.' },
+      { name: 'Disable', verdict: 'good', why: 'Simplest and safe: resumption still skips the certificate. Most APIs that take writes choose this.' } ] }
+  ],
+  refs: [
+    { label: 'RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3', url: 'https://www.rfc-editor.org/rfc/rfc8446', note: 'handshake, key schedule, 0-RTT replay.' },
+    { label: 'ByteByteGo newsletter: How does HTTPS work?', url: 'https://blog.bytebytego.com/p/how-does-https-work-episode-6', note: 'simplified (RSA-style) overview.' },
+    { label: 'MDN: How browsers work (DNS, TCP, TLS before the first byte)', url: 'https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/How_browsers_work' }
+  ],
+  verify: {
+    checked: ['1-RTT full handshake, key_share in ClientHello, encrypted Certificate/CertificateVerify/Finished, PSK resumption and 0-RTT replay risk: RFC 8446.', 'Certificate sent and validated, then symmetric encryption: ByteByteGo HTTPS post.'],
+    uncertain: ['ByteByteGo\'s diagram shows the client encrypting a session key with the server\'s public key: that is TLS 1.2 RSA key exchange, removed in 1.3. This flow follows RFC 8446.', 'Certificate names, dates and RTTs are illustrative.']
+  }
+});
+
+flow({
+  id: 'url-to-page',
+  title: 'What happens when you type a URL: request to rendered page',
+  category: 'Web & networking',
+  tags: ['DNS', 'TCP + TLS', 'CDN', 'Reverse proxy', 'HTTP caching', 'Critical rendering path'],
+  summary: 'The classic interview question, end to end. Type madgate.app/series/static-bloom and follow the request through DNS, a CDN edge, a reverse proxy, the Next.js server and the FastAPI backend, then back to the browser, which parses HTML, builds the DOM and CSSOM, and paints. Branch on whether the CDN already has the page.',
+  requirements: {
+    functional: ['Show the series page for a URL typed in the address bar.'],
+    nonFunctional: ['First contentful paint under 1.5 s on a fast connection.', 'Static parts served from a cache near the user; dynamic data from the origin.']
+  },
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'browser', label: 'Browser', sub: 'renderer + network', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Parses the URL, resolves the name, opens a secure connection, sends the request, and turns the response into pixels.' },
+    { id: 'dns', label: 'DNS', sub: 'resolver', kind: 'edge', icon: 'globe', x: 0, y: 0, desc: 'Turns madgate.app into the IP of the nearest CDN edge (see the DNS flow).' },
+    { id: 'cdn', label: 'CDN edge', sub: 'Brussels PoP', kind: 'edge', icon: 'cloud', x: 1, y: 1, desc: 'A cache close to the user. Terminates TLS and answers cached responses without contacting the origin.' },
+    { id: 'proxy', label: 'Reverse proxy', sub: 'nginx / load balancer', kind: 'edge', icon: 'split', x: 2, y: 1, desc: 'Entry point of the origin. Routes /api/* to FastAPI and pages to Next.js, and spreads load over instances.' },
+    { id: 'next', label: 'Next.js server', sub: 'server-side render', kind: 'service', icon: 'server', x: 3, y: 1, desc: 'Renders the page\'s HTML on the server, fetching the data it needs from the API.' },
+    { id: 'api', label: 'FastAPI', sub: '/api/series/{slug}', kind: 'service', icon: 'api', x: 4, y: 1, desc: 'Business logic. Reads the series and its first chapter range from PostgreSQL.' },
+    { id: 'db', label: 'PostgreSQL', sub: 'series, chapters', kind: 'db', icon: 'db', x: 4, y: 2, desc: 'Source of truth for series metadata.' }
+  ],
+  pseudo: `
+url = parse("https://madgate.app/series/static-bloom")
+ip = dns.resolve(url.host)                       # nearest CDN edge
+conn = tls_connect(ip, 443)                      # TCP + TLS 1.3
+resp = conn.send(GET(url.path))
+# at the CDN
+if cache.fresh(url): return cache.get(url)       # HIT
+resp = origin.fetch(url)                         # MISS -> proxy -> Next.js
+#   Next.js: data = api.get("/api/series/static-bloom"); html = render(data)
+cache.store(url, resp, max_age=resp.s_maxage)
+# back in the browser
+dom = parse_html(resp.body); cssom = parse_css(fetch_subresources(dom))
+render_tree = combine(dom, cssom); layout(render_tree); paint()`,
+  steps: [
+    {
+      from: 'browser', to: 'dns', label: 'A? madgate.app', pc: ['url = parse', 'dns.resolve'],
+      title: 'Parse the URL and resolve the host',
+      caption: 'The browser splits the URL into scheme (https), host (madgate.app) and path (/series/static-bloom), then asks DNS for the host\'s address.',
+      text: ['The CDN\'s DNS answers with the address of an edge server near the user (by anycast or GeoDNS), not the origin\'s address. The full lookup is its own flow.'],
+      payloadKind: 'Parsed URL',
+      payload: { scheme: 'https', host: 'madgate.app', port: 443, path: '/series/static-bloom', dns_answer: '104.18.20.7 (CDN edge, Brussels)' }
+    },
+    {
+      from: 'browser', to: 'cdn', label: 'TCP + TLS, then GET /series/static-bloom', pc: ['tls_connect', 'conn.send'],
+      title: 'Connect securely and send the request',
+      caption: 'TCP handshake, TLS 1.3 handshake (see the HTTPS flow), then an HTTP/2 GET with the browser\'s headers and cookies. Two round trips to an edge 8 ms away.',
+      text: ['ByteByteGo\'s version of this question lists the same order: DNS lookup, TCP connection, HTTP request, server response, render.'],
+      payloadKind: 'HTTP request',
+      payload: { method: 'GET', ':path': '/series/static-bloom', ':authority': 'madgate.app', 'accept': 'text/html', 'accept-encoding': 'br, gzip', cookie: 'mg_fav=…' },
+      branch: { q: 'Does the edge have a fresh copy of this page?', options: [ { label: 'no: cache miss', goto: 'miss' }, { label: 'yes: cache hit', goto: 'hit' } ] }
+    },
+    {
+      id: 'miss', path: 'miss', from: 'cdn', to: 'proxy', label: 'GET /series/static-bloom (origin pull)', pc: ['origin.fetch'],
+      title: 'Miss: the edge asks the origin',
+      caption: 'The edge has no fresh copy, so it forwards the request to the origin\'s reverse proxy over a kept-alive connection.',
+      text: ['The proxy matches the path: pages go to Next.js, /api/* would go to FastAPI directly. It also adds X-Forwarded-For so the app knows the real client IP.'],
+      payloadKind: 'Forwarded request',
+      payload: { upstream: 'next:3000', path: '/series/static-bloom', 'x-forwarded-for': '91.178.22.4', 'cdn-cache': 'MISS' }
+    },
+    {
+      path: 'miss', from: 'proxy', to: 'next', label: 'route → next:3000', pc: ['Next.js: data'],
+      title: 'The proxy routes to Next.js',
+      caption: 'Next.js runs the page\'s server component for /series/[slug]. It needs data before it can produce HTML.',
+      text: ['Server rendering sends real HTML on the first response, so the user sees content before any JavaScript runs and crawlers can index the page.'],
+      payloadKind: 'Route match',
+      payload: { route: '/series/[slug]', params: { slug: 'static-bloom' }, render: 'server component' }
+    },
+    {
+      path: 'miss', from: 'next', to: 'api', label: 'GET /api/series/static-bloom', pc: ['Next.js: data'],
+      title: 'Next.js fetches the data from FastAPI',
+      caption: 'One internal HTTP call gets the series and the newest 50 chapters\' lightweight metadata.',
+      text: ['Keeping business logic in FastAPI and rendering in Next.js gives one place that owns the rules; the page is just a client of the API.'],
+      payloadKind: 'API call',
+      payload: { method: 'GET', url: 'http://api:8000/api/series/static-bloom?chapters=newest&limit=50' }
+    },
+    {
+      path: 'miss', from: 'api', to: 'db', label: 'SELECT series + 50 chapters', pc: ['Next.js: data'],
+      title: 'FastAPI reads PostgreSQL',
+      caption: 'Two indexed queries: the series by slug, and chapters ordered by number descending, limit 50.',
+      text: ['An index on (series_id, number DESC) lets the database read just the 50 rows it returns.'],
+      payloadKind: 'SQL',
+      payload: { q1: "SELECT * FROM series WHERE slug = 'static-bloom'", q2: 'SELECT id, number, title, page_count FROM chapters WHERE series_id = 7 ORDER BY number DESC LIMIT 50', rows: 51, ms: 3 }
+    },
+    {
+      path: 'miss', from: 'next', to: 'cdn', reply: true, label: '200 text/html  s-maxage=60', pc: ['html = render', 'cache.store'],
+      title: 'HTML goes back and the edge keeps a copy',
+      caption: 'Next.js renders the HTML and returns it with a Cache-Control header that lets shared caches keep it for 60 seconds. The edge stores it and forwards it.',
+      text: ['s-maxage applies to shared caches like CDNs; max-age to the browser. The next visitor within 60 s in Brussels gets a cache hit.'],
+      payloadKind: 'HTTP response',
+      payload: { status: 200, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=0, s-maxage=60', 'content-encoding': 'br', bytes: 18400 },
+      next: 'render'
+    },
+    {
+      id: 'hit', path: 'hit', from: 'cdn', to: 'cdn', label: 'HIT age=23s', pc: ['cache.fresh'],
+      title: 'Hit: the edge answers by itself',
+      caption: 'Another reader loaded this page 23 seconds ago. The copy is still fresh (s-maxage 60), so the edge replies in a few milliseconds without touching the origin.',
+      text: ['This is what keeps origin load low during a spike: a new chapter announcement can bring thousands of readers, but the origin renders the page once a minute per edge.'],
+      payloadKind: 'Cache lookup',
+      payload: { key: 'https://madgate.app/series/static-bloom', status: 'HIT', age_s: 23, s_maxage: 60 }
+    },
+    {
+      id: 'render', from: 'cdn', to: 'browser', reply: true, label: '200 HTML (first 14 KB)', pc: ['parse_html', 'combine(dom'],
+      title: 'The browser parses and paints',
+      caption: 'HTML streams in. The browser builds the DOM, finds the CSS, fonts and scripts and fetches them, builds the CSSOM, combines both into a render tree, lays it out and paints.',
+      text: ['MDN notes that the first response packet carries about 14 KB, and the browser starts parsing as soon as it arrives; a preload scanner fetches linked resources early. Render-blocking CSS and synchronous scripts delay the first paint, which is why critical CSS is inlined and scripts are deferred.'],
+      payloadKind: 'Rendering pipeline',
+      payload: { dom_nodes: 812, subresources: ['app.css', 'chunk-main.js (defer)', 'cover.webp'], steps: ['DOM', 'CSSOM', 'render tree', 'layout', 'paint', 'composite'], first_contentful_paint_ms: 640 }
+    }
+  ],
+  refs: [
+    { label: 'ByteByteGo newsletter: What happens when you type a URL into your browser?', url: 'https://blog.bytebytego.com/p/what-happens-when-you-type-a-url' },
+    { label: 'MDN: How browsers work', url: 'https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/How_browsers_work', note: 'navigation, 14 KB first packet, parsing, preload scanner, render tree.' },
+    { label: 'ByteByteGo newsletter: How does CDN work?', url: 'https://blog.bytebytego.com/p/how-does-cdn-work' },
+    { label: 'MDN: Cache-Control', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control' }
+  ],
+  verify: {
+    checked: ['Order DNS → TCP → HTTP → response → render and the DNS cache layers: ByteByteGo post.', 'Parsing on the first chunk, preload scanner, DOM/CSSOM/render tree/layout/paint: MDN.'],
+    uncertain: ['IPs, sizes and timings are illustrative; the CDN in front of MadGate is hypothetical (the live MadGate runs on Render).']
+  }
+});
+
+flow({
+  id: 'primary-replica',
+  title: 'Primary–replica ("master–slave") replication',
+  category: 'Databases & replication',
+  tags: ['Single leader', 'WAL streaming', 'Sync vs async commit', 'Read/write split', 'Read-your-writes'],
+  summary: 'One database takes every write and streams its write-ahead log to read-only copies. Follow an order INSERT through a query router to the primary, then choose: an asynchronous commit that answers immediately, or a synchronous commit that waits for a replica to flush the log. Then see why a read sent to a lagging replica can miss the order you just placed.',
+  requirements: {
+    functional: [
+      'All writes (INSERT, UPDATE, DELETE) go to one primary.',
+      'Reads can be spread over several read-only replicas.',
+      'A user who just placed an order can see it on the next page load.'
+    ],
+    nonFunctional: [
+      'Read capacity grows by adding replicas, without touching the primary.',
+      'Losing a replica never loses data; losing the primary loses at most the last few hundred milliseconds of writes (async), or nothing that was acknowledged (sync).',
+      'Replication lag is measured and alarmed on (target under 1 s).'
+    ]
+  },
+  estimates: [
+    { label: 'Read : write', value: '9 : 1', note: 'Typical of shops and feeds; the reason a read/write split pays off.' },
+    { label: 'Writes', value: '1,200 / s', note: 'All on the primary. Replicas replay the same WAL, so they need similar disk throughput.' },
+    { label: 'Reads', value: '11,000 / s', note: 'Split over 2 replicas plus the primary.' },
+    { label: 'Sync commit cost', value: '+1 round trip', note: 'PostgreSQL: the minimum extra wait is the primary↔standby round trip (≈0.5 ms same zone, 1–2 ms across zones).' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Order API', sub: 'FastAPI', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'The application. It does not know which database is which: it talks to the router.' },
+    { id: 'router', label: 'Query router', sub: 'proxy / driver', kind: 'edge', icon: 'split', x: 1, y: 1, desc: 'Sends writes and transactions to the primary, plain reads to a replica. Can be a proxy (ProxySQL, Pgpool-II) or logic in the app\'s data layer.' },
+    { id: 'primary', label: 'Primary', sub: 'PostgreSQL, read-write', kind: 'db', icon: 'db', x: 2, y: 1, desc: 'The single leader. The only node that accepts writes. Every change is first appended to its write-ahead log (WAL).' },
+    { id: 'wal', label: 'WAL sender', sub: 'streams log records', kind: 'worker', icon: 'log', x: 2, y: 0, desc: 'One process per connected standby. Reads new WAL from the primary and streams it over a replication connection.' },
+    { id: 'r1', label: 'Replica 1', sub: 'hot standby, zone b', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Read-only copy. Receives WAL, writes it to disk, replays it. Can be the synchronous standby.' },
+    { id: 'r2', label: 'Replica 2', sub: 'hot standby, zone c', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'Second read-only copy, asynchronous. Usually a few milliseconds behind; more under load.' }
+  ],
+  pseudo: `
+def handle(sql, session):
+    if is_write(sql) or session.in_transaction:
+        return primary.execute(sql)          # one leader
+    return pick_replica(session).execute(sql)
+
+# on the primary, at COMMIT
+def commit(tx):
+    lsn = wal.append(tx.records)             # write-ahead log first
+    wal.flush_to_disk(lsn)
+    if synchronous_standby_names:            # sync mode
+        wait_until(standby_flushed_lsn >= lsn)
+    return "COMMIT", lsn                     # async: no wait
+
+# on each replica, forever
+def replay_loop():
+    for rec in stream_from(primary, start=my_lsn):
+        write_and_flush(rec); reply(flushed=rec.lsn)
+        apply(rec)                           # now visible to reads
+
+def pick_replica(session):
+    for r in replicas:                       # read-your-writes
+        if r.replay_lsn >= session.last_write_lsn:
+            return r
+    return primary`,
+  steps: [
+    {
+      from: 'app', to: 'router', label: 'INSERT INTO orders …', pc: ['def handle', 'if is_write'],
+      title: 'The API places an order',
+      caption: 'Ana checks out. The Order API sends one INSERT to the query router, exactly as it would to a single database.',
+      text: ['The router looks at the statement. An INSERT is a write, so only one machine may take it: the primary. Keeping one writer is what makes single-leader replication simple: there is never a conflict between two writers.'],
+      payloadKind: 'SQL',
+      payload: { sql: "INSERT INTO orders (id, user_id, total_cents, status) VALUES ('ord_8812', 'usr_ana', 4599, 'paid')", session: 'sess_ana_41', in_transaction: false }
+    },
+    {
+      from: 'router', to: 'primary', label: 'write → primary:5432', pc: ['return primary.execute'],
+      title: 'Writes always go to the primary',
+      caption: 'The router forwards the INSERT to the primary at 10.0.1.10:5432. Replicas would reject it: they are read-only hot standbys.',
+      text: ['ByteByteGo\'s first scaling chapter describes the same split: the primary ("master") takes data-modifying commands; replicas ("slaves") get copies and serve reads. Newer documentation says primary and standby or replica.'],
+      payloadKind: 'Routed query',
+      payload: { target: 'primary 10.0.1.10:5432', reason: 'is_write(INSERT)', sql: 'INSERT INTO orders …' }
+    },
+    {
+      from: 'primary', to: 'primary', label: 'WAL append + flush, LSN 0/3A41F28', pc: ['def commit', 'wal.append', 'flush_to_disk'],
+      title: 'The primary writes its log first',
+      caption: 'Before the change counts as committed, the primary appends it to the write-ahead log and flushes the log to disk. The position in the log is the LSN.',
+      text: ['The WAL is the single source of truth for replication: replicas do not re-run SQL, they replay the same log records byte for byte (physical replication).'],
+      payloadKind: 'WAL record',
+      payload: { lsn: '0/3A41F28', xid: 918244, records: ['INSERT heap orders', 'INSERT index orders_pkey', 'COMMIT'], flushed_locally: true },
+      fields: { lsn: 'Log sequence number: a byte position in the WAL. Replicas report how far they have received, flushed and replayed in LSNs.' },
+      branch: { q: 'Is a synchronous standby configured?', options: [ { label: 'no: async (default)', goto: 'async1' }, { label: 'yes: sync commit', goto: 'sync1' } ] }
+    },
+    {
+      id: 'async1', path: 'async', from: 'primary', to: 'router', reply: true, label: 'COMMIT ok (0.9 ms)', pc: ['return "COMMIT"'],
+      title: 'Async: answer now, replicate after',
+      caption: 'With no synchronous standby, the primary acknowledges as soon as its own WAL is on disk. Ana sees "Order placed" in under a millisecond of database time.',
+      text: ['PostgreSQL\'s docs say it plainly: with asynchronous shipping, WAL records are sent after commit, so a crash of the primary in that window loses those transactions.'],
+      payloadKind: 'Response',
+      payload: { result: 'COMMIT', lsn: '0/3A41F28', waited_for_standby: false, db_time_ms: 0.9 },
+      failure: ['**Primary dies 50 ms later:** the order was acknowledged to Ana but may not be on any replica. After failover it is gone. This is the price of async replication; see the failover flow.']
+    },
+    {
+      path: 'async', from: 'wal', to: 'r2', async: true, label: 'stream WAL from 0/3A41F28', pc: ['for rec in stream_from', 'write_and_flush', 'apply(rec)'],
+      title: 'The log streams to the replicas',
+      caption: 'The WAL sender pushes the new records to each replica over a replication connection. Replica 2 is busy with a large report and is 400 ms behind.',
+      text: ['Each replica writes the records to its own WAL, replies with how far it has flushed, then replays them so the rows become visible to queries.'],
+      payloadKind: 'Replication status',
+      payload: { replica: 'r2', sent_lsn: '0/3A41F28', flush_lsn: '0/3A41F28', replay_lsn: '0/3A40B10', replay_lag_ms: 400 },
+      fields: { replay_lag_ms: 'Time between the primary writing the record and this replica applying it. PostgreSQL shows it in pg_stat_replication.replay_lag.' }
+    },
+    {
+      path: 'async', from: 'app', to: 'router', label: 'SELECT … WHERE id=ord_8812', pc: ['return pick_replica', 'def pick_replica'],
+      title: 'Ana reloads her orders page',
+      caption: 'The confirmation page immediately reads the order back. It is a plain SELECT, so the router may send it to a replica.',
+      text: ['If the router picked Replica 2 blindly, the row would not be there yet: Ana would see "order not found" for her own order. This is replication lag made visible.'],
+      payloadKind: 'SQL',
+      payload: { sql: "SELECT * FROM orders WHERE id = 'ord_8812'", session: 'sess_ana_41', last_write_lsn: '0/3A41F28' },
+      fields: { last_write_lsn: 'The router remembered the LSN of Ana\'s last write in her session. It is the key to read-your-writes.' }
+    },
+    {
+      path: 'async', from: 'router', to: 'r1', label: 'read → replica 1 (caught up)', pc: ['for r in replicas', 'if r.replay_lsn', '        return r'],
+      title: 'Read-your-writes: pick a replica that has caught up',
+      caption: 'The router compares Ana\'s last write LSN with each replica\'s replay LSN. Replica 2 is behind; Replica 1 has replayed past it, so the read goes there and finds the order.',
+      text: ['If no replica had caught up, the router would send this one read to the primary. Other common fixes: pin a user to the primary for a few seconds after a write, or accept staleness for pages where it does not matter.'],
+      payloadKind: 'Routing decision',
+      payload: { candidates: [{ replica: 'r1', replay_lsn: '0/3A41F30', ok: true }, { replica: 'r2', replay_lsn: '0/3A40B10', ok: false }], chosen: 'r1', rows: 1 },
+      end: true
+    },
+    {
+      id: 'sync1', path: 'sync', from: 'wal', to: 'r1', label: 'WAL 0/3A41F28, wait for flush', pc: ['if synchronous_standby_names', 'wait_until'],
+      title: 'Sync: the commit waits for a standby',
+      caption: 'Replica 1 is listed in synchronous_standby_names. The primary sends it the commit record and holds Ana\'s COMMIT until Replica 1 confirms it is on its disk.',
+      text: ['PostgreSQL\'s synchronous_commit setting chooses what "confirmed" means: remote_write (in the standby\'s OS), on (flushed to its disk, the default with a sync standby), or remote_apply (replayed and visible to reads there).'],
+      payloadKind: 'Replication',
+      payload: { to: 'r1 (synchronous)', lsn: '0/3A41F28', synchronous_commit: 'on', waits_for: 'flush_lsn >= 0/3A41F28' }
+    },
+    {
+      path: 'sync', from: 'r1', to: 'wal', reply: true, label: 'flushed 0/3A41F28', pc: ['write_and_flush'],
+      title: 'Replica 1 confirms the flush',
+      caption: 'Replica 1 writes the record to its WAL, flushes it, and replies. About 1.4 ms passed: one round trip to zone b plus a disk flush.',
+      text: ['Now the order exists on two disks in two zones. Losing it requires both machines to fail at once.'],
+      payloadKind: 'Standby reply',
+      payload: { standby: 'r1', write_lsn: '0/3A41F28', flush_lsn: '0/3A41F28', apply_lsn: '0/3A41F00', rtt_ms: 1.4 }
+    },
+    {
+      path: 'sync', from: 'primary', to: 'router', reply: true, label: 'COMMIT ok (2.3 ms)', pc: ['return "COMMIT"'],
+      title: 'Only now does Ana get her confirmation',
+      caption: 'The primary releases the commit. Ana\'s order is durable on two machines, at the cost of extra latency on every write transaction.',
+      text: ['Read-only transactions do not wait for the standby, only commits that wrote something. If the only synchronous standby goes down, commits block until it returns or another standby is named: plan for at least two candidates (for example ANY 1 (r1, r2)).'],
+      payloadKind: 'Response',
+      payload: { result: 'COMMIT', lsn: '0/3A41F28', waited_for_standby: 'r1', db_time_ms: 2.3 },
+      failure: ['**Sync standby down, no other candidate:** every write commit hangs. That is why setups use a quorum like ANY 1 (r1, r2), or MySQL\'s semi-sync, which falls back to async after a timeout (trading safety for availability).'],
+      end: true
+    }
+  ],
+  decisions: [
+    {
+      q: 'Synchronous or asynchronous replication?',
+      options: [
+        { name: 'Asynchronous', verdict: 'good', why: 'Fastest writes, primary never blocked by a slow replica. Risk: the last moments of acknowledged writes can be lost on failover. The default in PostgreSQL and MySQL.' },
+        { name: 'Synchronous to one of several (quorum)', verdict: 'great', why: 'No acknowledged write is lost if the primary dies, and one slow standby does not block commits. Costs one round trip per commit.' },
+        { name: 'Synchronous to all replicas', verdict: 'bad', why: 'Any single replica failure stops all writes. Availability gets worse as you add replicas.' }
+      ]
+    },
+    {
+      q: 'Where does the read/write routing live?',
+      options: [
+        { name: 'In the app\'s data layer', verdict: 'good', why: 'Knows about sessions and transactions, so read-your-writes is easy. Every service has to implement it.' },
+        { name: 'In a database proxy', verdict: 'good', why: 'Apps stay unchanged; the proxy parses SQL. It cannot know about user sessions unless told, so stale reads after writes need care.' }
+      ]
+    }
+  ],
+  refs: [
+    { label: 'ByteByteGo, System Design Interview Vol. 1: Scale from zero to millions of users', url: 'https://bytebytego.com/courses/system-design-interview/scale-from-zero-to-millions-of-users', note: 'database replication section (master/slave, read/write split).' },
+    { label: 'ByteByteGo newsletter: Read replica pattern', url: 'https://blog.bytebytego.com/p/read-replica-pattern' },
+    { label: 'ByteByteGo newsletter: How to implement read replica pattern', url: 'https://blog.bytebytego.com/p/how-to-implement-read-replica-pattern', note: 'app-side vs middleware routing.' },
+    { label: 'PostgreSQL docs: Log-shipping standby servers (streaming and synchronous replication)', url: 'https://www.postgresql.org/docs/current/warm-standby.html' },
+    { label: 'PostgreSQL docs: synchronous_commit (remote_write, on, remote_apply)', url: 'https://www.postgresql.org/docs/current/runtime-config-wal.html' }
+  ],
+  verify: {
+    checked: ['Async commit window, sync commit wait and "read-only transactions do not wait": PostgreSQL docs, sections 26.2 and 19.5.', 'Primary takes writes, replicas take reads: ByteByteGo Vol. 1 chapter 1 and the two read-replica newsletter posts.'],
+    uncertain: ['Latencies (0.9 ms, 1.4 ms, 2.3 ms) are illustrative, not measured.', 'The LSN-based replica choice is one technique (used by some proxies and ORMs); many routers only offer "stick to primary after a write".']
+  }
+});
+
+flow({
+  id: 'db-failover',
+  title: 'Automatic database failover (leader lock + promotion)',
+  category: 'Databases & replication',
+  tags: ['Leader lock with TTL', 'etcd / DCS', 'Replica promotion', 'Fencing', 'Split brain', 'Lost async writes'],
+  summary: 'The primary\'s machine dies at 03:12. How does the cluster notice, pick a replica that is not too far behind, promote it, and move clients over, without ending up with two primaries? Follows the Patroni-style design: a leader key with a TTL in etcd, a race to acquire it, and fencing of the old leader.',
+  requirements: {
+    functional: ['Detect a dead primary without a human.', 'Promote the most up-to-date healthy replica.', 'Point clients at the new primary.'],
+    nonFunctional: ['Never two writable primaries at once (split brain).', 'Failover in well under a minute; bounded data loss (async) or none (sync).']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Order API', sub: 'connects via VIP', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Connects to a stable address (virtual IP, DNS name or proxy) that always points to whoever holds the leader key.' },
+    { id: 'proxy', label: 'HAProxy', sub: 'checks /primary', kind: 'edge', icon: 'split', x: 1, y: 1, desc: 'Health-checks each node\'s Patroni REST endpoint and only routes writes to the node that answers 200 on /primary.' },
+    { id: 'p', label: 'pg-1 (primary)', sub: 'Patroni + PostgreSQL', kind: 'db', icon: 'db', x: 2, y: 0, desc: 'Current leader. Its Patroni agent renews the leader key every loop (default 10 s). If it cannot renew, it demotes itself.' },
+    { id: 'r1', label: 'pg-2 (replica)', sub: 'lag 0 MB', kind: 'db', icon: 'db', x: 2, y: 2, desc: 'Streaming replica with an agent that watches the leader key.' },
+    { id: 'r2', label: 'pg-3 (replica)', sub: 'lag 40 MB', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'A replica that fell behind during a backup. Too far behind to be a safe leader.' },
+    { id: 'dcs', label: 'etcd', sub: '3-node consensus store', kind: 'cache', icon: 'lock', x: 3, y: 0, desc: 'Distributed configuration store. Holds /service/shop/leader with a TTL. Uses Raft itself, so it stays correct as long as a majority of its nodes are up.' }
+  ],
+  pseudo: `
+# every agent, every loop_wait (10 s)
+def ha_loop(me):
+    leader = dcs.get("/leader")
+    if leader == me:
+        if not dcs.update("/leader", me, ttl=30, prev=me):
+            demote_to_replica(me)                 # lost the lock: stop writes
+        return
+    if leader is None:                            # key expired: race
+        if my_lag() > maximum_lag_on_failover: return
+        if not am_healthiest(): return            # ask the other members
+        if dcs.create("/leader", me, ttl=30):     # atomic: only one wins
+            pg_promote()                          # replica -> read-write
+    else:
+        follow(leader)                            # replicate from the leader`,
+  steps: [
+    {
+      from: 'p', to: 'dcs', label: 'PUT /leader=pg-1 ttl=30 (renew)', pc: ['def ha_loop', 'leader == me', 'dcs.update'],
+      title: 'Normal life: the leader renews its lock',
+      caption: 'Every 10 seconds pg-1\'s agent renews the leader key in etcd with a 30-second TTL, using compare-and-set so it only succeeds if pg-1 still owns it.',
+      text: ['The lock is the single source of truth for "who is primary". PostgreSQL itself has no built-in leader election; Patroni adds it by using a consensus store (etcd, Consul or ZooKeeper).'],
+      payloadKind: 'etcd write',
+      payload: { key: '/service/shop/leader', value: 'pg-1', ttl: 30, prev_value: 'pg-1', loop_wait: 10 }
+    },
+    {
+      from: 'app', to: 'p', label: '03:12:04 INSERT … → connection refused', pc: ['dcs.update'],
+      title: 'The primary\'s host dies; writes fail',
+      caption: 'pg-1 loses power. It stops renewing the key. Writes from the Order API start failing with connection errors.',
+      text: ['Nothing happens instantly: the cluster cannot tell a dead primary from a slow network, so it waits for the TTL to run out. That wait is the price of not flapping on a short glitch.'],
+      payloadKind: 'Event',
+      payload: { node: 'pg-1', last_renewal: '03:12:01', key_expires: '03:12:31', client_errors: 'connection refused' }
+    },
+    {
+      from: 'dcs', to: 'r1', label: '03:12:31  /leader expired', pc: ['leader is None'],
+      title: 'The lock expires; replicas notice',
+      caption: 'At 03:12:31 the TTL runs out and etcd deletes the key. On their next loop, pg-2 and pg-3 see that there is no leader.',
+      text: ['Detection time is roughly ttl plus up to one loop_wait. Lower values fail over faster but risk unnecessary failovers on short network blips.'],
+      payloadKind: 'Watch event',
+      payload: { key: '/service/shop/leader', event: 'DELETE (ttl expired)', at: '03:12:31' },
+      branch: { q: 'Which replica tries to take the lock?', options: [ { label: 'pg-2 (caught up)', goto: 'good' }, { label: 'pg-3 (40 MB behind)', goto: 'lagging' } ] }
+    },
+    {
+      id: 'lagging', path: 'lagging replica', from: 'r2', to: 'r2', label: 'lag 40 MB > 1 MB: stand down', pc: ['maximum_lag_on_failover'],
+      title: 'A lagging replica refuses to run',
+      caption: 'pg-3 is 40 MB of WAL behind, more than maximum_lag_on_failover allows. Promoting it would throw away those writes, so it does not enter the race.',
+      text: ['Agents also ask each other over their REST APIs and only race if no healthier member exists. pg-2 is ahead, so pg-3 will follow whoever wins.'],
+      payloadKind: 'Eligibility check',
+      payload: { node: 'pg-3', received_lsn: '0/9F000000', best_known_lsn: '0/A1800000', lag_bytes: 41943040, maximum_lag_on_failover: 1048576, eligible: false },
+      next: 'good'
+    },
+    {
+      id: 'good', from: 'r1', to: 'dcs', label: 'CREATE /leader=pg-2 (if absent)', pc: ['am_healthiest', 'dcs.create'],
+      title: 'pg-2 wins the race for the lock',
+      caption: 'pg-2 is caught up and the healthiest member. It atomically creates the leader key; etcd\'s create-if-absent guarantees that only one node can succeed.',
+      text: ['This is where consensus matters: etcd\'s Raft log orders the competing requests, so two replicas can never both believe they created the key.'],
+      payloadKind: 'etcd transaction',
+      payload: { if: 'version(/service/shop/leader) == 0', then: 'PUT /service/shop/leader = pg-2 ttl=30', result: 'succeeded' }
+    },
+    {
+      from: 'r1', to: 'r1', label: 'pg_promote()', pc: ['pg_promote'],
+      title: 'pg-2 promotes itself',
+      caption: 'Holding the lock, pg-2 tells PostgreSQL to leave recovery and accept writes. It starts a new timeline so its WAL history can be told apart from pg-1\'s.',
+      text: ['With asynchronous replication, any commits pg-1 acknowledged after pg-2\'s last received LSN are lost here. With synchronous mode, Patroni only lets a synchronous standby take over, so nothing acknowledged is lost.'],
+      payloadKind: 'Promotion',
+      payload: { node: 'pg-2', action: 'pg_promote()', new_timeline: 4, last_replayed_lsn: '0/A1800000', possibly_lost_async_commits: '0–a few' }
+    },
+    {
+      from: 'r2', to: 'r1', async: true, label: 'follow pg-2 (timeline 4)', pc: ['follow(leader)'],
+      title: 'The other replica follows the new leader',
+      caption: 'pg-3 sees pg-2 in the leader key, repoints its replication connection, and catches up on timeline 4.',
+      text: [],
+      payloadKind: 'Reconfigure',
+      payload: { node: 'pg-3', primary_conninfo: 'host=pg-2 port=5432', recovery_target_timeline: 'latest' }
+    },
+    {
+      from: 'proxy', to: 'r1', label: 'GET :8008/primary → 200', pc: ['follow(leader)'],
+      title: 'The proxy moves traffic',
+      caption: 'HAProxy\'s health check now gets 200 from pg-2 and 503 from the others, so new connections go to pg-2. The Order API retries and its writes succeed again: about 35 seconds of write downtime.',
+      text: ['Clients should retry idempotently: a write that failed during failover may or may not have committed on pg-1.'],
+      payloadKind: 'Health checks',
+      payload: { 'pg-1': 'timeout', 'pg-2': '200 primary', 'pg-3': '503 replica', write_downtime_s: 35 }
+    },
+    {
+      from: 'p', to: 'dcs', label: '03:20 pg-1 back: GET /leader = pg-2', pc: ['leader = dcs.get', 'follow(leader)'],
+      title: 'The old primary comes back and is fenced',
+      caption: 'When pg-1 boots, its agent reads the lock, sees pg-2 owns it, and starts PostgreSQL as a replica (rewinding divergent WAL with pg_rewind) instead of as a primary.',
+      text: ['This is what prevents split brain: a node may only accept writes while it holds the lock. A primary cut off from etcd also demotes itself when it cannot renew, so an isolated old primary stops taking writes.'],
+      payloadKind: 'Rejoin',
+      payload: { node: 'pg-1', leader_key: 'pg-2', action: ['pg_rewind --source-server=pg-2', 'start as replica'], writable: false },
+      failure: ['**No fencing (naive script):** pg-1 restarts as a primary, both nodes take writes, and their data diverges. Repairing that by hand is one of the worst outages a database team can have.']
+    }
+  ],
+  decisions: [
+    { q: 'Who decides that the primary is dead?', options: [
+      { name: 'A consensus store (etcd / ZooKeeper / Consul)', verdict: 'great', why: 'A majority decides, so a network partition cannot produce two leaders. What Patroni and Kubernetes operators use.' },
+      { name: 'The replicas ping the primary', verdict: 'bad', why: 'A replica that is cut off from the primary cannot tell "primary dead" from "I am isolated", and promotes itself: split brain.' } ] }
+  ],
+  refs: [
+    { label: 'Patroni docs: dynamic configuration (ttl, loop_wait, maximum_lag_on_failover, synchronous_mode)', url: 'https://patroni.readthedocs.io/en/latest/dynamic_configuration.html' },
+    { label: 'Patroni: a template for PostgreSQL HA with ZooKeeper, etcd or Consul', url: 'https://patroni.readthedocs.io/en/latest/' },
+    { label: 'PostgreSQL docs: failover', url: 'https://www.postgresql.org/docs/current/warm-standby-failover.html' },
+    { label: 'ByteByteGo, System Design Interview Vol. 1: Scale from zero to millions of users', url: 'https://bytebytego.com/courses/system-design-interview/scale-from-zero-to-millions-of-users', note: 'replica promoted when the primary goes offline.' }
+  ],
+  verify: {
+    checked: ['ttl (default 30 s, "time before automatic failover"), loop_wait (default 10 s), maximum_lag_on_failover, synchronous_mode: Patroni dynamic configuration docs.', 'Replica promotion when the primary fails: ByteByteGo Vol. 1 chapter 1; PostgreSQL ships no failure detection of its own, and the old primary must be told it is no longer primary (STONITH): PostgreSQL failover docs.'],
+    uncertain: ['The exact sequence inside Patroni\'s HA loop is simplified to its essentials; the real loop has more states (paused, failsafe mode, standby clusters).', 'The 35 s downtime is an estimate from the defaults, not a measurement.']
+  }
+});
+
+flow({
+  id: 'multi-leader',
+  title: 'Multi-leader (active–active) replication and write conflicts',
+  category: 'Databases & replication',
+  tags: ['Leader per region', 'Async cross-region', 'Write conflicts', 'Last writer wins', 'CRDT merge'],
+  summary: 'Each region has its own writable leader, so users write locally with low latency. The cost: two people can change the same row in two regions at the same moment. Follow a profile edit in Frankfurt and a conflicting edit in Virginia, then choose how the conflict is resolved: last writer wins, or a merge.',
+  requirements: {
+    functional: ['Users in Europe and America can both write with local latency.', 'Every region eventually holds the same data.'],
+    nonFunctional: ['A whole region can fail without stopping writes elsewhere.', 'Conflicts are resolved deterministically, the same way in every region.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'eu', label: 'User in Brussels', sub: 'web app', kind: 'client', icon: 'laptop', x: 0, y: 0, desc: 'Routed to the Frankfurt region by GeoDNS.' },
+    { id: 'us', label: 'Teammate in Boston', sub: 'mobile app', kind: 'client', icon: 'phone', x: 0, y: 2, desc: 'Routed to the Virginia region.' },
+    { id: 'fra', label: 'Leader eu-central', sub: 'Frankfurt, writable', kind: 'db', icon: 'db', x: 1, y: 0, desc: 'Accepts writes for European users and replicates them asynchronously to the other leader.' },
+    { id: 'iad', label: 'Leader us-east', sub: 'Virginia, writable', kind: 'db', icon: 'db', x: 1, y: 2, desc: 'Accepts writes for American users and replicates them to Frankfurt.' },
+    { id: 'link', label: 'Replication link', sub: '~90 ms across the Atlantic', kind: 'queue', icon: 'route', x: 2, y: 1, desc: 'Ships each leader\'s changes to the other, with the version metadata needed to detect conflicts.' },
+    { id: 'resolve', label: 'Conflict resolver', sub: 'runs in both regions', kind: 'worker', icon: 'split', x: 3, y: 1, desc: 'Same rule in every region, so both converge to the same value: e.g. highest timestamp wins, or a field-level merge.' }
+  ],
+  pseudo: `
+def local_write(region, key, change):
+    row = region.db.apply(key, change)
+    row.version = (now(), region.id)            # timestamp + tie-breaker
+    replicate_async(other_regions, key, row)    # no cross-region wait
+    return "OK"
+
+def on_replicated(region, key, incoming):
+    local = region.db.get(key)
+    if not concurrent(local, incoming):
+        region.db.put(key, newer(local, incoming))
+    elif policy == "last_writer_wins":
+        region.db.put(key, max(local, incoming, key=version))
+    else:                                        # merge (CRDT / field-level)
+        region.db.put(key, merge(local, incoming))`,
+  steps: [
+    {
+      from: 'eu', to: 'fra', label: 'PATCH /team/42 {name:"Team Ember"}', pc: ['def local_write', 'db.apply'],
+      title: 'A write in Frankfurt',
+      caption: 'At 10:00:00.100 UTC the Brussels user renames the team to "Team Ember". Frankfurt commits locally in 4 ms.',
+      text: ['With a single leader in Virginia this write would cross the Atlantic twice (about 180 ms). Local leaders are the whole point of multi-leader replication.'],
+      payloadKind: 'Write',
+      payload: { table: 'teams', id: 42, set: { name: 'Team Ember' }, version: { ts: '10:00:00.100', region: 'eu-central' } }
+    },
+    {
+      from: 'us', to: 'iad', label: 'PATCH /team/42 {name:"Team Blaze", color:"red"}', pc: ['def local_write', 'db.apply'],
+      title: 'Meanwhile, a write to the same row in Virginia',
+      caption: 'At 10:00:00.130, before Frankfurt\'s change has arrived, the Boston teammate renames the same team to "Team Blaze" and sets its colour to red.',
+      text: ['Neither leader knew about the other\'s write when it accepted its own. That is a conflict: two concurrent writes to one key.'],
+      payloadKind: 'Write',
+      payload: { table: 'teams', id: 42, set: { name: 'Team Blaze', color: 'red' }, version: { ts: '10:00:00.130', region: 'us-east' } }
+    },
+    {
+      from: 'fra', to: 'link', async: true, label: 'change v(…100, eu)', pc: ['replicate_async'],
+      title: 'Both leaders ship their changes',
+      caption: 'Each leader sends its change to the other asynchronously. The two changes cross in the middle of the Atlantic about 90 ms later.',
+      text: ['Replication must carry enough metadata to detect conflicts: a version, a timestamp, or a vector clock per row or per field.'],
+      payloadKind: 'Replicated changes',
+      payload: { 'eu→us': { id: 42, name: 'Team Ember', v: ['10:00:00.100', 'eu-central'] }, 'us→eu': { id: 42, name: 'Team Blaze', color: 'red', v: ['10:00:00.130', 'us-east'] } }
+    },
+    {
+      from: 'link', to: 'resolve', label: 'concurrent writes to teams/42', pc: ['def on_replicated', 'if not concurrent'],
+      title: 'Each region detects the conflict',
+      caption: 'Frankfurt receives Virginia\'s change and sees that it does not build on its own; Virginia sees the mirror image. Both must now apply the same rule.',
+      text: ['Common strategies: avoid conflicts (route all writes for one record to one leader), last write wins, custom merge logic, or CRDTs. ByteByteGo stresses that conflict management is the hard part of multi-leader setups.'],
+      payloadKind: 'Conflict',
+      payload: { key: 'teams/42', local_in_fra: { name: 'Team Ember' }, incoming_from_us: { name: 'Team Blaze', color: 'red' }, concurrent: true },
+      branch: { q: 'Which resolution policy is configured?', options: [ { label: 'last writer wins', goto: 'lww' }, { label: 'field-level merge', goto: 'merge' } ] }
+    },
+    {
+      id: 'lww', path: 'last writer wins', from: 'resolve', to: 'fra', label: 'keep v(…130, us): "Team Blaze"', pc: ['last_writer_wins', 'max(local, incoming'],
+      title: 'Last writer wins: the later timestamp survives',
+      caption: 'Virginia\'s write has the later timestamp, so both regions keep "Team Blaze", red. The Brussels user\'s rename is silently lost.',
+      text: ['DynamoDB global tables use this rule: the modification with the latest internal timestamp wins, per item. It is simple and converges, but it depends on clocks and discards one of the writes.'],
+      payloadKind: 'Resolved row (both regions)',
+      payload: { id: 42, name: 'Team Blaze', color: 'red', lost_write: { name: 'Team Ember', from: 'eu-central' } },
+      end: true
+    },
+    {
+      id: 'merge', path: 'merge', from: 'resolve', to: 'iad', label: 'merge fields', pc: ['merge(local, incoming)'],
+      title: 'Merge: keep non-conflicting fields from both',
+      caption: 'With per-field versions, the colour change has no rival, so it is kept. Only the name truly conflicts; a rule (later timestamp) or the app (show both, ask the user) decides it.',
+      text: ['CRDTs push this further: sets, counters and text types defined so that merging in any order gives the same result. Collaborative editors and some databases (Redis Enterprise active-active, Riak) use them.'],
+      payloadKind: 'Resolved row (both regions)',
+      payload: { id: 42, name: 'Team Blaze', name_conflict: ['Team Ember', 'Team Blaze'], color: 'red', rule: 'per-field versions; name by later timestamp, both kept in history' }
+    },
+    {
+      path: 'merge', from: 'iad', to: 'us', reply: true, label: 'team/42 updated (conflict noted)', pc: ['merge(local, incoming)'],
+      title: 'Both regions converge',
+      caption: 'Frankfurt applies the same merge, so both regions hold identical data. The app can show "renamed by two people at once" in the activity log.',
+      text: ['The cleanest solution is often to avoid conflicts: give each record a home region (for example the team\'s creator\'s region) and send all its writes there.'],
+      payloadKind: 'Final state',
+      payload: { 'eu-central': { name: 'Team Blaze', color: 'red' }, 'us-east': { name: 'Team Blaze', color: 'red' }, converged: true }
+    }
+  ],
+  decisions: [
+    { q: 'Single leader with cross-region replicas, or a leader per region?', options: [
+      { name: 'Single leader', verdict: 'good', why: 'No write conflicts ever. Remote users pay a cross-region round trip on every write; failover is needed if the leader\'s region fails.' },
+      { name: 'Leader per region', verdict: 'good', why: 'Local writes and region-level fault tolerance. You must design for conflicts, and constraints like uniqueness become hard to enforce.' } ] }
+  ],
+  refs: [
+    { label: 'ByteByteGo newsletter: How to choose a replication strategy (multi-leader, conflict handling)', url: 'https://blog.bytebytego.com/p/how-to-choose-a-replication-strategy', note: 'subscriber post; the free part covers multi-leader conflicts and CRDTs.' },
+    { label: 'AWS docs: How DynamoDB global tables work (last writer wins)', url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_HowItWorks.html' },
+    { label: 'CRDT overview (crdt.tech)', url: 'https://crdt.tech/' }
+  ],
+  verify: {
+    checked: ['Multi-leader definition, conflict management and CRDT merging: ByteByteGo replication-strategy post (free part).', 'Per-item last-writer-wins with internal timestamps, replication typically within a second: DynamoDB global tables docs.'],
+    uncertain: ['Field-level merge is a design pattern; which databases do it natively varies. Product names in the CRDT note are examples, not checked against their current docs.']
+  }
+});
+
+flow({
+  id: 'consistent-hashing',
+  title: 'Consistent hashing: adding a cache server without a reshuffle',
+  category: 'Databases & replication',
+  tags: ['Hash ring', 'Clockwise lookup', 'Virtual nodes', 'Minimal key movement', 'hash mod N problem'],
+  summary: 'With hash(key) mod N, adding a fifth cache server remaps about 80% of keys and the database gets flooded. Consistent hashing places servers and keys on the same ring so a new server only takes keys from its neighbours. Follow a lookup, the scale-out, and the virtual nodes that keep load even.',
+  requirements: {
+    functional: ['Map each key to a cache server.', 'Add or remove servers while running.'],
+    nonFunctional: ['Only about k/n keys move when a server joins or leaves (k keys, n servers).', 'Load spread evenly even with few servers.']
+  },
+  estimates: [
+    { label: 'Keys moved with mod N, 4 → 5', value: '≈ 80%', note: 'A key stays only if hash mod 4 = hash mod 5: one key in five.' },
+    { label: 'Keys moved with a ring, 4 → 5', value: '≈ 20%', note: 'Only the keys in the new server\'s ranges, about 1/5 of all keys.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Web server', sub: 'cache client', kind: 'client', icon: 'server', x: 0, y: 1, desc: 'Needs the cached value for a key and must know which cache server holds it.' },
+    { id: 'ring', label: 'Hash ring', sub: '0 … 2³²−1', kind: 'cache', icon: 'ring', x: 1, y: 1, desc: 'Keys and servers hashed into the same space, joined end to end. A key belongs to the first server clockwise from it.' },
+    { id: 's1', label: 'cache-1', sub: '3 virtual nodes', kind: 'cache', icon: 'cache', x: 2, y: 0, desc: 'Owns the ring ranges ending at its virtual nodes.' },
+    { id: 's2', label: 'cache-2', sub: '3 virtual nodes', kind: 'cache', icon: 'cache', x: 3, y: 0, desc: 'Another cache server.' },
+    { id: 's4', label: 'cache-4', sub: '3 virtual nodes', kind: 'cache', icon: 'cache', x: 3, y: 2, desc: 'Another cache server.' },
+    { id: 's5', label: 'cache-5 (new)', sub: 'joins at 14:00', kind: 'cache', icon: 'cache', x: 2, y: 2, desc: 'Added during a traffic spike. Takes over some ranges from its clockwise neighbours only.' },
+    { id: 'db', label: 'Database', sub: 'source of truth', kind: 'db', icon: 'db', x: 1, y: 2, desc: 'Every cache miss lands here. A mass remap would turn into a wave of misses.' }
+  ],
+  pseudo: `
+ring = SortedMap()                               # position -> server
+def add_server(s, vnodes=3):
+    for i in range(vnodes):
+        ring[hash(f"{s}#{i}")] = s              # many points per server
+
+def server_for(key):
+    h = hash(key)
+    pos = ring.ceiling(h) or ring.first()       # first point clockwise, wrap
+    return ring[pos]
+
+def get(key):
+    s = server_for(key)
+    if (v := s.get(key)) is not None: return v
+    v = db.load(key); s.set(key, v); return v   # miss: fill from DB`,
+  steps: [
+    {
+      from: 's4', to: 'ring', label: 'cache-1#0..#2, cache-2#0..#2, cache-4#0..#2', pc: ['def add_server', 'ring[hash'],
+      title: 'Servers are hashed onto the ring',
+      caption: 'At startup every cache server is hashed three times (cache-1#0, cache-1#1, \u2026) onto a ring of 2\u00b3\u00b2 positions. Four servers give 12 points; cache-4 is shown, cache-3 is omitted from the drawing.',
+      text: ['Each server owns the arcs that end at its points. Many points per server (virtual nodes) make the arcs small and evenly mixed, so no server gets one huge range.'],
+      payloadKind: 'Ring',
+      payload: { points: 12, sample: [{ pos: 412000000, server: 'cache-1#2' }, { pos: 2701100000, server: 'cache-4#2' }, { pos: 3020551000, server: 'cache-2#1' }] }
+    },
+    {
+      from: 'app', to: 'ring', label: 'hash("user:8812") = 2,914,031,442', pc: ['def server_for', 'h = hash(key)'],
+      title: 'Hash the key onto the ring',
+      caption: 'The web server needs user:8812\'s profile. It hashes the key into the same 32-bit space the servers were hashed into.',
+      text: ['The ring is just a sorted list of server positions; "clockwise" means "the next larger position, wrapping around to the smallest".'],
+      payloadKind: 'Lookup',
+      payload: { key: 'user:8812', hash: 2914031442, ring_size: '2^32' }
+    },
+    {
+      from: 'ring', to: 's2', label: 'next point clockwise: cache-2#1', pc: ['ring.ceiling', 'return ring[pos]'],
+      title: 'Walk clockwise to the first server',
+      caption: 'The first server point after 2,914,031,442 is cache-2#1 at 3,020,551,000, so cache-2 owns this key.',
+      text: ['With 4 servers and 3 virtual nodes each, the ring has 12 points. Each server owns 3 small arcs spread around the ring instead of one big arc.'],
+      payloadKind: 'Ring segment',
+      payload: { points_near: [{ pos: 2701100000, server: 'cache-4#2' }, { pos: 3020551000, server: 'cache-2#1' }], owner: 'cache-2' }
+    },
+    {
+      from: 'app', to: 's2', label: 'GET user:8812 → hit', pc: ['def get', 's.get(key)'],
+      title: 'Read from the owning cache',
+      caption: 'cache-2 has the profile. Every web server computes the same ring, so they all agree on the owner without asking anyone.',
+      text: [],
+      payloadKind: 'Cache hit',
+      payload: { server: 'cache-2', key: 'user:8812', value: { name: 'Ana', plan: 'pro' }, ms: 0.4 }
+    },
+    {
+      from: 's5', to: 'ring', label: 'add cache-5#0..#2', pc: ['def add_server', 'ring[hash'],
+      title: '14:00 — a fifth server joins',
+      caption: 'Traffic spikes and cache-5 is added. Its three virtual nodes land at three spots on the ring. Each takes over only the arc between it and the previous point counter-clockwise.',
+      text: ['With hash mod N, changing N from 4 to 5 would send about 80% of keys to a different server at once. ByteByteGo calls this the rehashing problem: a storm of cache misses on the database.'],
+      payloadKind: 'Ring change',
+      payload: { added: [{ pos: 2850000000, server: 'cache-5#0' }, { pos: 1120400000, server: 'cache-5#1' }, { pos: 410700000, server: 'cache-5#2' }], keys_moving: '≈ 1/5 of all keys', from_servers: ['cache-2', 'cache-1', 'cache-4'] },
+      branch: { q: 'Does user:8812 fall in one of cache-5\'s new arcs?', options: [ { label: 'yes: it moved', goto: 'moved' }, { label: 'no: unaffected', goto: 'stay' } ] }
+    },
+    {
+      id: 'moved', path: 'key moved', from: 'ring', to: 's5', label: 'user:5190 @2.80e9 → cache-5#0', pc: ['ring.ceiling'],
+      title: 'Keys in the new arc now belong to cache-5',
+      caption: 'Take user:5190 at 2,801,000,000: the next point clockwise is now cache-5#0 at 2,850,000,000, not cache-2#1. That key moved from cache-2 to cache-5.',
+      text: ['user:8812 at 2,914,031,442 is past cache-5#0, so it still goes to cache-2. Only keys between cache-4#2 and cache-5#0 changed owner.'],
+      payloadKind: 'Owner change',
+      payload: { key: 'user:5190', hash: 2801000000, before: 'cache-2', after: 'cache-5' }
+    },
+    {
+      path: 'key moved', from: 's1', to: 's5', async: true, label: 'arc just before cache-1#2 → cache-5', pc: ['ring.ceiling'],
+      title: 'Each neighbour gives up one small arc',
+      caption: 'cache-5#2 at 410,700,000 lands just before cache-1#2, so keys in that thin arc move from cache-1 to cache-5. The same happens next to cache-2 and cache-4. Each existing server loses a little; none loses much.',
+      text: ['Nothing is copied ahead of time in a plain cache: the moved keys simply miss once on cache-5. A database built on a ring (Cassandra, Dynamo) streams the moved ranges to the new node before it serves them.'],
+      payloadKind: 'Ownership change',
+      payload: { 'cache-1': '-1 thin arc', 'cache-2': '-1 thin arc', 'cache-4': '-1 thin arc', 'cache-5': '+3 arcs (≈1/5 of keys)' }
+    },
+    {
+      path: 'key moved', from: 'app', to: 'db', label: 'miss on cache-5 → SELECT user 5190', pc: ['db.load(key)'],
+      title: 'One miss, then cached again',
+      caption: 'cache-5 starts empty, so the first read of user:5190 misses and loads from the database. Only about a fifth of keys do this, spread over time, which the database absorbs.',
+      text: ['Some systems pre-warm the new server or copy its ranges first. A distributed cache usually just accepts the brief misses.'],
+      payloadKind: 'Miss + fill',
+      payload: { server: 'cache-5', key: 'user:5190', db_query: 'SELECT * FROM users WHERE id = 5190', then: 'SET user:5190 ttl=3600' },
+      end: true
+    },
+    {
+      id: 'stay', path: 'unaffected', from: 'app', to: 's2', label: 'user:8812 still → cache-2 (hit)', pc: ['def get'],
+      title: 'Most keys keep their server',
+      caption: 'user:8812 is not in any of cache-5\'s arcs, so it still maps to cache-2 and still hits. About 4 in 5 keys are like this.',
+      text: ['Virtual nodes matter here: with one point per server, cache-5 would take one big arc from a single neighbour. With many points it takes small arcs from several, so load and moved keys are spread. ByteByteGo notes real systems use far more virtual nodes than 3.'],
+      payloadKind: 'Cache hit',
+      payload: { key: 'user:8812', owner_before: 'cache-2', owner_after: 'cache-2', hit: true }
+    }
+  ],
+  refs: [
+    { label: 'ByteByteGo, System Design Interview Vol. 1: Design consistent hashing', url: 'https://bytebytego.com/courses/system-design-interview/design-consistent-hashing', note: 'rehashing problem, ring, virtual nodes.' },
+    { label: 'Apache Cassandra docs: consistent hashing using a token ring, vnodes', url: 'https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html' },
+    { label: 'Amazon Dynamo paper (SOSP 2007)', url: 'https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf' }
+  ],
+  verify: {
+    checked: ['Rehashing problem with mod N, clockwise lookup, k/n keys remapped, virtual nodes: ByteByteGo chapter.', 'Tokens and vnodes in practice: Cassandra docs.'],
+    uncertain: ['Ring positions are made up for the example. The 80% / 20% figures assume uniform hashing.']
+  }
+});
+
+flow({
+  id: 'db-sharding',
+  title: 'Database sharding: routing by shard key',
+  category: 'Databases & replication',
+  tags: ['Shard key', 'Hash vs range', 'Query router', 'Targeted vs scatter-gather', 'Hotspots', 'Resharding'],
+  summary: 'When one database can no longer hold the data or the writes, split rows across shards that share a schema. Follow a query that includes the shard key straight to one shard, then a query without it that must ask every shard and merge the results, and see the celebrity hotspot and resharding problems.',
+  requirements: {
+    functional: ['Store 2 billion chapter-view rows and 40 million users.', 'Fetch one user\'s data quickly; occasionally run queries across all users.'],
+    nonFunctional: ['Write throughput grows by adding shards.', 'A query that includes the shard key touches one shard only.']
+  },
+  estimates: [
+    { label: 'Shards', value: '4 → 8', note: 'Each shard is itself a primary with replicas.' },
+    { label: 'Targeted query', value: '1 shard', note: 'Latency of a single database.' },
+    { label: 'Scatter-gather query', value: 'all shards', note: 'As slow as the slowest shard, and load on every shard.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'api', label: 'Reading-history API', sub: 'FastAPI', kind: 'client', icon: 'api', x: 0, y: 1, desc: 'Sends queries as if there were one database; the router hides the shards.' },
+    { id: 'router', label: 'Shard router', sub: 'mongos / Vitess / app lib', kind: 'edge', icon: 'split', x: 1, y: 1, desc: 'Computes which shard owns a key and forwards the query. With no key in the query, it fans out to all shards and merges.' },
+    { id: 'meta', label: 'Shard map', sub: 'config servers', kind: 'cache', icon: 'log', x: 1, y: 0, desc: 'Metadata: which key ranges (or hash ranges) live on which shard. Cached by routers.' },
+    { id: 's0', label: 'Shard 0', sub: 'hash range 0–3fff', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Holds about a quarter of users and all their rows.' },
+    { id: 's1', label: 'Shard 1', sub: 'hash range 4000–7fff', kind: 'db', icon: 'db', x: 3, y: 1, desc: 'Another quarter.' },
+    { id: 's2', label: 'Shards 2–3', sub: '8000–ffff', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'The remaining half, drawn as one box.' }
+  ],
+  pseudo: `
+SHARD_KEY = "user_id"
+def route(query):
+    key = query.get(SHARD_KEY)
+    if key is not None:
+        shard = shard_map.lookup(hash(key) & 0xffff)  # targeted
+        return shard.execute(query)
+    parts = parallel(s.execute(query) for s in shards) # scatter
+    return merge_sort_limit(parts, query.order_by, query.limit)  # gather`,
+  steps: [
+    {
+      from: 'api', to: 'router', label: 'SELECT … WHERE user_id=8812 ORDER BY at DESC LIMIT 20', pc: ['def route', 'key = query.get'],
+      title: 'A query that includes the shard key',
+      caption: 'Ana opens her reading history. The query filters on user_id, which is the shard key, so the router can tell exactly where her rows are.',
+      text: ['ByteByteGo\'s rule for choosing a shard key: it should spread data evenly and let most queries go to one shard. user_id fits: nearly every query is about one user.'],
+      payloadKind: 'SQL',
+      payload: { sql: 'SELECT chapter_id, at FROM views WHERE user_id = 8812 ORDER BY at DESC LIMIT 20', shard_key_present: true }
+    },
+    {
+      from: 'router', to: 'meta', label: 'hash(8812)=0x5a1c → ?', pc: ['shard_map.lookup'],
+      title: 'Look up the owner in the shard map',
+      caption: 'The router hashes 8812 to 0x5a1c and checks its cached shard map: that hash range belongs to Shard 1.',
+      text: ['Hash sharding spreads keys evenly but makes range scans on the key impossible. Range sharding (user_id 1–10M on shard 0…) keeps ranges together but new users all land on the last shard. MongoDB, for example, supports both, grouping keys into chunks that a balancer moves between shards.'],
+      payloadKind: 'Shard map entry',
+      payload: { hash: '0x5a1c', ranges: [{ from: '0x0000', to: '0x3fff', shard: 0 }, { from: '0x4000', to: '0x7fff', shard: 1 }], owner: 'shard 1' }
+    },
+    {
+      from: 'router', to: 's1', label: 'targeted → shard 1', pc: ['return shard.execute'],
+      title: 'Targeted: one shard answers',
+      caption: 'The query goes only to Shard 1, which has all of Ana\'s rows. 20 rows come back in 3 ms; the other shards did no work.',
+      text: ['Keeping everything a request needs on one shard (here, all of a user\'s views) also keeps transactions local, avoiding cross-shard commits.'],
+      payloadKind: 'Result',
+      payload: { shard: 1, rows: 20, ms: 3, other_shards_touched: 0 }
+    },
+    {
+      from: 'api', to: 'router', label: 'SELECT chapter_id, count(*) … GROUP BY … LIMIT 10', pc: ['key = query.get'],
+      title: 'A query without the shard key',
+      caption: 'An admin dashboard asks for the 10 most-read chapters this week. There is no user_id, so no single shard has the answer.',
+      text: [],
+      payloadKind: 'SQL',
+      payload: { sql: "SELECT chapter_id, count(*) AS n FROM views WHERE at > now() - interval '7 days' GROUP BY chapter_id ORDER BY n DESC LIMIT 10", shard_key_present: false },
+      branch: { q: 'How is this query served?', options: [ { label: 'scatter-gather over shards', goto: 'scatter' }, { label: 'precomputed elsewhere', goto: 'olap' } ] }
+    },
+    {
+      id: 'scatter', path: 'scatter-gather', from: 'router', to: 's0', label: 'broadcast to all 4 shards', pc: ['parts = parallel'],
+      title: 'Scatter: every shard runs the query',
+      caption: 'The router sends the query to all shards in parallel. Each computes its own local top counts.',
+      text: ['The response time is that of the slowest shard, and every shard pays the cost. Fine for a rare admin query; dangerous on a hot path.'],
+      payloadKind: 'Fan-out',
+      payload: { sent_to: ['shard 0', 'shard 1', 'shard 2', 'shard 3'], each_returns: 'local counts per chapter (not just top 10, or the merge would be wrong)' },
+      fields: { each_returns: 'A global top 10 needs each shard\'s full counts for candidate chapters, or a two-phase approximate method. Taking each shard\'s top 10 can miss a chapter that is 11th everywhere.' }
+    },
+    {
+      path: 'scatter-gather', from: 's1', to: 'router', reply: true, label: 'partial counts × 4 → merge', pc: ['merge_sort_limit'],
+      title: 'Gather: merge and cut to 10',
+      caption: 'The router sums the counts per chapter from the four shards, sorts, and returns the top 10. 410 ms, versus 3 ms for the targeted query.',
+      text: ['ByteByteGo lists the other costs of sharding: joins across shards are hard (denormalise instead), a celebrity key can overload one shard, and resharding is needed when shards fill unevenly. Consistent hashing reduces how much data moves when shards are added.'],
+      payloadKind: 'Merged result',
+      payload: { top: [{ chapter_id: 'static-bloom/63', n: 48211 }, { chapter_id: 'static-bloom/62', n: 30170 }], shards_merged: 4, ms: 410 },
+      failure: ['**Celebrity hotspot:** if one series gets 40% of all traffic and the shard key were series_id, its shard would melt. Fixes: a better key, splitting the hot key (key + random suffix), or caching.'],
+      end: true
+    },
+    {
+      id: 'olap', path: 'precomputed', from: 'router', to: 's2', async: true, label: 'served from analytics store', pc: ['parts = parallel'],
+      title: 'Better for dashboards: precompute',
+      caption: 'Analytics queries are often moved off the shards entirely: change events stream into a warehouse or a counter table that is keyed by chapter, where the top 10 is one cheap read.',
+      text: ['This is the usual shape at scale: shards serve per-user requests; aggregated views come from a separate pipeline (see the ad click aggregation and CDC flows).'],
+      payloadKind: 'Precomputed table',
+      payload: { table: 'chapter_views_weekly (keyed by chapter_id)', updated: 'every minute by a stream job', query_ms: 2 }
+    }
+  ],
+  decisions: [
+    { q: 'Hash or range sharding?', options: [
+      { name: 'Hash of the key', verdict: 'good', why: 'Even spread, no hot "latest" shard. Range queries on the key become scatter-gather.' },
+      { name: 'Ranges of the key', verdict: 'good', why: 'Range scans stay on one shard. Monotonic keys (time, auto-increment ids) send all new writes to one shard.' },
+      { name: 'Directory (lookup table)', verdict: 'good', why: 'Any placement you like, easy to move tenants. The directory is an extra hop and must be highly available.' } ] }
+  ],
+  refs: [
+    { label: 'ByteByteGo, System Design Interview Vol. 1: Scale from zero to millions of users (sharding, resharding, celebrity problem, joins)', url: 'https://bytebytego.com/courses/system-design-interview/scale-from-zero-to-millions-of-users' },
+    { label: 'MongoDB manual: Sharding (shard keys, mongos, config servers, chunks, targeted vs broadcast)', url: 'https://www.mongodb.com/docs/manual/sharding/' },
+    { label: 'Vitess docs: Sharding (keyspaces, vindexes, resharding)', url: 'https://vitess.io/docs/22.0/reference/features/sharding/' },
+    { label: 'Citus: Understanding partitioning and sharding in Postgres', url: 'https://www.citusdata.com/blog/2023/08/04/understanding-partitioning-and-sharding-in-postgres-and-citus/' }
+  ],
+  verify: {
+    checked: ['Shard key choice, resharding, celebrity problem, cross-shard joins: ByteByteGo Vol. 1 ch. 1.', 'mongos routing, config servers, chunks, targeted vs broadcast operations: MongoDB manual.'],
+    uncertain: ['Hash ranges, row counts and timings are illustrative.']
+  }
+});
+
+flow({
+  id: 'storage-engines',
+  title: 'Inside a database write: B-tree vs LSM-tree storage engines',
+  category: 'Databases & replication',
+  tags: ['Write-ahead log', 'B-tree pages', 'Memtable', 'SSTables', 'Compaction', 'Bloom filters'],
+  summary: 'Two families of storage engines sit under almost every database. PostgreSQL and InnoDB update sorted pages in place (B-trees); RocksDB, Cassandra and LevelDB append to a memtable and merge sorted files later (LSM-trees). Follow one write and one read through each path, and see where each pays its cost.',
+  requirements: {
+    functional: ['Durably store key → value and find it again.', 'Support range scans in key order.'],
+    nonFunctional: ['Survive a crash at any instant (write-ahead log).', 'Choose between read-optimised (B-tree) and write-optimised (LSM) behaviour.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'q', label: 'Query executor', sub: 'PUT / GET', kind: 'client', icon: 'api', x: 0, y: 1, desc: 'Receives a write or read for one key from the SQL layer or API.' },
+    { id: 'wal', label: 'Write-ahead log', sub: 'append-only file', kind: 'queue', icon: 'log', x: 1, y: 0, desc: 'Every change is appended and flushed here first, so it can be replayed after a crash. Both engine types use one.' },
+    { id: 'bt', label: 'B-tree', sub: '8 KB pages: root → leaf', kind: 'db', icon: 'tree', x: 2, y: 0, desc: 'A balanced tree of fixed-size pages. Finding a key reads one page per level (3–4 levels for millions of rows). Writes modify the leaf page in place.' },
+    { id: 'mem', label: 'Memtable', sub: 'sorted, in memory', kind: 'cache', icon: 'cache', x: 1, y: 2, desc: 'LSM engines insert writes into an in-memory sorted structure (a skip list in RocksDB). Fast: no disk seek per write.' },
+    { id: 'sst', label: 'SSTables L0…Ln', sub: 'immutable sorted files', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'When the memtable fills, it is written out as a sorted, immutable file. Background compaction merges files and drops overwritten or deleted values.' },
+    { id: 'bloom', label: 'Bloom filters', sub: 'one per file', kind: 'cache', icon: 'filter', x: 2, y: 2, desc: 'A compact bit set that answers "definitely not in this file" or "maybe". Lets reads skip most SSTables.' }
+  ],
+  pseudo: `
+def put(key, value):
+    wal.append(key, value); wal.fsync()        # durability first
+    if ENGINE == "btree":
+        leaf = btree.descend(key)              # root -> inner -> leaf
+        leaf.insert(key, value)                # in place; split if full
+    else:  # LSM
+        memtable.insert(key, value)
+        if memtable.full(): flush_to_sstable(memtable)  # sorted, immutable
+
+def get(key):
+    if ENGINE == "btree": return btree.descend(key).find(key)
+    if v := memtable.get(key): return v
+    for f in sstables_newest_first():
+        if f.bloom.might_contain(key) and (v := f.find(key)): return v
+    return None`,
+  steps: [
+    {
+      from: 'q', to: 'wal', label: 'append PUT user:8812 → fsync', pc: ['def put', 'wal.append'],
+      title: 'Every engine logs the write first',
+      caption: 'The executor gets PUT user:8812 = {plan: "pro"}. Before touching any data structure, the change is appended to the write-ahead log and flushed to disk.',
+      text: ['Appending is sequential and fast. If the machine crashes a moment later, replaying the log rebuilds the change. This is the same WAL that replication streams (see the primary–replica flow).'],
+      payloadKind: 'WAL record',
+      payload: { lsn: 88231, op: 'PUT', key: 'user:8812', value: { plan: 'pro' }, fsync: true },
+      branch: { q: 'Which storage engine is underneath?', options: [ { label: 'B-tree (PostgreSQL, InnoDB)', goto: 'btw' }, { label: 'LSM-tree (RocksDB, Cassandra)', goto: 'lsmw' } ] }
+    },
+    {
+      id: 'btw', path: 'B-tree', from: 'q', to: 'bt', label: 'descend root → inner → leaf #4471', pc: ['btree.descend', 'leaf.insert'],
+      title: 'B-tree: find the leaf page and update it in place',
+      caption: 'The engine walks from the root page down to the leaf that covers user:8812 (3 page reads, usually cached) and writes the new value into that page.',
+      text: ['If the leaf is full, it splits into two and the parent gets a new pointer. The modified page is written back to disk later by a checkpoint; the WAL covers the gap. Cost: random page writes, and a whole 8 KB page rewritten for a small change.'],
+      payloadKind: 'Page access',
+      payload: { path: ['root p1', 'inner p212', 'leaf p4471'], leaf_fill: '71%', split: false, dirty_page: 'p4471 (flushed at next checkpoint)' }
+    },
+    {
+      path: 'B-tree', from: 'bt', to: 'q', reply: true, label: 'GET: 3 page reads → value', pc: ['return btree.descend(key).find'],
+      title: 'B-tree read: one path, one place',
+      caption: 'A later GET walks the same three pages and finds exactly one copy of the key. Read cost is predictable: one page per tree level.',
+      text: ['ByteByteGo\'s comparison in one line: B-trees keep data sorted on disk so reads are fast but pay on every write; LSM-trees buffer writes in memory and flush in bulk, making writes cheap and reads more expensive. Range scans work in both because keys are stored in order.'],
+      payloadKind: 'Read',
+      payload: { key: 'user:8812', pages_read: 3, copies_of_key: 1, value: { plan: 'pro' } },
+      end: true
+    },
+    {
+      id: 'lsmw', path: 'LSM', from: 'q', to: 'mem', label: 'insert into memtable (skip list)', pc: ['memtable.insert'],
+      title: 'LSM: just insert into the in-memory memtable',
+      caption: 'No page is read or rewritten. The write lands in a sorted in-memory structure and is done: the WAL already made it durable.',
+      text: ['This is why LSM engines accept very high write rates: every disk write is sequential (log appends and whole-file flushes).'],
+      payloadKind: 'Memtable',
+      payload: { key: 'user:8812', value: { plan: 'pro' }, memtable_size_mb: 63.8, limit_mb: 64 }
+    },
+    {
+      path: 'LSM', from: 'mem', to: 'sst', async: true, label: 'full → flush as L0 SSTable #9132', pc: ['flush_to_sstable'],
+      title: 'Memtable full: flush to an immutable sorted file',
+      caption: 'The memtable reaches 64 MB. It becomes read-only, a new one takes writes, and the old one is written out in key order as a new SSTable. Its WAL segment can then be deleted.',
+      text: ['Files are never modified. An update writes a newer version of the key in a newer file; a delete writes a tombstone. Compaction later merges files, keeps the newest version and drops the rest.'],
+      payloadKind: 'Flush',
+      payload: { new_file: 'L0/009132.sst', keys: 412000, sorted: true, bloom_filter: '10 bits/key', wal_segment_deleted: true }
+    },
+    {
+      path: 'LSM', from: 'q', to: 'bloom', label: 'GET user:5190: memtable miss → check blooms', pc: ['def get', 'memtable.get', 'bloom.might_contain'],
+      title: 'LSM read: newest first, skip files with Bloom filters',
+      caption: 'A read checks the memtable, then SSTables from newest to oldest. Bloom filters say "definitely not here" for most files, so only one or two are actually read.',
+      text: ['Without compaction the number of files grows and reads slow down; with it, the same data is rewritten several times (write amplification). Tuning compaction is the main LSM trade-off.'],
+      payloadKind: 'Read path',
+      payload: { memtable: 'miss', files_checked: 7, bloom_says_maybe: 1, files_read: 1, found_in: 'L2/007004.sst' }
+    },
+    {
+      path: 'LSM', from: 'sst', to: 'sst', async: true, label: 'compaction: merge L0 + L1, drop old versions', pc: ['flush_to_sstable'],
+      title: 'Compaction keeps reads fast',
+      caption: 'In the background, overlapping files are merge-sorted into the next level. Old versions and tombstoned keys disappear, and each level holds fewer, larger, non-overlapping files.',
+      text: ['RocksDB, LevelDB and Cassandra all work this way, with different compaction strategies (levelled, tiered, time-window).'],
+      payloadKind: 'Compaction job',
+      payload: { inputs: ['L0/009131.sst', 'L0/009132.sst', 'L1/008870.sst'], output: ['L1/009140.sst', 'L1/009141.sst'], versions_dropped: 58210, tombstones_purged: 1204 }
+    }
+  ],
+  decisions: [
+    { q: 'Which engine for which workload?', options: [
+      { name: 'B-tree', verdict: 'good', why: 'Read-heavy OLTP with predictable lookups and in-place updates: PostgreSQL, MySQL InnoDB.' },
+      { name: 'LSM-tree', verdict: 'good', why: 'Write-heavy, append-like data (events, time series, messages): RocksDB, Cassandra, ScyllaDB. Reads rely on Bloom filters and compaction.' } ] }
+  ],
+  refs: [
+    { label: 'ByteByteGo newsletter: B-trees vs LSM-trees comparison', url: 'https://blog.bytebytego.com/p/b-trees-vs-lsm-trees-comparison-and', note: 'subscriber post; the free intro states the trade-off.' },
+    { label: 'RocksDB wiki: overview (memtable, logfile, sstfile, compaction)', url: 'https://github.com/facebook/rocksdb/wiki/RocksDB-Overview' },
+    { label: 'PostgreSQL docs: B-tree indexes', url: 'https://www.postgresql.org/docs/current/btree.html' },
+    { label: 'ByteByteGo, System Design Interview Vol. 1: Design a key-value store (write and read paths)', url: 'https://bytebytego.com/courses/system-design-interview/design-a-key-value-store' }
+  ],
+  verify: {
+    checked: ['Memtable → logfile → flush to sorted sstfile, compaction: RocksDB overview.', 'Write path (commit log, memory cache, SSTables) and read path with Bloom filters: ByteByteGo key-value store chapter.'],
+    uncertain: ['Page numbers, sizes and file names are illustrative; 64 MB is RocksDB\'s common default write buffer size but configurations vary.']
+  }
+});
+
+flow({
+  id: 'mvcc-isolation',
+  title: 'Transactions, MVCC and isolation levels (two concurrent seat bookings)',
+  category: 'Databases & replication',
+  tags: ['ACID', 'MVCC snapshots', 'Read Committed', 'Repeatable Read', 'Lost update', 'Serialization failure + retry'],
+  summary: 'Two people try to book the last seat at the same moment. With PostgreSQL\'s multi-version concurrency control, readers and writers do not block each other, but what each transaction sees depends on the isolation level. Watch the default Read Committed level, then Repeatable Read raising a serialization failure that the app retries.',
+  requirements: {
+    functional: ['Book a seat: decrement available seats and insert a booking, atomically.', 'Never sell the same last seat twice.'],
+    nonFunctional: ['Readers never wait for writers.', 'The app handles retryable errors.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'ana', label: 'Ana\'s request', sub: 'transaction T1', kind: 'client', icon: 'laptop', x: 0, y: 0, desc: 'Booking API worker handling Ana\'s checkout.' },
+    { id: 'ben', label: 'Ben\'s request', sub: 'transaction T2', kind: 'client', icon: 'phone', x: 0, y: 2, desc: 'Another worker handling Ben, a few milliseconds later.' },
+    { id: 'pg', label: 'PostgreSQL', sub: 'MVCC', kind: 'db', icon: 'db', x: 2, y: 1, desc: 'Keeps several versions of each row, tagged with the transaction that created and deleted them. Each statement or transaction reads from a snapshot.' },
+    { id: 'row', label: 'Row: show 77', sub: 'seats_left versions', kind: 'cache', icon: 'layers', x: 3, y: 0, desc: 'The physical versions of the row. An UPDATE writes a new version; the old one stays until no snapshot needs it, then VACUUM removes it.' },
+    { id: 'lock', label: 'Row lock', sub: 'one writer at a time', kind: 'worker', icon: 'lock', x: 3, y: 2, desc: 'Two transactions updating the same row still serialise on a row-level lock; the second waits for the first to commit or roll back.' }
+  ],
+  pseudo: `
+def book(show_id, user):
+    for attempt in range(3):
+        try:
+            with db.transaction(isolation=LEVEL):
+                seats = db.one("SELECT seats_left FROM shows WHERE id=%s", show_id)
+                if seats < 1: return "sold out"
+                db.run("UPDATE shows SET seats_left = seats_left - 1 WHERE id=%s", show_id)
+                db.run("INSERT INTO bookings(show_id, user_id) VALUES (%s, %s)", show_id, user)
+            return "booked"                              # COMMIT
+        except SerializationFailure:                    # SQLSTATE 40001
+            continue                                    # retry from the start
+    return "try again"`,
+  steps: [
+    {
+      from: 'ana', to: 'pg', label: 'BEGIN; SELECT seats_left → 1', pc: ['def book', 'with db.transaction', 'SELECT seats_left'],
+      title: 'Ana\'s transaction reads: 1 seat left',
+      caption: 'T1 begins and reads the show row from its snapshot: seats_left = 1. No lock is taken for a plain read.',
+      text: ['PostgreSQL\'s docs: with MVCC, reading never blocks writing and writing never blocks reading. Each statement sees a snapshot of committed data.'],
+      payloadKind: 'T1 snapshot',
+      payload: { tx: 'T1 (xid 5001)', sql: 'SELECT seats_left FROM shows WHERE id = 77', result: 1 }
+    },
+    {
+      from: 'ben', to: 'pg', label: 'BEGIN; SELECT seats_left → 1', pc: ['SELECT seats_left'],
+      title: 'Ben\'s transaction also reads 1',
+      caption: 'T2 starts 3 ms later. T1 has not written yet, so T2 also sees seats_left = 1. Both think they can book.',
+      text: ['This is the classic setup for a lost update: two read-modify-write cycles interleaved.'],
+      payloadKind: 'T2 snapshot',
+      payload: { tx: 'T2 (xid 5002)', result: 1 }
+    },
+    {
+      from: 'ana', to: 'row', label: 'UPDATE seats_left = seats_left - 1  (new version: 0)', pc: ['UPDATE shows'],
+      title: 'Ana updates: a new row version, plus a row lock',
+      caption: 'T1 decrements. PostgreSQL writes a new version of the row (seats_left = 0, created by xid 5001) and marks the old one as deleted by 5001. T1 holds the row lock.',
+      text: ['Until T1 commits, other transactions still see the old version (1). That is MVCC: versions, not overwrites.'],
+      payloadKind: 'Row versions',
+      payload: { versions: [{ seats_left: 1, xmin: 4870, xmax: 5001 }, { seats_left: 0, xmin: 5001, xmax: null }], locked_by: 'T1' }
+    },
+    {
+      from: 'ben', to: 'lock', label: 'UPDATE … waits for T1\'s row lock', pc: ['UPDATE shows'],
+      title: 'Ben\'s update has to wait',
+      caption: 'T2 tries the same UPDATE. The row is locked by T1, so T2 blocks until T1 finishes. Meanwhile Ana\'s transaction inserts her booking and commits.',
+      text: ['Readers do not wait, but two writers to the same row do. What happens when T2 wakes up depends on the isolation level.'],
+      payloadKind: 'Lock wait',
+      payload: { waiting: 'T2', holder: 'T1', then: 'T1 INSERT booking; COMMIT' },
+      branch: { q: 'Which isolation level does the transaction use?', options: [ { label: 'Read Committed (default)', goto: 'rc' }, { label: 'Repeatable Read', goto: 'rr' } ] }
+    },
+    {
+      id: 'rc', path: 'Read Committed', from: 'lock', to: 'row', label: 're-check row: seats_left=0 → 0-1 = -1', pc: ['UPDATE shows'],
+      title: 'Read Committed: the update re-reads the new version',
+      caption: 'When T1 commits, T2\'s UPDATE re-evaluates on the newest row version and applies seats_left - 1 to 0, giving -1. T2 already decided based on its stale SELECT. Two bookings, minus one seats.',
+      text: ['The fix in Read Committed is to make the check part of the write: UPDATE … SET seats_left = seats_left - 1 WHERE id = 77 AND seats_left > 0, and check that one row was updated; or lock the row up front with SELECT … FOR UPDATE. A CHECK (seats_left >= 0) constraint is a good last line of defence.'],
+      payloadKind: 'Outcome',
+      payload: { T2_update: 'applied to newest version', seats_left: -1, bookings: 2, bug: 'oversold', fix: 'UPDATE … WHERE seats_left > 0  (or SELECT … FOR UPDATE)' },
+      end: true
+    },
+    {
+      id: 'rr', path: 'Repeatable Read', from: 'pg', to: 'ben', reply: true, label: 'ERROR 40001 could not serialize access', pc: ['except SerializationFailure'],
+      title: 'Repeatable Read: T2 gets a serialization failure',
+      caption: 'At Repeatable Read, T2 must keep seeing its snapshot, but the row it wants to update was changed by a transaction that committed after that snapshot. PostgreSQL refuses: "could not serialize access due to concurrent update".',
+      text: ['PostgreSQL\'s docs say applications using Repeatable Read or Serializable must be ready to retry transactions on serialization failures. The error is safe: T2 is rolled back and nothing it did is kept.'],
+      payloadKind: 'Error',
+      payload: { sqlstate: '40001', message: 'could not serialize access due to concurrent update', T2: 'rolled back' }
+    },
+    {
+      path: 'Repeatable Read', from: 'ben', to: 'pg', label: 'retry: BEGIN; SELECT → 0 → "sold out"', pc: ['continue', 'if seats < 1'],
+      title: 'The app retries and sees the truth',
+      caption: 'Ben\'s worker catches 40001 and runs the whole transaction again with a fresh snapshot. It now reads seats_left = 0 and returns "sold out". Exactly one booking exists.',
+      text: ['Retrying the whole function, not just the failed statement, is the important part: the decision must be made again on fresh data.'],
+      payloadKind: 'Retry',
+      payload: { attempt: 2, seats_left: 0, result: 'sold out', bookings: 1 }
+    }
+  ],
+  decisions: [
+    { q: 'How to prevent overselling?', options: [
+      { name: 'Conditional UPDATE (WHERE seats_left > 0)', verdict: 'great', why: 'One statement, works at Read Committed, no retries for the common case.' },
+      { name: 'SELECT … FOR UPDATE then UPDATE', verdict: 'good', why: 'Pessimistic: the second transaction waits, then sees the new value. Simple; holds locks longer.' },
+      { name: 'Repeatable Read / Serializable + retry loop', verdict: 'good', why: 'Protects complex multi-row logic you cannot express in one statement. Every caller must retry on 40001.' } ] }
+  ],
+  refs: [
+    { label: 'PostgreSQL docs: Transaction isolation', url: 'https://www.postgresql.org/docs/current/transaction-iso.html', note: 'Read Committed re-evaluation, serialization failures, retries.' },
+    { label: 'PostgreSQL docs: MVCC introduction', url: 'https://www.postgresql.org/docs/current/mvcc-intro.html' },
+    { label: 'ByteByteGo, System Design Interview Vol. 2: Hotel reservation system (concurrency, double booking)', url: 'https://bytebytego.com/courses/system-design-interview/hotel-reservation-system' }
+  ],
+  verify: {
+    checked: ['Reading never blocks writing, snapshots per statement, Read Committed re-checks updated rows, Repeatable Read error text and retry advice: PostgreSQL docs.'],
+    uncertain: ['xid numbers and timing are illustrative.']
+  }
+});
+
+flow({
+  id: 'mcp',
+  title: 'Model Context Protocol (MCP): host, client, server, tools',
+  category: 'AI & machine learning',
+  tags: ['Host / client / server', 'JSON-RPC 2.0', 'initialize + capabilities', 'tools/list, tools/call', 'Resources, prompts', 'stdio vs Streamable HTTP'],
+  summary: 'MCP is the open protocol that lets an AI app plug into tools and data the same way every time. Follow Claude Desktop (the host) as it starts an MCP client per server, negotiates capabilities, lists a GitHub server\'s tools, lets the model call one, and feeds the result back. Branch on the two transports: a local process over stdio, or a remote server over Streamable HTTP.',
+  requirements: {
+    functional: ['An AI application discovers what tools, data (resources) and prompt templates a server offers.', 'The model can call a tool with JSON arguments and get a structured result.', 'Servers can notify clients when their tool list changes.'],
+    nonFunctional: ['One protocol for every integration: write a server once, use it in any MCP host.', 'A human can approve or deny tool calls.', 'Works for local processes and remote services.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User', sub: 'types a request', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks the assistant something that needs outside data or actions.' },
+    { id: 'host', label: 'MCP host', sub: 'Claude Desktop / VS Code', kind: 'service', icon: 'laptop', x: 1, y: 1, desc: 'The AI application. It owns the conversation, the LLM calls and the user\'s consent. It creates one MCP client per server it connects to.' },
+    { id: 'llm', label: 'LLM', sub: 'Claude / GPT', kind: 'ai', icon: 'brain', x: 1, y: 0, desc: 'Sees the tool definitions the host passes in and decides when to call one. It never talks to MCP servers directly.' },
+    { id: 'client', label: 'MCP client', sub: 'one per server', kind: 'edge', icon: 'plug', x: 2, y: 1, desc: 'A connection object inside the host that speaks JSON-RPC 2.0 to exactly one server and keeps that session.' },
+    { id: 'gh', label: 'GitHub MCP server', sub: 'remote, Streamable HTTP', kind: 'service', icon: 'server', x: 3, y: 0, desc: 'Exposes tools (search_issues, create_pr…), resources and prompts. Remote servers usually serve many clients.' },
+    { id: 'fs', label: 'Filesystem server', sub: 'local process, stdio', kind: 'service', icon: 'folder', x: 3, y: 2, desc: 'Launched by the host as a subprocess. Messages go over its stdin and stdout. Typically serves a single client.' },
+    { id: 'api', label: 'GitHub API', sub: 'api.github.com', kind: 'external', icon: 'globe', x: 3, y: 1, desc: 'The real system behind the server. The MCP server translates tool calls into API requests.' }
+  ],
+  pseudo: `
+# host start-up: one client per configured server
+for cfg in mcp_servers:
+    c = Client(transport=StdioTransport(cfg.cmd) if cfg.local else HttpTransport(cfg.url))
+    init = c.request("initialize", {protocolVersion: "2025-06-18", capabilities: {...}})
+    c.notify("notifications/initialized")
+    tools += c.request("tools/list").tools        # name, description, inputSchema
+
+# each user turn
+reply = llm.chat(messages, tools=tools)
+while reply.tool_calls:
+    for call in reply.tool_calls:
+        if not user_approves(call): result = denied(call)
+        else: result = client_for(call.name).request("tools/call", {name: call.name, arguments: call.args})
+        messages.append(tool_result(call.id, result.content, result.isError))
+    reply = llm.chat(messages, tools=tools)
+show(reply.text)`,
+  steps: [
+    {
+      from: 'host', to: 'client', label: 'create client for "github"', pc: ['for cfg in mcp_servers', 'c = Client'],
+      title: 'The host creates one MCP client per server',
+      caption: 'When Claude Desktop starts, it reads its MCP config: a remote GitHub server and a local filesystem server. It creates a separate MCP client object for each.',
+      text: ['The MCP docs define the three roles: the host (the AI application) creates one MCP client for each MCP server, and each client keeps a dedicated connection with its server. VS Code connecting to the Sentry server is their example.'],
+      payloadKind: 'Host config',
+      payload: { mcpServers: { github: { url: 'https://api.githubcopilot.com/mcp/', transport: 'streamable-http' }, filesystem: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/ana/notes'] } } }
+    },
+    {
+      from: 'client', to: 'gh', label: 'initialize (protocolVersion 2025-06-18)', pc: ['c.request("initialize"', 'notifications/initialized'],
+      title: 'Handshake: initialize and capabilities',
+      caption: 'The client sends initialize with the protocol version and what it supports. The server answers with its own version and capabilities (tools, resources, prompts). The client then sends notifications/initialized.',
+      text: ['Every message is JSON-RPC 2.0: requests have an id and expect a response; notifications have no id. Capability negotiation means neither side uses a feature the other did not announce.'],
+      payloadKind: 'JSON-RPC',
+      payload: { request: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: { elicitation: {} }, clientInfo: { name: 'claude-desktop', version: '1.0' } } }, response: { id: 1, result: { protocolVersion: '2025-06-18', capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} }, serverInfo: { name: 'github-mcp', version: '0.9' } } } },
+      fields: { listChanged: 'The server will send notifications/tools/list_changed if its tools change, so the client can list them again.' },
+      branch: { q: 'Which transport carries these messages?', options: [ { label: 'Streamable HTTP (remote)', goto: 'http' }, { label: 'stdio (local process)', goto: 'stdio' } ] }
+    },
+    {
+      id: 'http', path: 'Streamable HTTP', from: 'gh', to: 'client', reply: true, label: '200 + Mcp-Session-Id: 1868a…', pc: ['HttpTransport'],
+      title: 'Remote: one HTTP endpoint, a session header',
+      caption: 'For remote servers, every client message is an HTTP POST to a single MCP endpoint. The server returns JSON, or opens a text/event-stream (SSE) to stream several messages. It may assign a session id the client sends on later requests.',
+      text: ['Remote servers also need authorization: the 2025-06-18 spec uses OAuth 2.1, so the user signs in to GitHub and the client sends a bearer token. Local stdio servers take credentials from their environment instead.'],
+      payloadKind: 'HTTP',
+      payload: { request: 'POST /mcp  Accept: application/json, text/event-stream  Authorization: Bearer gho_…', response_headers: { 'Content-Type': 'application/json', 'Mcp-Session-Id': '1868a90c-…' }, later_requests_include: 'Mcp-Session-Id: 1868a90c-…' },
+      next: 'list'
+    },
+    {
+      id: 'stdio', path: 'stdio', from: 'client', to: 'fs', label: 'spawn npx … ; JSON lines on stdin/stdout', pc: ['StdioTransport'],
+      title: 'Local: a subprocess talking over stdin and stdout',
+      caption: 'For the filesystem server, the host launches a child process. The client writes JSON-RPC messages to its stdin, one per line, and reads replies from its stdout. Logs go to stderr.',
+      text: ['No network, no ports, no auth handshake: the process runs with the user\'s permissions and only sees the folders it was given.'],
+      payloadKind: 'stdio frames',
+      payload: { stdin: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{…}}\\n', stdout: '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{},"resources":{}}}}\\n', stderr: '[fs] allowed: /Users/ana/notes' }
+    },
+    {
+      id: 'list', from: 'client', to: 'gh', label: 'tools/list', pc: ['tools += c.request("tools/list")'],
+      title: 'Discover the server\'s tools',
+      caption: 'The client asks for the tool list. Each tool has a name, a description for the model, and a JSON Schema for its arguments. The host merges the tools from all its servers.',
+      text: ['MCP servers offer three primitives. Tools are model-controlled actions. Resources are data the application can read by URI (a file, a repo README). Prompts are user-chosen templates, often surfaced as slash commands.'],
+      payloadKind: 'tools/list result',
+      payload: { tools: [{ name: 'search_issues', description: 'Search issues and PRs in a repository', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, query: { type: 'string' } }, required: ['repo', 'query'] } }, { name: 'create_pull_request', description: 'Open a PR', inputSchema: '{…}' }], also_available: ['resources/list → repo://madgate/README.md', 'prompts/list → review_pr'] }
+    },
+    {
+      from: 'user', to: 'host', label: '"Any open bugs about the reader?"', pc: ['reply = llm.chat'],
+      title: 'The user asks a question',
+      caption: 'Ana asks about open reader bugs in her MadGate repo. The host sends her message to the model together with the tool definitions it collected.',
+      text: [],
+      payloadKind: 'Chat request',
+      payload: { messages: [{ role: 'user', content: 'Any open bugs about the reader in swampi/madgate?' }], tools: ['github.search_issues', 'github.create_pull_request', 'filesystem.read_file', '…'] }
+    },
+    {
+      from: 'host', to: 'llm', label: 'messages + tool schemas', pc: ['reply = llm.chat', 'while reply.tool_calls'],
+      title: 'The model decides to call a tool',
+      caption: 'The model reads the tool descriptions and answers not with text but with a tool call: search_issues with JSON arguments matching the schema.',
+      text: ['This is ordinary function calling (see the tool-calling flow). MCP standardises where the tool definitions come from and how the call reaches the system behind them.'],
+      payloadKind: 'Model output',
+      payload: { stop_reason: 'tool_use', tool_calls: [{ id: 'call_1', name: 'search_issues', arguments: { repo: 'swampi/madgate', query: 'is:open label:bug reader' } }] }
+    },
+    {
+      from: 'host', to: 'user', label: 'Allow search_issues?', pc: ['user_approves'],
+      title: 'Human in the loop',
+      caption: 'Before running it, the host shows Ana which tool will run with which arguments. The spec says there should always be a human in the loop with the ability to deny tool invocations.',
+      text: ['Hosts often let users "always allow" read-only tools and keep asking for tools that write (create_pull_request).'],
+      payloadKind: 'Consent prompt',
+      payload: { tool: 'github.search_issues', arguments: { repo: 'swampi/madgate', query: 'is:open label:bug reader' }, choices: ['Allow once', 'Always allow', 'Deny'], chosen: 'Allow once' }
+    },
+    {
+      from: 'client', to: 'gh', label: 'tools/call search_issues', pc: ['request("tools/call"'],
+      title: 'The client sends tools/call',
+      caption: 'The host routes the call to the client that owns this tool. The GitHub server turns it into a GitHub API search and wraps the answer as MCP content.',
+      text: [],
+      payloadKind: 'JSON-RPC',
+      payload: { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'search_issues', arguments: { repo: 'swampi/madgate', query: 'is:open label:bug reader' } } }
+    },
+    {
+      from: 'gh', to: 'api', label: 'GET /search/issues?q=repo:swampi/madgate+…', pc: ['request("tools/call"'],
+      title: 'The server calls the real API',
+      caption: 'The MCP server is an adapter: it validates the arguments, calls api.github.com with the user\'s token, and keeps only what the model needs.',
+      text: ['Trimming results matters: every byte returned ends up in the model\'s context window and costs tokens.'],
+      payloadKind: 'Upstream request',
+      payload: { method: 'GET', url: 'https://api.github.com/search/issues?q=repo:swampi/madgate+is:open+label:bug+reader', results: 2 }
+    },
+    {
+      from: 'gh', to: 'client', reply: true, label: 'result: content[], isError=false', pc: ['messages.append(tool_result'],
+      title: 'The result comes back as content',
+      caption: 'The server answers with a list of content items (text here; images, audio and resource links are possible) and isError. A failed call returns isError: true with a message the model can read and react to.',
+      text: ['Tool errors are part of the result, not protocol errors, so the model can see "rate limited, retry later" and decide what to do.'],
+      payloadKind: 'tools/call result',
+      payload: { id: 7, result: { content: [{ type: 'text', text: '#142 Scrolling stops on mobile (open)\\n#139 First page spinner too long (open)' }], isError: false } }
+    },
+    {
+      from: 'host', to: 'llm', label: 'tool_result → final answer', pc: ['reply = llm.chat(messages, tools=tools)', 'show(reply.text)'],
+      title: 'The model writes the answer',
+      caption: 'The host appends the tool result to the conversation and calls the model again. Now it has the facts and answers Ana in plain language.',
+      text: ['If the model needed more (for example the issue bodies), it would call another tool and the loop would continue. That loop is the agent loop in the ReAct flow.'],
+      payloadKind: 'Final reply',
+      payload: { text: 'Two open reader bugs: #142 "Scrolling stops on mobile" and #139 "First page spinner too long".', tool_calls: [] }
+    }
+  ],
+  decisions: [
+    { q: 'Local stdio server or remote HTTP server?', options: [
+      { name: 'stdio', verdict: 'good', why: 'For tools that touch the user\'s machine (files, git, a local database). No network exposure; one client per process.' },
+      { name: 'Streamable HTTP', verdict: 'good', why: 'For SaaS integrations shared by many users. Needs OAuth, session handling and the usual web security.' } ] },
+    { q: 'MCP or a direct API integration in your app?', options: [
+      { name: 'MCP', verdict: 'good', why: 'Any MCP host can use the integration; tools are discovered at runtime.' },
+      { name: 'Direct function calling', verdict: 'good', why: 'Simpler for one app with a few fixed tools you control.' } ] }
+  ],
+  refs: [
+    { label: 'MCP docs: Architecture overview (host, client, server; data and transport layers)', url: 'https://modelcontextprotocol.io/docs/learn/architecture' },
+    { label: 'MCP specification 2025-06-18: Lifecycle (initialize, capabilities)', url: 'https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle' },
+    { label: 'MCP specification 2025-06-18: Transports (stdio, Streamable HTTP, Mcp-Session-Id)', url: 'https://modelcontextprotocol.io/specification/2025-06-18/basic/transports' },
+    { label: 'MCP specification 2025-06-18: Tools (tools/list, tools/call, isError, human in the loop)', url: 'https://modelcontextprotocol.io/specification/2025-06-18/server/tools' },
+    { label: 'MCP specification 2025-06-18: Resources', url: 'https://modelcontextprotocol.io/specification/2025-06-18/server/resources' },
+    { label: 'MCP specification 2025-06-18: Prompts', url: 'https://modelcontextprotocol.io/specification/2025-06-18/server/prompts' },
+    { label: 'ByteByteGo newsletter: MCP vs RAG vs AI agents', url: 'https://blog.bytebytego.com/p/ep224-mcp-vs-rag-vs-ai-agents' }
+  ],
+  verify: {
+    checked: ['One client per server, dedicated connection, VS Code + Sentry example, stdio usually single-client and HTTP many: MCP architecture page.', 'initialize / notifications/initialized, capabilities, listChanged, tools/call result with isError, human in the loop: spec pages listed.', 'Single HTTP endpoint, SSE responses, Mcp-Session-Id: transports page.'],
+    uncertain: ['The GitHub server URL and tool names are illustrative; check the server\'s own README for its real tool list.']
+  }
+});
+
+flow({
+  id: 'rag',
+  title: 'Retrieval-augmented generation (RAG): ingestion to grounded answer',
+  category: 'AI & machine learning',
+  tags: ['Chunking', 'Embeddings', 'Vector DB', 'Hybrid search (BM25 + vectors)', 'Reranking', 'Grounded generation + citations'],
+  summary: 'An LLM does not know your private documents. RAG fixes that in two phases. Offline: split documents into chunks, embed them, and index them. Online: embed the question, retrieve candidate chunks with vector and keyword search, rerank them, and put the best few in the prompt so the model answers from them, with citations.',
+  requirements: {
+    functional: ['Answer employee questions from 40,000 internal docs (HR policies, runbooks, wikis).', 'Cite the passages each answer is based on.', 'New or edited docs searchable within minutes.'],
+    nonFunctional: ['Answers grounded in retrieved text, not the model\'s memory.', 'Under 3 s to first token.', 'Respect document permissions.']
+  },
+  estimates: [
+    { label: 'Corpus', value: '40k docs → ~1.2M chunks', note: 'At ~300 tokens per chunk with overlap.' },
+    { label: 'Index size', value: '≈ 7.4 GB', note: '1.2M × 1536 dims × 4 bytes (float32), before any compression.' },
+    { label: 'Per query', value: '1 embed + 2 searches + 1 rerank + 1 LLM call', note: 'The LLM call dominates latency and cost.' }
+  ],
+  grid: { cols: 5, rows: 3 },
+  nodes: [
+    { id: 'docs', label: 'Document sources', sub: 'Confluence, Drive, PDFs', kind: 'storage', icon: 'doc', x: 0, y: 0, desc: 'Where the knowledge lives. Connectors pull new and changed documents with their permissions.' },
+    { id: 'ingest', label: 'Ingestion worker', sub: 'parse → chunk', kind: 'worker', icon: 'gear', x: 1, y: 0, desc: 'Extracts text, cleans it, splits it into chunks, and attaches metadata (title, URL, section, ACL).' },
+    { id: 'embed', label: 'Embedding model', sub: 'text → 1536-d vector', kind: 'ai', icon: 'vector', x: 2, y: 0, desc: 'Turns text into a vector so that texts with similar meaning are close together. Used for chunks offline and for questions online.' },
+    { id: 'vdb', label: 'Vector + keyword index', sub: 'HNSW + BM25', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Stores each chunk\'s vector (approximate nearest-neighbour index) and its words (BM25 inverted index), plus metadata filters.' },
+    { id: 'user', label: 'Employee', sub: 'chat UI', kind: 'client', icon: 'user', x: 0, y: 2, desc: 'Asks a question in natural language.' },
+    { id: 'app', label: 'RAG service', sub: 'orchestrator', kind: 'service', icon: 'server', x: 1, y: 2, desc: 'Runs the online steps: embed, retrieve, rerank, build the prompt, call the LLM, attach citations.' },
+    { id: 'rerank', label: 'Reranker', sub: 'cross-encoder', kind: 'ai', icon: 'filter', x: 3, y: 2, desc: 'Scores each (question, chunk) pair together. Slower but much more accurate than vector similarity, so it runs only on the top candidates.' },
+    { id: 'llm', label: 'LLM', sub: 'generator', kind: 'ai', icon: 'brain', x: 4, y: 1, desc: 'Writes the answer using only the supplied passages and cites them.' }
+  ],
+  pseudo: `
+# offline: ingestion
+for doc in connector.changed_since(last_sync):
+    text = parse(doc)                                # PDF/HTML -> text
+    for i, chunk in enumerate(split(text, size=300, overlap=50)):
+        ctx = llm.summarize_position(doc, chunk)     # optional contextual prefix
+        vec = embed(ctx + chunk)
+        index.upsert(id=f"{doc.id}#{i}", vector=vec, text=chunk,
+                     meta={"url": doc.url, "acl": doc.acl})
+
+# online: answer a question
+def answer(q, user):
+    qv = embed(q)
+    dense = index.vector_search(qv, k=50, filter={"acl": user.groups})
+    sparse = index.bm25_search(q, k=50, filter={"acl": user.groups})
+    cands = reciprocal_rank_fusion(dense, sparse)[:50]
+    top = reranker.rank(q, cands)[:5]
+    prompt = SYSTEM + format_sources(top) + q
+    return llm.generate(prompt, stream=True), cite(top)`,
+  steps: [
+    {
+      from: 'docs', to: 'ingest', label: 'changed: "Parental leave policy v7.pdf"', pc: ['for doc in connector', 'text = parse'],
+      title: 'Offline: a changed document is pulled in',
+      caption: 'HR updates the parental leave policy. The connector notices the change and hands the PDF and its permissions to the ingestion worker, which extracts clean text.',
+      text: ['Ingestion runs continuously or on a schedule. Keeping permissions (ACLs) with every chunk is what later stops the assistant from quoting a document the user cannot open.'],
+      payloadKind: 'Document',
+      payload: { id: 'hr-0193', title: 'Parental leave policy v7', url: 'https://wiki.acme.internal/hr/parental-leave', acl: ['all-employees-be'], pages: 6, updated: '2026-11-20' }
+    },
+    {
+      from: 'ingest', to: 'ingest', label: 'split: 300 tokens, 50 overlap → 14 chunks', pc: ['split(text'],
+      title: 'Chunk the text',
+      caption: 'The text is split into 14 chunks of about 300 tokens, overlapping by 50 so a sentence cut at a boundary still appears whole in one chunk.',
+      text: ['ByteByteGo lists the common strategies: fixed-size with overlap, recursive (paragraphs, then lines, then words), document-based (one chunk per heading or section), semantic (start a new chunk when sentence similarity drops), and agentic (a model picks the method per document). Chunks too big blur the meaning of the vector; too small lose context.'],
+      payloadKind: 'Chunk #3',
+      payload: { id: 'hr-0193#3', section: '2. Duration', text: 'Employees in Belgium are entitled to 20 weeks of paid parental leave, which can be taken in blocks of at least two weeks before the child\'s second birthday…', tokens: 297 }
+    },
+    {
+      from: 'ingest', to: 'embed', label: 'embed(context + chunk)', pc: ['summarize_position', 'vec = embed'],
+      title: 'Add context, then embed',
+      caption: 'A chunk like "20 weeks…" loses meaning on its own. A cheap LLM call writes a one-line context (which document, which section), which is prepended before embedding.',
+      text: ['Anthropic calls this Contextual Retrieval: a 50–100 token context prepended to each chunk before embedding and before BM25 indexing. In their tests it cut failed retrievals by 49%, and by 67% with reranking added.'],
+      payloadKind: 'Embedding input',
+      payload: { input: 'This chunk is from Acme\'s Belgian parental leave policy (v7, Nov 2026), section "Duration". | Employees in Belgium are entitled to 20 weeks…', model: 'text-embedding-3-small', output_dims: 1536, vector_head: [0.0123, -0.0441, 0.0870, '…'] }
+    },
+    {
+      from: 'embed', to: 'vdb', label: 'upsert hr-0193#3 (vector + text + meta)', pc: ['index.upsert'],
+      title: 'Index the chunk two ways',
+      caption: 'The chunk is stored with its vector in the ANN index and its words in a BM25 keyword index, together with metadata used for filtering and citation.',
+      text: ['Upsert by a stable id (doc id + chunk number) so re-ingesting a document replaces its old chunks instead of duplicating them. See the vector search flow for how the HNSW index finds neighbours fast.'],
+      payloadKind: 'Index record',
+      payload: { id: 'hr-0193#3', vector: '[1536 floats]', text: 'Employees in Belgium are entitled to 20 weeks…', meta: { url: 'https://wiki.acme.internal/hr/parental-leave#duration', acl: ['all-employees-be'], updated: '2026-11-20' } }
+    },
+    {
+      from: 'user', to: 'app', label: '"How long is parental leave here?"', pc: ['def answer'],
+      title: 'Online: an employee asks',
+      caption: 'Lucas, an employee in the Brussels office, asks how much parental leave he gets. The RAG service knows his groups from his login.',
+      text: [],
+      payloadKind: 'Question',
+      payload: { user: 'lucas@acme.com', groups: ['all-employees-be', 'eng'], question: 'How long is parental leave here?' }
+    },
+    {
+      from: 'app', to: 'vdb', label: 'vector top-50 + BM25 top-50 (acl filter)', pc: ['qv = embed(q)', 'vector_search', 'bm25_search', 'reciprocal_rank_fusion'],
+      title: 'Hybrid retrieval: meaning and exact words',
+      caption: 'The question is embedded with the same model and searched for nearest vectors; in parallel, BM25 matches keywords like "parental leave". Both are filtered to documents Lucas may see, and fused into one candidate list.',
+      text: ['Anthropic\'s write-up explains why both: embeddings capture meaning but can miss exact matches (an error code, a product name); BM25 catches those. Reciprocal rank fusion merges the two rankings without needing comparable scores.'],
+      payloadKind: 'Candidates',
+      payload: { dense_top: ['hr-0193#3 (0.83)', 'hr-0102#1 (0.79)', 'hr-0193#4 (0.77)'], bm25_top: ['hr-0193#3', 'hr-0088#2 (US policy)', 'hr-0193#1'], fused: 50, filtered_out_by_acl: 6 }
+    },
+    {
+      from: 'app', to: 'rerank', label: 'rank 50 (question, chunk) pairs', pc: ['reranker.rank'],
+      title: 'Rerank the candidates',
+      caption: 'A cross-encoder reads the question and each candidate together and scores relevance. It pushes the US policy chunk down (wrong country) and keeps the five best.',
+      text: ['Pinecone\'s explanation: the first stage (bi-encoder vectors) compresses meaning into one vector per text and loses information; a reranker sees the pair together, so it is much more accurate, but far too slow to run on millions of chunks. Hence two stages: retrieve broadly, rerank narrowly.'],
+      payloadKind: 'Reranked',
+      payload: { top5: [{ id: 'hr-0193#3', score: 0.97 }, { id: 'hr-0193#4', score: 0.91 }, { id: 'hr-0193#1', score: 0.66 }, { id: 'hr-0102#1', score: 0.42 }, { id: 'hr-0088#2', score: 0.11 }] }
+    },
+    {
+      from: 'app', to: 'llm', label: 'system + 5 sources + question', pc: ['prompt = SYSTEM', 'llm.generate'],
+      title: 'Build a grounded prompt',
+      caption: 'The service puts the top passages into the prompt with numbered source tags and tells the model to answer only from them and cite them, or say it does not know.',
+      text: ['This is the "augmented" part. The original RAG paper (Lewis et al., 2020) described it as combining the model\'s parametric memory with a non-parametric memory: a dense vector index searched by a neural retriever.'],
+      payloadKind: 'Prompt',
+      payload: { system: 'Answer using only the sources. Cite like [1]. If the sources do not answer, say so.', sources: ['[1] Parental leave policy v7 §2 Duration: "Employees in Belgium are entitled to 20 weeks…"', '[2] §3 Scheduling: "…blocks of at least two weeks…"'], question: 'How long is parental leave here?' },
+      branch: { q: 'Did retrieval find passages that answer the question?', options: [ { label: 'yes', goto: 'gen' }, { label: 'no relevant passages', goto: 'none' } ] }
+    },
+    {
+      id: 'gen', path: 'answered', from: 'llm', to: 'user', reply: true, label: 'streamed answer + [1][2]', pc: ['return llm.generate', 'cite(top)'],
+      title: 'Answer with citations',
+      caption: 'The model streams: "You get 20 weeks of paid parental leave, in blocks of at least two weeks, before your child turns two [1][2]." The UI turns [1] into a link to the exact section.',
+      text: ['Citations let users check the answer, and let you measure faithfulness offline (see the evaluation flow). Without them, a fluent wrong answer looks the same as a right one.'],
+      payloadKind: 'Answer',
+      payload: { text: 'You get 20 weeks of paid parental leave, taken in blocks of at least two weeks before your child turns two [1][2].', citations: { '1': 'https://wiki.acme.internal/hr/parental-leave#duration', '2': 'https://wiki.acme.internal/hr/parental-leave#scheduling' }, first_token_ms: 1150 },
+      end: true
+    },
+    {
+      id: 'none', path: 'not found', from: 'llm', to: 'user', reply: true, label: '"I couldn\'t find this in the docs"', pc: ['return llm.generate'],
+      title: 'Nothing relevant: say so',
+      caption: 'If the reranker\'s best score is low, the service (or the model, following its instructions) answers that the documents do not cover it and suggests who to ask, instead of guessing.',
+      text: ['A fixed pipeline cannot try again with a better query. Agentic RAG adds that loop: grade the retrieval, rewrite the question, or search elsewhere.'],
+      payloadKind: 'Answer',
+      payload: { text: 'I couldn\'t find this in the HR documents you have access to. HR Belgium (hr-be@acme.com) can confirm.', best_rerank_score: 0.18, threshold: 0.5 }
+    }
+  ],
+  decisions: [
+    { q: 'Vector search only, or hybrid with BM25?', options: [
+      { name: 'Hybrid + rerank', verdict: 'great', why: 'Catches both paraphrases and exact terms; reranking fixes ordering. More moving parts.' },
+      { name: 'Vector only', verdict: 'good', why: 'Simplest. Misses exact identifiers and rare names.' } ] },
+    { q: 'RAG or fine-tuning to teach the model your documents?', options: [
+      { name: 'RAG', verdict: 'great', why: 'Fresh data without retraining, citations, per-user permissions.' },
+      { name: 'Fine-tuning', verdict: 'good', why: 'Teaches style and format, not reliable recall of facts; data goes stale. Often combined with RAG.' } ] }
+  ],
+  refs: [
+    { label: 'Lewis et al. (2020): Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks', url: 'https://arxiv.org/abs/2005.11401' },
+    { label: 'Anthropic engineering: Introducing Contextual Retrieval', url: 'https://www.anthropic.com/news/contextual-retrieval', note: 'chunk → embed → vector DB, BM25, contextual prefixes, reranking, measured gains.' },
+    { label: 'ByteByteGo: 8 chunking strategies for RAG', url: 'https://blog.bytebytego.com/p/ep229-8-chunking-strategies-for-rag' },
+    { label: 'Pinecone: Rerankers and two-stage retrieval', url: 'https://www.pinecone.io/learn/series/rag/rerankers/' },
+    { label: 'Cohere docs: Rerank overview', url: 'https://docs.cohere.com/docs/rerank-overview' }
+  ],
+  verify: {
+    checked: ['Two-phase RAG pipeline, BM25 + embeddings, contextual prefix of 50–100 tokens, 49% / 67% reduction in failed retrievals: Anthropic\'s post.', 'Chunking strategies: ByteByteGo. Why rerankers are slower but more accurate: Pinecone.', 'Parametric + non-parametric memory: Lewis et al. abstract.'],
+    uncertain: ['Chunk size, k values, scores and the 0.5 threshold are illustrative defaults; teams tune them on their own evaluation sets.', 'The policy text is invented for the example.']
+  }
+});
+
+flow({
+  id: 'agentic-rag',
+  title: 'Agentic RAG: route, grade, rewrite, retry',
+  category: 'AI & machine learning',
+  tags: ['Query routing', 'Retrieval grading', 'Query rewriting', 'Multiple sources', 'Corrective RAG', 'Bounded loop'],
+  summary: 'Plain RAG runs once in a straight line and answers from whatever it retrieved. Agentic RAG puts an LLM-driven decision loop in the middle: it decides which source to search, grades whether the results really answer the question, rewrites the query or falls back to web search when they do not, and only then generates.',
+  requirements: {
+    functional: ['Answer questions that may need internal docs, a SQL database, or the public web.', 'Detect weak retrieval and try again before answering.'],
+    nonFunctional: ['Bounded: at most 3 retrieval rounds, so cost and latency stay predictable.', 'Every answer still cites its sources.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User', sub: 'support chat', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks a question that may be ambiguous or need several sources.' },
+    { id: 'agent', label: 'RAG agent', sub: 'LLM + state machine', kind: 'ai', icon: 'robot', x: 1, y: 1, desc: 'An LLM with tools, run inside a small graph of states (route, retrieve, grade, rewrite, generate). The graph caps the number of loops.' },
+    { id: 'docs', label: 'Docs vector index', sub: 'product manuals', kind: 'db', icon: 'vector', x: 2, y: 0, desc: 'The standard RAG index from the RAG flow.' },
+    { id: 'sql', label: 'Orders DB', sub: 'read-only SQL tool', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Structured data the agent can query through a restricted tool.' },
+    { id: 'grader', label: 'Relevance grader', sub: 'small LLM / classifier', kind: 'ai', icon: 'check', x: 2, y: 2, desc: 'Judges each retrieved chunk: does it actually answer the question? Corrective RAG calls this a retrieval evaluator.' },
+    { id: 'web', label: 'Web search API', sub: 'fallback source', kind: 'external', icon: 'globe', x: 3, y: 2, desc: 'Used when internal sources do not have a good answer.' }
+  ],
+  pseudo: `
+def agentic_rag(q, max_rounds=3):
+    source = llm.route(q, options=["docs", "orders_sql", "web"])
+    for round in range(max_rounds):
+        chunks = retrieve(source, q)
+        graded = [c for c in chunks if grader.relevant(q, c)]
+        if len(graded) >= 2:
+            return llm.generate(q, graded)             # enough evidence
+        q = llm.rewrite(q, feedback=chunks)            # sharpen the query
+        if round == 1: source = "web"                  # corrective fallback
+    return "I couldn't find a reliable answer."`,
+  steps: [
+    {
+      from: 'user', to: 'agent', label: '"Does the X2 work with the old dock?"', pc: ['def agentic_rag'],
+      title: 'An ambiguous question arrives',
+      caption: 'A customer asks whether the X2 headset works with "the old dock". There are three docks; the question does not say which.',
+      text: ['ByteByteGo\'s point about standard RAG: it takes the query as-is, retrieves whatever scores highest, and hopes for the best. Nothing in the middle checks whether retrieval was good enough.'],
+      payloadKind: 'Question',
+      payload: { question: 'Does the X2 work with the old dock?', customer_id: 'c_5521' }
+    },
+    {
+      from: 'agent', to: 'agent', label: 'route → docs', pc: ['llm.route'],
+      title: 'Route: which source fits?',
+      caption: 'The agent first decides where to look. Compatibility is a product-manual question, not an order lookup, so it picks the docs index.',
+      text: ['Routing is a single LLM call with a constrained output (one of the source names). It saves calls to sources that cannot help.'],
+      payloadKind: 'Routing decision',
+      payload: { options: ['docs', 'orders_sql', 'web'], chosen: 'docs', reason: 'hardware compatibility question' }
+    },
+    {
+      from: 'agent', to: 'docs', label: 'search "X2 old dock compatible"', pc: ['chunks = retrieve'],
+      title: 'Round 1: retrieve',
+      caption: 'The query is searched as written. The top results are about the X2\'s battery and a generic dock page, scored high by similarity because they share words.',
+      text: [],
+      payloadKind: 'Retrieved',
+      payload: { results: [{ id: 'x2-manual#12', text: 'X2 battery lasts 30 h…', sim: 0.81 }, { id: 'docks#1', text: 'Our docks charge all headsets…', sim: 0.78 }, { id: 'x1-dock#4', text: 'D1 dock firmware 2.1…', sim: 0.74 }] }
+    },
+    {
+      from: 'agent', to: 'grader', label: 'grade 3 chunks', pc: ['grader.relevant'],
+      title: 'Grade: is this actually an answer?',
+      caption: 'The grader reads each chunk with the question. None states whether the X2 works with a specific older dock: relevant topic, no answer. 0 of 3 pass.',
+      text: ['Corrective RAG (Yan et al., 2024) uses a lightweight retrieval evaluator to score retrieved documents and trigger different actions depending on its confidence. This is the checkpoint that plain RAG lacks.'],
+      payloadKind: 'Grades',
+      payload: { 'x2-manual#12': 'not relevant (battery)', 'docks#1': 'partially (too generic)', 'x1-dock#4': 'not relevant (X1)', passed: 0, needed: 2 },
+      branch: { q: 'Enough relevant chunks?', options: [ { label: 'no: rewrite and retry', goto: 'rw' }, { label: 'yes: generate', goto: 'gen' } ] }
+    },
+    {
+      id: 'rw', path: 'retry', from: 'agent', to: 'agent', label: 'rewrite → "X2 compatibility D1 dock D2 dock"', pc: ['llm.rewrite'],
+      title: 'Rewrite the query',
+      caption: 'The agent uses what it saw: "old dock" probably means the D1 or D2 (the current one is D3). It rewrites the query with the real product names.',
+      text: ['ByteByteGo describes this as the move from a pipeline to a control loop: before searching, rewrite an ambiguous query; after searching, if results look weak, reformulate and try again.'],
+      payloadKind: 'Rewritten query',
+      payload: { before: 'X2 old dock compatible', after: 'X2 headset compatibility with D1 dock and D2 dock', round: 2 }
+    },
+    {
+      path: 'retry', from: 'agent', to: 'docs', label: 'round 2 search', pc: ['chunks = retrieve'],
+      title: 'Round 2: retrieve again',
+      caption: 'Now the compatibility matrix and a release note come back.',
+      text: [],
+      payloadKind: 'Retrieved',
+      payload: { results: [{ id: 'compat#2', text: 'X2: D2 and D3 docks supported. D1 not supported (no USB-C).' }, { id: 'release-x2#5', text: 'X2 requires D2 firmware 3.0 or later.' }] }
+    },
+    {
+      path: 'retry', from: 'agent', to: 'grader', label: 'grade: 2 of 2 relevant', pc: ['grader.relevant', 'if len(graded) >= 2'],
+      title: 'Grade again: enough evidence',
+      caption: 'Both chunks directly answer the question. The loop ends.',
+      text: ['If round 2 had also failed, the corrective step would switch to web search (as CRAG does for static corpora) before giving up after round 3.'],
+      payloadKind: 'Grades',
+      payload: { 'compat#2': 'relevant', 'release-x2#5': 'relevant', passed: 2 }
+    },
+    {
+      id: 'gen', from: 'agent', to: 'user', reply: true, label: 'answer with both cases + citations', pc: ['return llm.generate'],
+      title: 'Generate a precise answer',
+      caption: 'The answer covers the ambiguity instead of guessing: "With the D2 dock, yes, after updating it to firmware 3.0. The D1 is not supported [1][2]."',
+      text: ['The extra rounds cost latency and tokens, so production systems keep the loop bounded and use small, fast models for routing and grading.'],
+      payloadKind: 'Answer',
+      payload: { text: 'If your old dock is the D2: yes, after updating it to firmware 3.0. The D1 is not supported because it has no USB-C [1][2].', rounds: 2, llm_calls: 6 }
+    }
+  ],
+  decisions: [
+    { q: 'Plain RAG or agentic RAG?', options: [
+      { name: 'Plain RAG', verdict: 'good', why: 'One retrieval, one LLM call: cheap and fast. Fine for clear questions over one corpus.' },
+      { name: 'Agentic RAG', verdict: 'good', why: 'Handles ambiguity, multiple sources and weak retrieval. 3–10× the LLM calls; needs a loop limit.' } ] }
+  ],
+  refs: [
+    { label: 'ByteByteGo newsletter: How agentic RAG works', url: 'https://blog.bytebytego.com/p/how-agentic-rag-works' },
+    { label: 'ByteByteGo: RAG vs agentic RAG', url: 'https://blog.bytebytego.com/p/ep230-rag-vs-agentic-rag' },
+    { label: 'Yan et al. (2024): Corrective Retrieval Augmented Generation (CRAG)', url: 'https://arxiv.org/abs/2401.15884' },
+    { label: 'Asai et al. (2023): Self-RAG: learning to retrieve, generate and critique', url: 'https://arxiv.org/abs/2310.11511' },
+    { label: 'LangGraph docs: Build an agentic RAG (retriever tool, grade documents, rewrite the question)', url: 'https://docs.langchain.com/oss/python/langgraph/agentic-rag' }
+  ],
+  verify: {
+    checked: ['Standard RAG has no checkpoint; agentic RAG adds rewrite-before and reformulate-after: ByteByteGo post (free part).', 'Retrieval evaluator with confidence-based actions and web search fallback: CRAG abstract.'],
+    uncertain: ['The 2-chunk threshold, 3-round cap and product names are illustrative.']
+  }
+});
+
+flow({
+  id: 'vector-search',
+  title: 'Embeddings and semantic search (HNSW vector index)',
+  category: 'AI & machine learning',
+  tags: ['Embedding model', 'Cosine similarity', 'Approximate nearest neighbours', 'HNSW layers', 'Metadata filters', 'Recall vs speed'],
+  summary: 'How a search for "cozy mystery set in a bakery" finds books that never use those words. Text becomes a vector; similar meanings become nearby vectors; and an HNSW graph index finds the nearest ones among millions without comparing against all of them. Branch on exact brute force versus the approximate index.',
+  requirements: {
+    functional: ['Search 5 million book descriptions by meaning, not keywords.', 'Filter by language and availability.'],
+    nonFunctional: ['p95 under 50 ms.', 'Recall@10 above 0.95 compared with exact search.']
+  },
+  estimates: [
+    { label: 'Vectors', value: '5M × 768 dims', note: 'float32: 5M × 768 × 4 B ≈ 15.4 GB, plus graph links.' },
+    { label: 'Brute force', value: '5M dot products / query', note: '≈ 3.8 billion multiply-adds per query.' },
+    { label: 'HNSW', value: 'a few thousand distance checks', note: 'Logarithmic scaling, per the HNSW paper.' }
+  ],
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Reader', sub: 'search box', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Types a description of what they feel like reading.' },
+    { id: 'api', label: 'Search API', sub: 'FastAPI', kind: 'service', icon: 'api', x: 1, y: 1, desc: 'Embeds the query, calls the vector index with filters, and hydrates results from the catalogue.' },
+    { id: 'emb', label: 'Embedding model', sub: 'sentence encoder', kind: 'ai', icon: 'vector', x: 1, y: 0, desc: 'A neural network trained so that texts with similar meaning map to vectors pointing in similar directions.' },
+    { id: 'top', label: 'HNSW top layer', sub: 'few nodes, long links', kind: 'cache', icon: 'layers', x: 2, y: 0, desc: 'Only a small random subset of vectors appear here, linked across long distances. Search starts here to cross the space quickly.' },
+    { id: 'bottom', label: 'HNSW layer 0', sub: 'all 5M vectors, short links', kind: 'db', icon: 'vector', x: 3, y: 1, desc: 'Every vector, each linked to its closest neighbours. The final, fine-grained search happens here.' },
+    { id: 'cat', label: 'Catalogue DB', sub: 'titles, covers, stock', kind: 'db', icon: 'db', x: 2, y: 2, desc: 'The source of truth for book details. The index only stores ids, vectors and filterable metadata.' }
+  ],
+  pseudo: `
+qv = normalize(embed("cozy mystery set in a bakery"))   # 768 floats, length 1
+
+def brute_force(qv, k):
+    return top_k(all_vectors, key=lambda v: dot(qv, v))  # exact, O(N)
+
+def hnsw_search(qv, k, ef=64):
+    node = entry_point                                   # top layer
+    for layer in range(max_layer, 0, -1):
+        node = greedy_closest(node, qv, layer)           # long hops
+    cands = beam_search(node, qv, layer=0, width=ef)     # short hops
+    return [c for c in cands if passes_filter(c)][:k]
+
+results = catalogue.hydrate(hnsw_search(qv, k=10))`,
+  steps: [
+    {
+      from: 'user', to: 'api', label: 'q="cozy mystery set in a bakery"', pc: ['qv = normalize'],
+      title: 'A search by meaning',
+      caption: 'The reader wants something like a cozy bakery mystery. The best match in the catalogue is described as "an amateur sleuth who runs a pastry shop": no shared keywords.',
+      text: ['Keyword search (BM25) would miss it. Semantic search compares meanings instead, by comparing vectors.'],
+      payloadKind: 'Request',
+      payload: { q: 'cozy mystery set in a bakery', filters: { language: 'en', in_stock: true }, k: 10 }
+    },
+    {
+      from: 'api', to: 'emb', label: 'embed(q) → 768 floats', pc: ['embed(', 'normalize'],
+      title: 'Turn the query into a vector',
+      caption: 'The same model that embedded every book description embeds the query. The vector is normalised to length 1, so the dot product equals cosine similarity.',
+      text: ['Queries and documents must use the same model and version: vectors from two different models live in unrelated spaces. Re-embedding the whole corpus is the cost of changing models.'],
+      payloadKind: 'Embedding',
+      payload: { model: 'all-mpnet-base-v2 (example)', dims: 768, vector_head: [0.031, -0.112, 0.067, 0.004, '…'], norm: 1.0 },
+      fields: { norm: 'Length 1. Then cosine similarity = dot product, which indexes compute fastest.' },
+      branch: { q: 'How is the nearest-neighbour search done?', options: [ { label: 'HNSW (approximate)', goto: 'hnsw' }, { label: 'brute force (exact)', goto: 'bf' } ] }
+    },
+    {
+      id: 'bf', path: 'brute force', from: 'api', to: 'bottom', label: 'dot(q, v) for all 5M vectors', pc: ['def brute_force', 'top_k(all_vectors'],
+      title: 'Exact search: compare with everything',
+      caption: 'Compute the similarity with all 5 million vectors and keep the 10 best. Always correct, but about 3.8 billion multiply-adds per query: hundreds of milliseconds on CPU.',
+      text: ['Fine for thousands of vectors, or offline on GPUs (Faiss provides exact and approximate indexes). For live search at millions of vectors, an approximate index is used, and exact search becomes the ground truth to measure its recall.'],
+      payloadKind: 'Exact top 3',
+      payload: { compared: 5000000, ms: 420, top: [{ id: 'bk_88123', title: 'Death by Croissant', cos: 0.71 }, { id: 'bk_10422', title: 'The Sourdough Alibi', cos: 0.69 }, { id: 'bk_55190', title: 'Murder at the Pastry Shop', cos: 0.68 }] },
+      next: 'hydr'
+    },
+    {
+      id: 'hnsw', path: 'HNSW', from: 'api', to: 'top', label: 'enter at top layer', pc: ['def hnsw_search', 'node = entry_point'],
+      title: 'HNSW: start at the sparse top layer',
+      caption: 'The index is a stack of graphs. Each vector was placed on a random number of layers, with exponentially fewer vectors on higher layers. Search enters at the top, where a few nodes have long links.',
+      text: ['The HNSW paper (Malkov and Yashunin): the maximum layer of each element is chosen randomly with an exponentially decaying probability; starting from the upper layer gives logarithmic complexity scaling. Pinecone compares it to a skip list.'],
+      payloadKind: 'Index structure',
+      payload: { layers: { '3': '~80 nodes', '2': '~5k nodes', '1': '~300k nodes', '0': '5M nodes' }, M: 16, entry_point: 'bk_00017' },
+      fields: { M: 'Links per node. More links: better recall, more memory and slower inserts.' }
+    },
+    {
+      path: 'HNSW', from: 'top', to: 'bottom', label: 'greedy hops down layers 3 → 1', pc: ['for layer in range', 'greedy_closest'],
+      title: 'Greedy hops, one layer at a time',
+      caption: 'On each layer, the search keeps moving to whichever neighbour is closer to the query, until no neighbour is closer. Then it drops one layer and continues from the same node.',
+      text: ['Long links on top cross the space in a few hops (from "space opera" to "crime fiction"); shorter links lower down narrow it to "cozy mysteries".'],
+      payloadKind: 'Search trace',
+      payload: { layer3: ['bk_00017 (0.12)', 'bk_31002 (0.33)'], layer2: ['bk_31002', 'bk_40981 (0.52)'], layer1: ['bk_40981', 'bk_10422 (0.69)'], distance_checks_so_far: 210 }
+    },
+    {
+      path: 'HNSW', from: 'bottom', to: 'api', reply: true, label: 'beam search ef=64 → top 10 (filtered)', pc: ['beam_search', 'passes_filter'],
+      title: 'Fine search on layer 0, then filters',
+      caption: 'On the bottom layer it explores a wider beam of 64 candidates around the landing point, keeps the closest, and drops those that fail the filters (out of stock, wrong language).',
+      text: ['ef is the speed/recall dial: larger beams find more true neighbours but check more vectors. Heavy filtering is a known weakness: if most neighbours are filtered out, results run short, so vector databases offer filtered-graph traversal or pre-filtering.'],
+      payloadKind: 'Results',
+      payload: { distance_checks: 2930, ms: 6, top: [{ id: 'bk_88123', cos: 0.71 }, { id: 'bk_10422', cos: 0.69 }, { id: 'bk_55190', cos: 0.68 }], recall_at_10_vs_exact: 0.97 }
+    },
+    {
+      id: 'hydr', from: 'api', to: 'cat', label: 'SELECT … WHERE id IN (10 ids)', pc: ['catalogue.hydrate'],
+      title: 'Hydrate results from the catalogue',
+      caption: 'The index returns ids and scores. The API loads titles, covers and prices from the catalogue and returns the list.',
+      text: ['Keeping the index lean (ids, vectors, a few filter fields) keeps it in memory. The same retrieval step is the core of RAG and of candidate generation in recommendation systems.'],
+      payloadKind: 'Response',
+      payload: { results: [{ title: 'Death by Croissant', author: 'M. Laurent', score: 0.71 }, { title: 'The Sourdough Alibi', author: 'K. Abara', score: 0.69 }], total_ms: 19 }
+    }
+  ],
+  decisions: [
+    { q: 'Which index?', options: [
+      { name: 'HNSW', verdict: 'great', why: 'High recall and low latency; the default in most vector databases. Memory-hungry (vectors + links in RAM).' },
+      { name: 'IVF + product quantization', verdict: 'good', why: 'Compresses vectors heavily for billions of items; lower recall per byte of memory. Common in Faiss.' },
+      { name: 'Brute force', verdict: 'good', why: 'Exact. Fine below ~100k vectors or on GPU batches.' } ] }
+  ],
+  refs: [
+    { label: 'Malkov & Yashunin: Efficient and robust approximate nearest neighbor search using HNSW graphs', url: 'https://arxiv.org/abs/1603.09320' },
+    { label: 'Pinecone: Hierarchical Navigable Small Worlds (HNSW) explained', url: 'https://www.pinecone.io/learn/series/faiss/hnsw/' },
+    { label: 'Faiss (Meta): library for similarity search of dense vectors', url: 'https://github.com/facebookresearch/faiss' },
+    { label: 'ByteByteGo newsletter: MCP vs RAG vs AI agents (where vector search sits)', url: 'https://blog.bytebytego.com/p/ep224-mcp-vs-rag-vs-ai-agents' }
+  ],
+  verify: {
+    checked: ['Random max layer with exponentially decaying probability, search from the upper layer, logarithmic scaling: HNSW paper abstract.', 'Greedy routing, degree vs recall trade-off: Pinecone article. Faiss scope: its README.'],
+    uncertain: ['Layer sizes, distance-check counts and timings are illustrative orders of magnitude, not benchmarks.', 'The embedding model name is an example.']
+  }
+});
+
 </script>
 <script>
 /* System Design Flows: the app engine. Flows themselves live in the FLOWS data (see flow({...}) calls).
@@ -9562,8 +11384,8 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const app = $('#app');
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
-const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party' };
+const CATEGORY_ORDER = ['Web & networking', 'Infrastructure foundations', 'Databases & replication', 'Distributed systems', 'Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Data at scale', 'AI & machine learning'];
+const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party', ai: 'AI model' };
 
 /* ---------- icons ---------- */
 const ICON = {
@@ -9608,7 +11430,37 @@ const ICON = {
   ticket: '<path d="M3 8a2 2 0 002-2h14a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H5a2 2 0 00-2-2v-2a2 2 0 000-4z"/><path d="M14 6v12"/>',
   ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.6"/><circle cx="19" cy="15" r="1.6"/><circle cx="5" cy="15" r="1.6"/>',
   pulse: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
-  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+  laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 19h19l-2-4h-15z"/>',
+  browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6 6.5h.01M8.5 6.5h.01M11 6.5h.01"/>',
+  pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0112 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+  plug: '<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v4"/>',
+  box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/>',
+  split: '<path d="M4 12h6l4-6h6M10 12l4 6h6"/><path d="M18 4l2 2-2 2M18 16l2 2-2 2"/>',
+  wallet: '<path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H5a1 1 0 01-1-1V6a2 2 0 012-2h11"/><circle cx="16" cy="13.5" r="1.3"/>',
+  building: '<path d="M5 21V4h10v17M15 9h4v12M3 21h18"/><path d="M8 7.5h1M11 7.5h1M8 11h1M11 11h1M8 14.5h1M11 14.5h1"/>',
+  inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/>',
+  route: '<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h7a3 3 0 000-6H9a3 3 0 010-6h7"/>',
+  log: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 10h7M9 14h7M9 18h4"/>',
+  vote: '<path d="M4 11l3 3 6-7"/><path d="M11 20h9M14 15h6"/>',
+  brain: '<path d="M9 4a3 3 0 00-3 3 3 3 0 00-2 5 3 3 0 002 5 3 3 0 003 3h1V4z"/><path d="M15 4a3 3 0 013 3 3 3 0 012 5 3 3 0 01-2 5 3 3 0 01-3 3h-1V4z"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  vector: '<circle cx="5" cy="18" r="1.6"/><circle cx="9" cy="8" r="1.6"/><circle cx="15" cy="14" r="1.6"/><circle cx="19" cy="5" r="1.6"/><path d="M4 21V3M2 19h20" opacity=".6"/>',
+  tool: '<path d="M14.5 6.5a4 4 0 01-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 005.3-5.3l-2.4 2.4-2.4-.6-.6-2.4z"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7"/>',
+  speaker: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/>',
+  doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  gpu: '<rect x="3" y="6" width="18" height="12" rx="1.5"/><rect x="7" y="9" width="6" height="6"/><path d="M16 9h2M16 12h2M16 15h2M7 18v3M11 18v3M15 18v3"/>',
+  robot: '<rect x="5" y="8" width="14" height="11" rx="2.5"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01M9.5 16.5h5"/><circle cx="12" cy="3.5" r="1"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="M7 15l4-4 3 3 5-6"/>',
+  cloud: '<path d="M7 18h10a4 4 0 00.6-7.95A6 6 0 006.2 9.2 4.5 4.5 0 007 18z"/>',
+  api: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/>',
+  filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5" opacity=".7"/>',
+  folder: '<path d="M3 6.5A1.5 1.5 0 014.5 5H10l2 2h7.5A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/>',
+  ai: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>'
 };
 const svgIcon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICON[k] || ICON.service) + '</svg>';
 const UI = {
@@ -9828,7 +11680,7 @@ let S = null; // state of the open flow
 function renderFlow(f, start) {
   currentFlow = f; setNav(''); document.title = f.title + ' · System Design Flows';
   const tabsMemo = (S && S.tab) || 'explain';
-  S = { f, i: start, tab: tabsMemo, playing: false, speed: 1, raf: 0, timer: 0 };
+  S = { f, i: start, tab: tabsMemo, playing: false, speed: 1, raf: 0, timer: 0, hist: [], choice: {} };
   const sec = [];
   if (f.requirements) sec.push(['req', 'Requirements']);
   if (f.estimates) sec.push(['est', 'Scale']);
@@ -9853,17 +11705,20 @@ function renderFlow(f, start) {
       f.estimates.map(e => '<div class="sd-box"><span>' + esc(e.label) + '</span><b>' + esc(e.value) + '</b>' + (e.note ? '<p>' + rich(e.note) + '</p>' : '') + '</div>').join('') + '</div></section>';
   }
   h += '<section class="sd-sec" id="sec-sim"><h2>Walkthrough</h2><p class="sub">Tap a component to see its role. Use the arrows, swipe, or press ← → on a keyboard. Payload lines marked <b>+</b> were added at this step, <b>~</b> changed.</p>' +
-    '<div class="sd-sim"><div class="sd-stage"><div class="sd-box">' +
+    '<div class="sd-sim"><div class="sd-stage sd-box">' +
     '<div class="sd-diagram" id="dg"><div class="sd-canvas" id="cv"><svg class="sd-wires" id="wires"></svg>' +
     f.nodes.map(n => '<button type="button" class="sd-node" data-node="' + n.id + '" style="--kc:' + kc(n.kind) + '" aria-label="' + esc(n.label) + '"><span class="ic">' + nodeIcon(n) + '</span><span class="tx"><b>' + esc(n.label) + '</b>' + (n.sub ? '<small>' + esc(n.sub) + '</small>' : '') + '</span></button>').join('') +
     '</div></div>' +
-    '<div class="sd-legend2"><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2"/></svg>request</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="6 5"/></svg>async / queued</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/></svg>response</span></div>' +
-    '<div class="sd-ninfo" id="ninfo"></div>' +
-    '<div class="sd-caption" id="cap"></div>' +
+    '<div class="sd-legend2"><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2"/></svg>request</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="6 5"/></svg>async / queued</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/></svg>response</span>' +
+    (hasBranch(f) ? '<span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1 3" opacity=".7"/></svg>other branch</span>' : '') +
+    '<span><i class="sd-pbadge" style="position:static;transform:none">1</i>earlier step</span></div>' +
+    '<div class="sd-ninfo" id="ninfo"></div></div>' +
+    '<div class="sd-cappane sd-box"><div class="sd-caption" id="cap"></div><div class="sd-fork" id="fork"></div>' +
     '<div class="sd-ctrl"><button class="sd-btn" id="bPrev" aria-label="Previous step">' + UI.prev + '</button><button class="sd-btn pri" id="bNext">Next ' + UI.next + '</button><button class="sd-btn" id="bPlay" aria-label="Play">' + UI.play + '</button><button class="sd-btn" id="bRestart" aria-label="Restart">' + UI.restart + '</button>' +
     '<label class="sd-speed">speed <input id="speed" type="range" min="0.5" max="2" step="0.25" value="1"></label></div>' +
-    '<div class="sd-dots" id="dots">' + f.steps.map((s, i) => '<button class="sd-dot" data-i="' + i + '" title="' + esc(s.title) + '">' + (i + 1) + '</button>').join('') + '</div>' +
-    '</div></div>' +
+    '<div class="sd-dots" id="dots">' + f.steps.map((s, i) => '<button class="sd-dot' + (s.path ? ' alt' : '') + '" data-i="' + i + '" title="' + esc((s.path ? '[' + s.path + '] ' : '') + s.title) + '">' + (i + 1) + '</button>').join('') + '</div>' +
+    (f.pseudo ? pseudoHTML(f) : '') +
+    '</div>' +
     '<div class="sd-panel sd-box" id="panel"><div class="sd-tabs" id="tabs"></div><div class="sd-tabbody" id="tabbody"></div></div></div></section>';
 
   if (f.api) {
@@ -9882,19 +11737,23 @@ function renderFlow(f, start) {
     f.steps.map((s, i) => { const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to); return '<li data-i="' + i + '"><button data-i="' + i + '"><span class="no">' + (i + 1) + '</span><span>' + esc(s.title) + '</span><span class="hop">' + esc(a.label) + (s.from === s.to ? '' : ' → ' + esc(b.label)) + '</span></button></li>'; }).join('') + '</ol></div></section>';
   if (f.refs) {
     h += '<section class="sd-sec" id="sec-refs"><h2>References</h2><p class="sub">Primary sources to go deeper. Payloads and code on this page are illustrative.</p><ol class="sd-refs">' +
-      f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol></section>';
+      f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol>' +
+      (f.verify ? '<div class="sd-verify">' + (f.verify.checked ? '<div><h3>How this flow was checked</h3><ul class="sd-list">' + f.verify.checked.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') +
+        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '') + '</section>';
   }
   h += '<div class="sd-bar" id="bar"><button id="mPrev" aria-label="Previous step">' + UI.prev + 'Back</button><span class="mid" id="mCount"></span><button id="mNext" aria-label="Next step">Next' + UI.next + '</button></div>';
   app.innerHTML = h;
 
   // events
-  $('#bPrev').onclick = () => go(S.i - 1, true);
-  $('#bNext').onclick = () => go(S.i + 1, true);
-  $('#mPrev').onclick = () => go(S.i - 1, true, true);
-  $('#mNext').onclick = () => go(S.i + 1, true, true);
+  $('#bPrev').onclick = () => back();
+  $('#bNext').onclick = () => forward();
+  $('#mPrev').onclick = () => back(true);
+  $('#mNext').onclick = () => forward(true);
   $('#bRestart').onclick = () => { setPlaying(false); go(0, true); };
   $('#bPlay').onclick = () => setPlaying(!S.playing);
   $('#speed').oninput = e => { S.speed = parseFloat(e.target.value); if (S.playing) { setPlaying(false); setPlaying(true); } };
+  $('#fork').onclick = e => { const b = e.target.closest('[data-go]'); if (!b) return; if (b.dataset.bi !== undefined) S.choice[+b.dataset.bi] = +b.dataset.opt; go(+b.dataset.go, true); };
+  const pcEl = $('#pc'); if (pcEl) pcEl.onclick = e => { const l = e.target.closest('[data-l]'); if (!l) return; const n = +l.dataset.l; const k = f.steps.findIndex(st => pcLines(st).includes(n)); if (k >= 0) go(k, true); };
   $('#dots').onclick = e => { const b = e.target.closest('[data-i]'); if (b) go(+b.dataset.i, true); };
   $('#steplist').onclick = e => { const b = e.target.closest('button[data-i]'); if (b) { go(+b.dataset.i, true); $('#sec-sim').scrollIntoView({ behavior: 'smooth' }); } };
   $('#cv').addEventListener('click', e => { const n = e.target.closest('.sd-node'); if (n) showNode(n.dataset.node); });
@@ -9911,7 +11770,7 @@ function swipe(el) {
   el.addEventListener('touchend', e => {
     if (x0 === null) return; const t = e.changedTouches[0]; const dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
     if (e.target.closest('pre')) return;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) go(S.i + (dx < 0 ? 1 : -1), true);
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) { if (dx < 0) forward(); else back(); }
   }, { passive: true });
 }
 
@@ -9923,11 +11782,11 @@ function layout() {
   const W = cv.clientWidth;
   const narrow = W < 560 && f.grid.cols > f.grid.rows;
   const cols = narrow ? f.grid.rows : f.grid.cols, rows = narrow ? f.grid.cols : f.grid.rows;
-  const rowH = W < 560 ? 104 : 134;
+  const rowH = W < 560 ? 108 : (W > 1000 ? 162 : 134);
   const H = rows * rowH;
   cv.style.height = H + 'px';
   const colW = W / cols;
-  const nw = Math.max(70, Math.min(W < 560 ? 100 : 150, colW * (W < 560 ? 0.78 : 0.68)));
+  const nw = Math.max(70, Math.min(W < 560 ? 100 : 158, colW * (W < 560 ? 0.78 : (W > 1000 ? 0.6 : 0.66))));
   const P = {};
   f.nodes.forEach(n => {
     const gx = narrow ? n.y : n.x, gy = narrow ? n.x : n.y;
@@ -9949,40 +11808,119 @@ function edgeGeom(a, b, off) {
   const [x1, y1] = clip(A, dx, dy); const [x2, y2] = clip(B, -dx, -dy);
   return { x1: x1 + nx, y1: y1 + ny, x2: x2 + nx, y2: y2 + ny };
 }
+/* ---------- branches: steps may carry id / next / end / path / branch ---------- */
+function hasBranch(f) { return f.steps.some(s => s.branch); }
+function idxOf(id) { return S.f.steps.findIndex(s => s.id === id); }
+function nextIndex(i) {
+  const f = S.f, s = f.steps[i];
+  if (!s || s.end) return -1;
+  if (s.branch) return idxOf(s.branch.options[S.choice[i] || 0].goto);
+  if (s.next) return idxOf(s.next);
+  return i + 1 < f.steps.length ? i + 1 : -1;
+}
+// the path from step 0 to step t, honouring the branch choices already made, else defaults, else any option that reaches t
+function pathTo(t) {
+  const f = S.f, seen = new Set();
+  const succ = i => { const s = f.steps[i]; if (s.end) return [];
+    if (s.branch) { const ch = S.choice[i] || 0; const o = s.branch.options.map((x, k) => [k, idxOf(x.goto)]); o.sort((a, b) => (a[0] === ch ? -1 : 0) - (b[0] === ch ? -1 : 0)); return o; }
+    const n = s.next ? idxOf(s.next) : (i + 1 < f.steps.length ? i + 1 : -1); return n >= 0 ? [[null, n]] : []; };
+  const dfs = (i, acc) => {
+    if (i === t) return acc; if (seen.has(i)) return null; seen.add(i);
+    for (const [k, n] of succ(i)) { const r = dfs(n, acc.concat([[i, k]])); if (r) return r; }
+    return null;
+  };
+  const r = dfs(0, []) || [];
+  r.forEach(([i, k]) => { if (k !== null) S.choice[i] = k; });
+  return r.map(x => x[0]);
+}
+function forward(fromBar) { const n = nextIndex(S.i); if (n >= 0) go(n, true, fromBar); }
+function back(fromBar) { if (S.hist.length) go(S.hist[S.hist.length - 1], true, fromBar); }
+
+/* ---------- pseudocode that follows the steps ---------- */
+// pc entries: a line number, a range '3-5', or a piece of text found in the line ('def commit')
+function pcLines(s) {
+  const out = [], f = S.f;
+  if (!f._pl) f._pl = (f.pseudo || '').replace(/^\n+|\s+$/g, '').split('\n');
+  (s.pc || []).forEach(v => { if (typeof v === 'number') out.push(v); else if (!/^\d+(-\d+)?$/.test(v)) { const k = f._pl.findIndex(l => l.includes(v)); if (k >= 0) out.push(k + 1); } else { const [a, b] = String(v).split('-').map(Number); for (let k = a; k <= (b || a); k++) out.push(k); } });
+  return out;
+}
+function pseudoHTML(f) {
+  const lines = f.pseudo.replace(/^\n+|\s+$/g, '').split('\n');
+  return '<div class="sd-pseudo"><div class="sd-phead"><span>Pseudocode</span><small>the highlighted lines run at this step · tap a line to jump</small></div>' +
+    '<pre class="sd-code" id="pc"><code>' + lines.map((l, k) => '<span class="pl" data-l="' + (k + 1) + '"><i>' + (k + 1) + '</i>' + (highlight(l, f.pseudoLang || 'python') || ' ') + '</span>').join('') + '</code></pre></div>';
+}
+function updatePseudo() {
+  const box = $('#pc'); if (!box) return;
+  const f = S.f, s = f.steps[S.i], cur = new Set(pcLines(s)), past = new Set();
+  S.hist.forEach(k => pcLines(f.steps[k]).forEach(n => past.add(n)));
+  const col = kc(f.nodes.find(n => n.id === s.to).kind);
+  let first = null;
+  $$('.pl', box).forEach(el => { const n = +el.dataset.l; const on = cur.has(n); el.classList.toggle('on', on); el.classList.toggle('done', !on && past.has(n)); if (on) { el.style.setProperty('--kc', col); if (!first) first = el; } });
+  if (first) box.scrollTo({ top: Math.max(0, first.offsetTop - box.clientHeight / 3), behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
 function drawWires() {
   if (!S || !L) return;
   const f = S.f, svg = $('#wires'); if (!svg) return;
   svg.setAttribute('viewBox', '0 0 ' + L.W + ' ' + L.H);
   const dirs = new Set(f.steps.filter(s => s.from !== s.to).map(s => s.from + '>' + s.to));
-  const offFor = s => dirs.has(s.to + '>' + s.from) ? 4.5 : 0;
-  const seen = new Set(f.steps.slice(0, S.i).map(s => s.from + '>' + s.to));
+  const offFor = s => dirs.has(s.to + '>' + s.from) ? 5 : 0;
+  const seenNums = new Map();
+  S.hist.forEach(k => { const st = f.steps[k]; if (st.from === st.to) return; const key = st.from + '>' + st.to; if (!seenNums.has(key)) seenNums.set(key, []); seenNums.get(key).push(k + 1); });
   let out = '';
   const done = new Set();
   f.steps.forEach(s => {
     if (s.from === s.to) return; const k = s.from + '>' + s.to; if (done.has(k)) return; done.add(k);
     const g = edgeGeom(s.from, s.to, offFor(s));
-    out += '<line class="sd-wire' + (seen.has(k) ? ' past' : '') + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    out += '<line class="sd-wire' + (seenNums.has(k) ? ' past' : '') + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
   });
   const s = f.steps[S.i];
-  $$('.sd-wlabel,.sd-busychip', $('#cv')).forEach(x => x.remove());
+  $$('.sd-wlabel,.sd-busychip,.sd-pbadge,.sd-altlabel', $('#cv')).forEach(x => x.remove());
+  const curKey = s.from + '>' + s.to;
+  // numbered badges on edges already travelled, so the diagram keeps the story
+  seenNums.forEach((nums, key) => {
+    if (key === curKey) return;
+    const [a, b] = key.split('>'); const g = edgeGeom(a, b, offFor({ from: a, to: b }));
+    const t = (dirs.has(b + '>' + a) && a > b) ? 0.38 : 0.5;
+    const bd = document.createElement('i'); bd.className = 'sd-pbadge';
+    bd.style.left = (g.x1 + (g.x2 - g.x1) * t) + 'px'; bd.style.top = (g.y1 + (g.y2 - g.y1) * t) + 'px';
+    const shown = nums.slice(-2); bd.textContent = shown.join(',');
+    bd.title = shown.map(n => n + '. ' + (f.steps[n - 1].label || f.steps[n - 1].title)).join('\n');
+    $('#cv').appendChild(bd);
+  });
+  // the other outcomes of a branch, drawn faintly with their labels
+  if (s.branch) {
+    s.branch.options.forEach((o, k) => {
+      const t = f.steps[idxOf(o.goto)]; if (!t || t.from === t.to) return;
+      const g = edgeGeom(t.from, t.to, offFor(t));
+      out += '<line class="sd-wire alt" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+      const lb = document.createElement('div'); lb.className = 'sd-altlabel' + ((S.choice[S.i] || 0) === k ? ' on' : '');
+      lb.style.left = ((g.x1 + g.x2) / 2) + 'px'; lb.style.top = ((g.y1 + g.y2) / 2) + 'px';
+      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb);
+    });
+  }
   if (s.from !== s.to) {
     const g = edgeGeom(s.from, s.to, offFor(s));
     const col = kc(f.nodes.find(n => n.id === s.from).kind);
-    const ang = Math.atan2(g.y2 - g.y1, g.x2 - g.x1), ah = 9;
+    const ang = Math.atan2(g.y2 - g.y1, g.x2 - g.x1), ah = 10;
     const p1 = [g.x2 - ah * Math.cos(ang - .45), g.y2 - ah * Math.sin(ang - .45)], p2 = [g.x2 - ah * Math.cos(ang + .45), g.y2 - ah * Math.sin(ang + .45)];
     out += '<line class="sd-wire active' + (s.async ? ' async' : '') + (s.reply ? ' reply' : '') + '" style="stroke:' + col + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>' +
       '<path d="M' + g.x2 + ',' + g.y2 + 'L' + p1[0] + ',' + p1[1] + 'L' + p2[0] + ',' + p2[1] + 'z" style="fill:' + col + '"/>' +
-      '<circle id="pk" class="sd-packet" r="6" cx="' + g.x1 + '" cy="' + g.y1 + '" style="fill:' + col + ';color:' + col + '"/>';
+      '<circle id="pk" class="sd-packet" r="5.5" cx="' + g.x1 + '" cy="' + g.y1 + '" style="fill:' + col + ';color:' + col + '"/>';
     svg.innerHTML = out;
     const lab = document.createElement('div');
     lab.className = 'sd-wlabel'; lab.style.color = col;
-    lab.style.left = ((g.x1 + g.x2) / 2) + 'px'; lab.style.top = ((g.y1 + g.y2) / 2) + 'px';
     lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>' + esc(s.label || s.title);
+    lab.title = s.label || s.title;
     $('#cv').appendChild(lab);
-    // if the label doesn't fit in the free gap between the two boxes, show only the step number
+    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
     const free = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
     const horizontal = Math.abs(g.x2 - g.x1) >= Math.abs(g.y2 - g.y1);
-    if ((horizontal ? lab.offsetWidth : lab.offsetHeight) > free - 10) { lab.classList.add('badge'); lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>'; lab.title = s.label || s.title; }
+    lab.style.left = mx + 'px'; lab.style.top = my + 'px';
+    // a long label on a short horizontal hop sits just above the line instead of hiding its text
+    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('above'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 120, 160)) + 'px'; }
+    // keep the label inside the canvas
+    const half = lab.offsetWidth / 2; lab.style.left = Math.min(L.W - half - 4, Math.max(half + 4, mx)) + 'px';
     animatePacket(g);
   } else {
     svg.innerHTML = out;
@@ -9990,34 +11928,35 @@ function drawWires() {
     const chip = document.createElement('div');
     chip.className = 'sd-busychip'; chip.style.color = kc(n.kind);
     const below = P.y + P.h / 2 + 30 < L.H;
-    chip.style.left = P.x + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
     chip.textContent = (S.i + 1) + ' · ' + (s.label || s.title);
     $('#cv').appendChild(chip);
+    const half = chip.offsetWidth / 2;
+    chip.style.left = Math.min(L.W - half - 4, Math.max(half + 4, P.x)) + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
     cancelAnimationFrame(S.raf);
   }
 }
+// the packet travels the arrow once and settles: the arrow, its label and the payload carry the meaning
 function animatePacket(g) {
   cancelAnimationFrame(S.raf);
   const pk = $('#pk'); if (!pk) return;
-  if (reduceMotion) { pk.setAttribute('cx', g.x2); pk.setAttribute('cy', g.y2); return; }
-  const dur = 1300 / S.speed, rest = 500 / S.speed; let t0 = null;
+  if (reduceMotion) { pk.setAttribute('opacity', 0); return; }
+  const dur = 1100 / S.speed; let t0 = null;
   const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   const tick = ts => {
-    if (t0 === null) t0 = ts; const e = (ts - t0) % (dur + rest); const t = ease(Math.min(1, e / dur));
+    if (t0 === null) t0 = ts; const e = ts - t0; const t = ease(Math.min(1, e / dur));
     pk.setAttribute('cx', g.x1 + (g.x2 - g.x1) * t); pk.setAttribute('cy', g.y1 + (g.y2 - g.y1) * t);
-    pk.setAttribute('opacity', e > dur ? Math.max(0, 1 - (e - dur) / rest) : 1);
-    S.raf = requestAnimationFrame(tick);
+    pk.setAttribute('opacity', e > dur ? Math.max(0, 1 - (e - dur) / 300) : 1);
+    if (e < dur + 300) S.raf = requestAnimationFrame(tick);
   };
   S.raf = requestAnimationFrame(tick);
 }
 
 function go(i, user, fromBar) {
-  const f = S.f; if (i < 0 || i >= f.steps.length) { if (S.playing && i >= f.steps.length) setPlaying(false); return; }
-  S.i = i; markSeen(f.id, i);
+  const f = S.f; if (i < 0 || i >= f.steps.length) return;
+  S.i = i; S.hist = pathTo(i); markSeen(f.id, i);
   const s = f.steps[i];
   history.replaceState(null, '', '#/flow/' + f.id + '/' + (i + 1));
-  // nodes
-  const visited = new Set(); f.steps.slice(0, i + 1).forEach(x => { visited.add(x.from); visited.add(x.to); });
+  const visited = new Set(); S.hist.concat([i]).forEach(k => { visited.add(f.steps[k].from); visited.add(f.steps[k].to); });
   $$('.sd-node', $('#cv')).forEach(el => {
     const id = el.dataset.node;
     el.classList.toggle('src', id === s.from && s.from !== s.to);
@@ -10026,16 +11965,27 @@ function go(i, user, fromBar) {
     el.classList.toggle('dim', !visited.has(id));
   });
   drawWires();
-  // caption
   const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to);
-  $('#cap').innerHTML = '<div class="sn"><span>Step ' + (i + 1) + ' of ' + f.steps.length + '</span><span>·</span><span>' + esc(a.label) + (s.from === s.to ? ' (internal)' : ' → ' + esc(b.label)) + '</span>' + (s.async ? '<span class="sd-tag">async</span>' : '') + '</div><h2>' + rich(s.title) + '</h2><p>' + rich(s.caption) + '</p>';
-  $('#bPrev').disabled = i === 0; $('#bNext').disabled = i === f.steps.length - 1;
-  $('#mPrev').disabled = i === 0; $('#mNext').disabled = i === f.steps.length - 1;
+  $('#cap').innerHTML = '<div class="sn"><span>Step ' + (i + 1) + ' of ' + f.steps.length + '</span><span>·</span><span>' + esc(a.label) + (s.from === s.to ? ' (internal)' : ' → ' + esc(b.label)) + '</span>' + (s.async ? '<span class="sd-tag">async</span>' : '') + (s.path ? '<span class="sd-tag sd-pathtag">if ' + esc(s.path) + '</span>' : '') + '</div><h2>' + rich(s.title) + '</h2><p>' + rich(s.caption) + '</p>';
+  // fork: choose the outcome at a branch, or come back to try the other one at the end of a path
+  let fk = '';
+  if (s.branch) {
+    fk = '<span class="q">' + rich(s.branch.q) + '</span>' + s.branch.options.map((o, k) => '<button class="sd-chip' + ((S.choice[i] || 0) === k ? ' on' : '') + '" data-bi="' + i + '" data-opt="' + k + '" data-go="' + idxOf(o.goto) + '">' + esc(o.label) + ' →</button>').join('');
+  } else if (nextIndex(i) < 0) {
+    const bi = S.hist.slice().reverse().find(k => f.steps[k].branch);
+    if (bi !== undefined) { const br = f.steps[bi].branch, ch = S.choice[bi] || 0;
+      fk = '<span class="q">End of this path. Other outcome' + (br.options.length > 2 ? 's' : '') + ' of step ' + (bi + 1) + ':</span>' + br.options.map((o, k) => k === ch ? '' : '<button class="sd-chip" data-bi="' + bi + '" data-opt="' + k + '" data-go="' + idxOf(o.goto) + '">if ' + esc(o.label) + ' →</button>').join(''); }
+  }
+  $('#fork').innerHTML = fk; $('#fork').classList.toggle('show', !!fk);
+  const nx = nextIndex(i);
+  $('#bPrev').disabled = !S.hist.length; $('#bNext').disabled = nx < 0;
+  $('#mPrev').disabled = !S.hist.length; $('#mNext').disabled = nx < 0;
   $('#mCount').textContent = (i + 1) + ' / ' + f.steps.length;
   $$('#dots .sd-dot').forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('seen', (progress[f.id] || []).includes(k)); });
   $$('#steplist li').forEach((li, k) => li.classList.toggle('on', k === i));
   $('.sd-progressbar').style.width = ((i + 1) / f.steps.length * 100) + '%';
   renderTabs();
+  updatePseudo();
   $('#ninfo').classList.remove('show');
   if (user && fromBar) {
     const st = $('.sd-stage'); const top = st.getBoundingClientRect().top;
@@ -10077,7 +12027,7 @@ function payloadHTML(s) {
   let h = '';
   let prev = null;
   if (s.diff !== false) {
-    for (let k = S.i - 1; k >= 0; k--) { const p = f.steps[k].payload; if (p !== undefined) { prev = p; break; } }
+    for (let j = S.hist.length - 1; j >= 0; j--) { const p = f.steps[S.hist[j]].payload; if (p !== undefined) { prev = p; break; } }
     if (prev && (typeof prev !== 'object' || typeof s.payload !== 'object')) prev = null;
     if (prev) { // only diff when the two payloads are recognisably the same message
       const pf = flatten(prev, ''), cf = Object.keys(flatten(s.payload, ''));
@@ -10115,7 +12065,7 @@ function showNode(id) {
 function setPlaying(on) {
   S.playing = on; clearInterval(S.timer);
   $('#bPlay').innerHTML = on ? UI.pause : UI.play; $('#bPlay').setAttribute('aria-label', on ? 'Pause' : 'Play');
-  if (on) { if (S.i >= S.f.steps.length - 1) go(0, true); S.timer = setInterval(() => go(S.i + 1, true), 4200 / S.speed); }
+  if (on) { if (nextIndex(S.i) < 0) go(0, true); S.timer = setInterval(() => { if (nextIndex(S.i) < 0) setPlaying(false); else forward(); }, 4200 / S.speed); }
 }
 function stopAll() { if (S) { clearInterval(S.timer); cancelAnimationFrame(S.raf); } }
 
@@ -10172,8 +12122,8 @@ function copyText(t, btn) {
 }
 document.addEventListener('keydown', e => {
   if (!S || !$('#cv') || e.target.closest('input,textarea')) return;
-  if (e.key === 'ArrowRight') { go(S.i + 1, true); e.preventDefault(); }
-  else if (e.key === 'ArrowLeft') { go(S.i - 1, true); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { forward(); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { back(); e.preventDefault(); }
   else if (e.key === ' ' && !e.target.closest('button')) { setPlaying(!S.playing); e.preventDefault(); }
 });
 let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(layout, 120); });

@@ -1,7 +1,7 @@
 flow({
   id: 'kv-store',
   title: 'Distributed key-value store (Dynamo-style)',
-  category: 'Data at scale',
+  category: 'Databases & replication',
   tags: ['Consistent hashing', 'Replication N=3', 'Quorum R/W', 'Vector clocks', 'Hinted handoff', 'Anti-entropy'],
   summary: 'A shopping-cart store must accept writes even while machines fail. Follow a PUT through a consistent-hash ring to three replicas, a quorum write that succeeds while one node is down, a hint that heals it later, a read that finds two versions and repairs the stale one, and background Merkle-tree sync.',
   requirements: {

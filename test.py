@@ -32,6 +32,15 @@ CHECK_JS = r"""
       if (!s.text) problems.push(f.id + ' step ' + (i+1) + ': no text');
     });
     f.nodes.forEach(n => { if (!used.has(n.id)) problems.push(f.id + ': node never used ' + n.id); });
+    const sids = new Set(f.steps.filter(s => s.id).map(s => s.id));
+    const plen = f.pseudo ? f.pseudo.replace(/^\n+|\s+$/g, '').split('\n').length : 0;
+    f.steps.forEach((s, i) => {
+      if (s.next && !sids.has(s.next)) problems.push(f.id + ' step ' + (i+1) + ': next to unknown step ' + s.next);
+      if (s.branch) s.branch.options.forEach(o => { if (!sids.has(o.goto)) problems.push(f.id + ' step ' + (i+1) + ': branch to unknown step ' + o.goto); });
+      const pls = f.pseudo ? f.pseudo.replace(/^\n+|\s+$/g, '').split('\n') : [];
+      (s.pc || []).forEach(v => { if (typeof v === 'string' && !/^\d+(-\d+)?$/.test(v)) { if (!pls.some(l => l.includes(v))) problems.push(f.id + ' step ' + (i+1) + ': pc text not found "' + v + '"'); return; } String(v).split('-').forEach(n => { if (+n < 1 || +n > plen) problems.push(f.id + ' step ' + (i+1) + ': pc line ' + n + ' outside pseudocode (' + plen + ')'); }); });
+      if (f.pseudo && !(s.pc || []).length) problems.push(f.id + ' step ' + (i+1) + ': no pseudocode line');
+    });
     const blob = JSON.stringify(f, (k, v) => ['code','schema','payload'].includes(k) ? undefined : v);
     (blob.match(/\{\{([A-Za-z][^}|]*)/g) || []).forEach(m => { const t = m.slice(2).trim().toLowerCase(); if (!G[t]) problems.push(f.id + ': glossary term missing "' + t + '"'); });
     (blob.match(/\[\[([\w-]+)/g) || []).forEach(m => { const t = m.slice(2); if (!nid.has(t)) problems.push(f.id + ': chip to unknown node ' + t); });
@@ -76,6 +85,8 @@ async def main():
                 for t in tabs:
                     await pg.click('#tabs [data-tab="' + t + '"]')
                 active = await pg.evaluate('() => !!document.querySelector(".sd-wire.active, .sd-busychip")')
+                lab = await pg.evaluate('''() => { const cv = document.querySelector('#cv').getBoundingClientRect(); const l = document.querySelector('#cv .sd-wlabel, #cv .sd-busychip'); if (!l) return null; const r = l.getBoundingClientRect(); return (r.left < cv.left - 14 || r.right > cv.right + 14) ? Math.round(r.left - cv.left) + '..' + Math.round(r.right - cv.left) + ' of ' + Math.round(cv.width) : null; }''')
+                if lab: errors.append(fid + ' step ' + str(i+1) + ': label outside diagram ' + lab)
                 if not active: errors.append(fid + ' step ' + str(i+1) + ': no arrow/chip drawn')
                 await pg.click('#tabs [data-tab="explain"]')
             # overlap check on desktop and phone

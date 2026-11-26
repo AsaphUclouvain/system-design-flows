@@ -10,8 +10,8 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const app = $('#app');
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const CATEGORY_ORDER = ['Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Infrastructure foundations', 'Data at scale'];
-const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party' };
+const CATEGORY_ORDER = ['Web & networking', 'Infrastructure foundations', 'Databases & replication', 'Distributed systems', 'Messaging & events', 'Identity & security', 'Real-time', 'Product systems', 'Search & discovery', 'Commerce & money', 'Data at scale', 'AI & machine learning'];
+const KIND_LABEL = { client: 'Client', edge: 'Edge', service: 'Service', worker: 'Worker', db: 'Database', cache: 'Cache', queue: 'Queue / log', storage: 'Object storage', external: 'Third party', ai: 'AI model' };
 
 /* ---------- icons ---------- */
 const ICON = {
@@ -56,7 +56,37 @@ const ICON = {
   ticket: '<path d="M3 8a2 2 0 002-2h14a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H5a2 2 0 00-2-2v-2a2 2 0 000-4z"/><path d="M14 6v12"/>',
   ring: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.6"/><circle cx="19" cy="15" r="1.6"/><circle cx="5" cy="15" r="1.6"/>',
   pulse: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
-  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+  laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 19h19l-2-4h-15z"/>',
+  browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6 6.5h.01M8.5 6.5h.01M11 6.5h.01"/>',
+  pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0112 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+  plug: '<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v4"/>',
+  box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/>',
+  split: '<path d="M4 12h6l4-6h6M10 12l4 6h6"/><path d="M18 4l2 2-2 2M18 16l2 2-2 2"/>',
+  wallet: '<path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H5a1 1 0 01-1-1V6a2 2 0 012-2h11"/><circle cx="16" cy="13.5" r="1.3"/>',
+  building: '<path d="M5 21V4h10v17M15 9h4v12M3 21h18"/><path d="M8 7.5h1M11 7.5h1M8 11h1M11 11h1M8 14.5h1M11 14.5h1"/>',
+  inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/>',
+  route: '<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h7a3 3 0 000-6H9a3 3 0 010-6h7"/>',
+  log: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 10h7M9 14h7M9 18h4"/>',
+  vote: '<path d="M4 11l3 3 6-7"/><path d="M11 20h9M14 15h6"/>',
+  brain: '<path d="M9 4a3 3 0 00-3 3 3 3 0 00-2 5 3 3 0 002 5 3 3 0 003 3h1V4z"/><path d="M15 4a3 3 0 013 3 3 3 0 012 5 3 3 0 01-2 5 3 3 0 01-3 3h-1V4z"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  vector: '<circle cx="5" cy="18" r="1.6"/><circle cx="9" cy="8" r="1.6"/><circle cx="15" cy="14" r="1.6"/><circle cx="19" cy="5" r="1.6"/><path d="M4 21V3M2 19h20" opacity=".6"/>',
+  tool: '<path d="M14.5 6.5a4 4 0 01-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 005.3-5.3l-2.4 2.4-2.4-.6-.6-2.4z"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21M8.5 21h7"/>',
+  speaker: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/>',
+  doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  gpu: '<rect x="3" y="6" width="18" height="12" rx="1.5"/><rect x="7" y="9" width="6" height="6"/><path d="M16 9h2M16 12h2M16 15h2M7 18v3M11 18v3M15 18v3"/>',
+  robot: '<rect x="5" y="8" width="14" height="11" rx="2.5"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01M9.5 16.5h5"/><circle cx="12" cy="3.5" r="1"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="M7 15l4-4 3 3 5-6"/>',
+  cloud: '<path d="M7 18h10a4 4 0 00.6-7.95A6 6 0 006.2 9.2 4.5 4.5 0 007 18z"/>',
+  api: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/>',
+  filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5" opacity=".7"/>',
+  folder: '<path d="M3 6.5A1.5 1.5 0 014.5 5H10l2 2h7.5A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/>',
+  ai: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>'
 };
 const svgIcon = (k) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICON[k] || ICON.service) + '</svg>';
 const UI = {
@@ -276,7 +306,7 @@ let S = null; // state of the open flow
 function renderFlow(f, start) {
   currentFlow = f; setNav(''); document.title = f.title + ' · System Design Flows';
   const tabsMemo = (S && S.tab) || 'explain';
-  S = { f, i: start, tab: tabsMemo, playing: false, speed: 1, raf: 0, timer: 0 };
+  S = { f, i: start, tab: tabsMemo, playing: false, speed: 1, raf: 0, timer: 0, hist: [], choice: {} };
   const sec = [];
   if (f.requirements) sec.push(['req', 'Requirements']);
   if (f.estimates) sec.push(['est', 'Scale']);
@@ -301,17 +331,20 @@ function renderFlow(f, start) {
       f.estimates.map(e => '<div class="sd-box"><span>' + esc(e.label) + '</span><b>' + esc(e.value) + '</b>' + (e.note ? '<p>' + rich(e.note) + '</p>' : '') + '</div>').join('') + '</div></section>';
   }
   h += '<section class="sd-sec" id="sec-sim"><h2>Walkthrough</h2><p class="sub">Tap a component to see its role. Use the arrows, swipe, or press ← → on a keyboard. Payload lines marked <b>+</b> were added at this step, <b>~</b> changed.</p>' +
-    '<div class="sd-sim"><div class="sd-stage"><div class="sd-box">' +
+    '<div class="sd-sim"><div class="sd-stage sd-box">' +
     '<div class="sd-diagram" id="dg"><div class="sd-canvas" id="cv"><svg class="sd-wires" id="wires"></svg>' +
     f.nodes.map(n => '<button type="button" class="sd-node" data-node="' + n.id + '" style="--kc:' + kc(n.kind) + '" aria-label="' + esc(n.label) + '"><span class="ic">' + nodeIcon(n) + '</span><span class="tx"><b>' + esc(n.label) + '</b>' + (n.sub ? '<small>' + esc(n.sub) + '</small>' : '') + '</span></button>').join('') +
     '</div></div>' +
-    '<div class="sd-legend2"><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2"/></svg>request</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="6 5"/></svg>async / queued</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/></svg>response</span></div>' +
-    '<div class="sd-ninfo" id="ninfo"></div>' +
-    '<div class="sd-caption" id="cap"></div>' +
+    '<div class="sd-legend2"><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2"/></svg>request</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="6 5"/></svg>async / queued</span><span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/></svg>response</span>' +
+    (hasBranch(f) ? '<span><svg viewBox="0 0 28 8"><line x1="0" y1="4" x2="28" y2="4" stroke="currentColor" stroke-width="1.6" stroke-dasharray="1 3" opacity=".7"/></svg>other branch</span>' : '') +
+    '<span><i class="sd-pbadge" style="position:static;transform:none">1</i>earlier step</span></div>' +
+    '<div class="sd-ninfo" id="ninfo"></div></div>' +
+    '<div class="sd-cappane sd-box"><div class="sd-caption" id="cap"></div><div class="sd-fork" id="fork"></div>' +
     '<div class="sd-ctrl"><button class="sd-btn" id="bPrev" aria-label="Previous step">' + UI.prev + '</button><button class="sd-btn pri" id="bNext">Next ' + UI.next + '</button><button class="sd-btn" id="bPlay" aria-label="Play">' + UI.play + '</button><button class="sd-btn" id="bRestart" aria-label="Restart">' + UI.restart + '</button>' +
     '<label class="sd-speed">speed <input id="speed" type="range" min="0.5" max="2" step="0.25" value="1"></label></div>' +
-    '<div class="sd-dots" id="dots">' + f.steps.map((s, i) => '<button class="sd-dot" data-i="' + i + '" title="' + esc(s.title) + '">' + (i + 1) + '</button>').join('') + '</div>' +
-    '</div></div>' +
+    '<div class="sd-dots" id="dots">' + f.steps.map((s, i) => '<button class="sd-dot' + (s.path ? ' alt' : '') + '" data-i="' + i + '" title="' + esc((s.path ? '[' + s.path + '] ' : '') + s.title) + '">' + (i + 1) + '</button>').join('') + '</div>' +
+    (f.pseudo ? pseudoHTML(f) : '') +
+    '</div>' +
     '<div class="sd-panel sd-box" id="panel"><div class="sd-tabs" id="tabs"></div><div class="sd-tabbody" id="tabbody"></div></div></div></section>';
 
   if (f.api) {
@@ -330,19 +363,23 @@ function renderFlow(f, start) {
     f.steps.map((s, i) => { const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to); return '<li data-i="' + i + '"><button data-i="' + i + '"><span class="no">' + (i + 1) + '</span><span>' + esc(s.title) + '</span><span class="hop">' + esc(a.label) + (s.from === s.to ? '' : ' → ' + esc(b.label)) + '</span></button></li>'; }).join('') + '</ol></div></section>';
   if (f.refs) {
     h += '<section class="sd-sec" id="sec-refs"><h2>References</h2><p class="sub">Primary sources to go deeper. Payloads and code on this page are illustrative.</p><ol class="sd-refs">' +
-      f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol></section>';
+      f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol>' +
+      (f.verify ? '<div class="sd-verify">' + (f.verify.checked ? '<div><h3>How this flow was checked</h3><ul class="sd-list">' + f.verify.checked.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') +
+        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '') + '</section>';
   }
   h += '<div class="sd-bar" id="bar"><button id="mPrev" aria-label="Previous step">' + UI.prev + 'Back</button><span class="mid" id="mCount"></span><button id="mNext" aria-label="Next step">Next' + UI.next + '</button></div>';
   app.innerHTML = h;
 
   // events
-  $('#bPrev').onclick = () => go(S.i - 1, true);
-  $('#bNext').onclick = () => go(S.i + 1, true);
-  $('#mPrev').onclick = () => go(S.i - 1, true, true);
-  $('#mNext').onclick = () => go(S.i + 1, true, true);
+  $('#bPrev').onclick = () => back();
+  $('#bNext').onclick = () => forward();
+  $('#mPrev').onclick = () => back(true);
+  $('#mNext').onclick = () => forward(true);
   $('#bRestart').onclick = () => { setPlaying(false); go(0, true); };
   $('#bPlay').onclick = () => setPlaying(!S.playing);
   $('#speed').oninput = e => { S.speed = parseFloat(e.target.value); if (S.playing) { setPlaying(false); setPlaying(true); } };
+  $('#fork').onclick = e => { const b = e.target.closest('[data-go]'); if (!b) return; if (b.dataset.bi !== undefined) S.choice[+b.dataset.bi] = +b.dataset.opt; go(+b.dataset.go, true); };
+  const pcEl = $('#pc'); if (pcEl) pcEl.onclick = e => { const l = e.target.closest('[data-l]'); if (!l) return; const n = +l.dataset.l; const k = f.steps.findIndex(st => pcLines(st).includes(n)); if (k >= 0) go(k, true); };
   $('#dots').onclick = e => { const b = e.target.closest('[data-i]'); if (b) go(+b.dataset.i, true); };
   $('#steplist').onclick = e => { const b = e.target.closest('button[data-i]'); if (b) { go(+b.dataset.i, true); $('#sec-sim').scrollIntoView({ behavior: 'smooth' }); } };
   $('#cv').addEventListener('click', e => { const n = e.target.closest('.sd-node'); if (n) showNode(n.dataset.node); });
@@ -359,7 +396,7 @@ function swipe(el) {
   el.addEventListener('touchend', e => {
     if (x0 === null) return; const t = e.changedTouches[0]; const dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
     if (e.target.closest('pre')) return;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) go(S.i + (dx < 0 ? 1 : -1), true);
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) { if (dx < 0) forward(); else back(); }
   }, { passive: true });
 }
 
@@ -371,11 +408,11 @@ function layout() {
   const W = cv.clientWidth;
   const narrow = W < 560 && f.grid.cols > f.grid.rows;
   const cols = narrow ? f.grid.rows : f.grid.cols, rows = narrow ? f.grid.cols : f.grid.rows;
-  const rowH = W < 560 ? 104 : 134;
+  const rowH = W < 560 ? 108 : (W > 1000 ? 162 : 134);
   const H = rows * rowH;
   cv.style.height = H + 'px';
   const colW = W / cols;
-  const nw = Math.max(70, Math.min(W < 560 ? 100 : 150, colW * (W < 560 ? 0.78 : 0.68)));
+  const nw = Math.max(70, Math.min(W < 560 ? 100 : 158, colW * (W < 560 ? 0.78 : (W > 1000 ? 0.6 : 0.66))));
   const P = {};
   f.nodes.forEach(n => {
     const gx = narrow ? n.y : n.x, gy = narrow ? n.x : n.y;
@@ -397,40 +434,119 @@ function edgeGeom(a, b, off) {
   const [x1, y1] = clip(A, dx, dy); const [x2, y2] = clip(B, -dx, -dy);
   return { x1: x1 + nx, y1: y1 + ny, x2: x2 + nx, y2: y2 + ny };
 }
+/* ---------- branches: steps may carry id / next / end / path / branch ---------- */
+function hasBranch(f) { return f.steps.some(s => s.branch); }
+function idxOf(id) { return S.f.steps.findIndex(s => s.id === id); }
+function nextIndex(i) {
+  const f = S.f, s = f.steps[i];
+  if (!s || s.end) return -1;
+  if (s.branch) return idxOf(s.branch.options[S.choice[i] || 0].goto);
+  if (s.next) return idxOf(s.next);
+  return i + 1 < f.steps.length ? i + 1 : -1;
+}
+// the path from step 0 to step t, honouring the branch choices already made, else defaults, else any option that reaches t
+function pathTo(t) {
+  const f = S.f, seen = new Set();
+  const succ = i => { const s = f.steps[i]; if (s.end) return [];
+    if (s.branch) { const ch = S.choice[i] || 0; const o = s.branch.options.map((x, k) => [k, idxOf(x.goto)]); o.sort((a, b) => (a[0] === ch ? -1 : 0) - (b[0] === ch ? -1 : 0)); return o; }
+    const n = s.next ? idxOf(s.next) : (i + 1 < f.steps.length ? i + 1 : -1); return n >= 0 ? [[null, n]] : []; };
+  const dfs = (i, acc) => {
+    if (i === t) return acc; if (seen.has(i)) return null; seen.add(i);
+    for (const [k, n] of succ(i)) { const r = dfs(n, acc.concat([[i, k]])); if (r) return r; }
+    return null;
+  };
+  const r = dfs(0, []) || [];
+  r.forEach(([i, k]) => { if (k !== null) S.choice[i] = k; });
+  return r.map(x => x[0]);
+}
+function forward(fromBar) { const n = nextIndex(S.i); if (n >= 0) go(n, true, fromBar); }
+function back(fromBar) { if (S.hist.length) go(S.hist[S.hist.length - 1], true, fromBar); }
+
+/* ---------- pseudocode that follows the steps ---------- */
+// pc entries: a line number, a range '3-5', or a piece of text found in the line ('def commit')
+function pcLines(s) {
+  const out = [], f = S.f;
+  if (!f._pl) f._pl = (f.pseudo || '').replace(/^\n+|\s+$/g, '').split('\n');
+  (s.pc || []).forEach(v => { if (typeof v === 'number') out.push(v); else if (!/^\d+(-\d+)?$/.test(v)) { const k = f._pl.findIndex(l => l.includes(v)); if (k >= 0) out.push(k + 1); } else { const [a, b] = String(v).split('-').map(Number); for (let k = a; k <= (b || a); k++) out.push(k); } });
+  return out;
+}
+function pseudoHTML(f) {
+  const lines = f.pseudo.replace(/^\n+|\s+$/g, '').split('\n');
+  return '<div class="sd-pseudo"><div class="sd-phead"><span>Pseudocode</span><small>the highlighted lines run at this step · tap a line to jump</small></div>' +
+    '<pre class="sd-code" id="pc"><code>' + lines.map((l, k) => '<span class="pl" data-l="' + (k + 1) + '"><i>' + (k + 1) + '</i>' + (highlight(l, f.pseudoLang || 'python') || ' ') + '</span>').join('') + '</code></pre></div>';
+}
+function updatePseudo() {
+  const box = $('#pc'); if (!box) return;
+  const f = S.f, s = f.steps[S.i], cur = new Set(pcLines(s)), past = new Set();
+  S.hist.forEach(k => pcLines(f.steps[k]).forEach(n => past.add(n)));
+  const col = kc(f.nodes.find(n => n.id === s.to).kind);
+  let first = null;
+  $$('.pl', box).forEach(el => { const n = +el.dataset.l; const on = cur.has(n); el.classList.toggle('on', on); el.classList.toggle('done', !on && past.has(n)); if (on) { el.style.setProperty('--kc', col); if (!first) first = el; } });
+  if (first) box.scrollTo({ top: Math.max(0, first.offsetTop - box.clientHeight / 3), behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
 function drawWires() {
   if (!S || !L) return;
   const f = S.f, svg = $('#wires'); if (!svg) return;
   svg.setAttribute('viewBox', '0 0 ' + L.W + ' ' + L.H);
   const dirs = new Set(f.steps.filter(s => s.from !== s.to).map(s => s.from + '>' + s.to));
-  const offFor = s => dirs.has(s.to + '>' + s.from) ? 4.5 : 0;
-  const seen = new Set(f.steps.slice(0, S.i).map(s => s.from + '>' + s.to));
+  const offFor = s => dirs.has(s.to + '>' + s.from) ? 5 : 0;
+  const seenNums = new Map();
+  S.hist.forEach(k => { const st = f.steps[k]; if (st.from === st.to) return; const key = st.from + '>' + st.to; if (!seenNums.has(key)) seenNums.set(key, []); seenNums.get(key).push(k + 1); });
   let out = '';
   const done = new Set();
   f.steps.forEach(s => {
     if (s.from === s.to) return; const k = s.from + '>' + s.to; if (done.has(k)) return; done.add(k);
     const g = edgeGeom(s.from, s.to, offFor(s));
-    out += '<line class="sd-wire' + (seen.has(k) ? ' past' : '') + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    out += '<line class="sd-wire' + (seenNums.has(k) ? ' past' : '') + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
   });
   const s = f.steps[S.i];
-  $$('.sd-wlabel,.sd-busychip', $('#cv')).forEach(x => x.remove());
+  $$('.sd-wlabel,.sd-busychip,.sd-pbadge,.sd-altlabel', $('#cv')).forEach(x => x.remove());
+  const curKey = s.from + '>' + s.to;
+  // numbered badges on edges already travelled, so the diagram keeps the story
+  seenNums.forEach((nums, key) => {
+    if (key === curKey) return;
+    const [a, b] = key.split('>'); const g = edgeGeom(a, b, offFor({ from: a, to: b }));
+    const t = (dirs.has(b + '>' + a) && a > b) ? 0.38 : 0.5;
+    const bd = document.createElement('i'); bd.className = 'sd-pbadge';
+    bd.style.left = (g.x1 + (g.x2 - g.x1) * t) + 'px'; bd.style.top = (g.y1 + (g.y2 - g.y1) * t) + 'px';
+    const shown = nums.slice(-2); bd.textContent = shown.join(',');
+    bd.title = shown.map(n => n + '. ' + (f.steps[n - 1].label || f.steps[n - 1].title)).join('\n');
+    $('#cv').appendChild(bd);
+  });
+  // the other outcomes of a branch, drawn faintly with their labels
+  if (s.branch) {
+    s.branch.options.forEach((o, k) => {
+      const t = f.steps[idxOf(o.goto)]; if (!t || t.from === t.to) return;
+      const g = edgeGeom(t.from, t.to, offFor(t));
+      out += '<line class="sd-wire alt" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+      const lb = document.createElement('div'); lb.className = 'sd-altlabel' + ((S.choice[S.i] || 0) === k ? ' on' : '');
+      lb.style.left = ((g.x1 + g.x2) / 2) + 'px'; lb.style.top = ((g.y1 + g.y2) / 2) + 'px';
+      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb);
+    });
+  }
   if (s.from !== s.to) {
     const g = edgeGeom(s.from, s.to, offFor(s));
     const col = kc(f.nodes.find(n => n.id === s.from).kind);
-    const ang = Math.atan2(g.y2 - g.y1, g.x2 - g.x1), ah = 9;
+    const ang = Math.atan2(g.y2 - g.y1, g.x2 - g.x1), ah = 10;
     const p1 = [g.x2 - ah * Math.cos(ang - .45), g.y2 - ah * Math.sin(ang - .45)], p2 = [g.x2 - ah * Math.cos(ang + .45), g.y2 - ah * Math.sin(ang + .45)];
     out += '<line class="sd-wire active' + (s.async ? ' async' : '') + (s.reply ? ' reply' : '') + '" style="stroke:' + col + '" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>' +
       '<path d="M' + g.x2 + ',' + g.y2 + 'L' + p1[0] + ',' + p1[1] + 'L' + p2[0] + ',' + p2[1] + 'z" style="fill:' + col + '"/>' +
-      '<circle id="pk" class="sd-packet" r="6" cx="' + g.x1 + '" cy="' + g.y1 + '" style="fill:' + col + ';color:' + col + '"/>';
+      '<circle id="pk" class="sd-packet" r="5.5" cx="' + g.x1 + '" cy="' + g.y1 + '" style="fill:' + col + ';color:' + col + '"/>';
     svg.innerHTML = out;
     const lab = document.createElement('div');
     lab.className = 'sd-wlabel'; lab.style.color = col;
-    lab.style.left = ((g.x1 + g.x2) / 2) + 'px'; lab.style.top = ((g.y1 + g.y2) / 2) + 'px';
     lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>' + esc(s.label || s.title);
+    lab.title = s.label || s.title;
     $('#cv').appendChild(lab);
-    // if the label doesn't fit in the free gap between the two boxes, show only the step number
+    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
     const free = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
     const horizontal = Math.abs(g.x2 - g.x1) >= Math.abs(g.y2 - g.y1);
-    if ((horizontal ? lab.offsetWidth : lab.offsetHeight) > free - 10) { lab.classList.add('badge'); lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>'; lab.title = s.label || s.title; }
+    lab.style.left = mx + 'px'; lab.style.top = my + 'px';
+    // a long label on a short horizontal hop sits just above the line instead of hiding its text
+    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('above'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 120, 160)) + 'px'; }
+    // keep the label inside the canvas
+    const half = lab.offsetWidth / 2; lab.style.left = Math.min(L.W - half - 4, Math.max(half + 4, mx)) + 'px';
     animatePacket(g);
   } else {
     svg.innerHTML = out;
@@ -438,34 +554,35 @@ function drawWires() {
     const chip = document.createElement('div');
     chip.className = 'sd-busychip'; chip.style.color = kc(n.kind);
     const below = P.y + P.h / 2 + 30 < L.H;
-    chip.style.left = P.x + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
     chip.textContent = (S.i + 1) + ' · ' + (s.label || s.title);
     $('#cv').appendChild(chip);
+    const half = chip.offsetWidth / 2;
+    chip.style.left = Math.min(L.W - half - 4, Math.max(half + 4, P.x)) + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
     cancelAnimationFrame(S.raf);
   }
 }
+// the packet travels the arrow once and settles: the arrow, its label and the payload carry the meaning
 function animatePacket(g) {
   cancelAnimationFrame(S.raf);
   const pk = $('#pk'); if (!pk) return;
-  if (reduceMotion) { pk.setAttribute('cx', g.x2); pk.setAttribute('cy', g.y2); return; }
-  const dur = 1300 / S.speed, rest = 500 / S.speed; let t0 = null;
+  if (reduceMotion) { pk.setAttribute('opacity', 0); return; }
+  const dur = 1100 / S.speed; let t0 = null;
   const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   const tick = ts => {
-    if (t0 === null) t0 = ts; const e = (ts - t0) % (dur + rest); const t = ease(Math.min(1, e / dur));
+    if (t0 === null) t0 = ts; const e = ts - t0; const t = ease(Math.min(1, e / dur));
     pk.setAttribute('cx', g.x1 + (g.x2 - g.x1) * t); pk.setAttribute('cy', g.y1 + (g.y2 - g.y1) * t);
-    pk.setAttribute('opacity', e > dur ? Math.max(0, 1 - (e - dur) / rest) : 1);
-    S.raf = requestAnimationFrame(tick);
+    pk.setAttribute('opacity', e > dur ? Math.max(0, 1 - (e - dur) / 300) : 1);
+    if (e < dur + 300) S.raf = requestAnimationFrame(tick);
   };
   S.raf = requestAnimationFrame(tick);
 }
 
 function go(i, user, fromBar) {
-  const f = S.f; if (i < 0 || i >= f.steps.length) { if (S.playing && i >= f.steps.length) setPlaying(false); return; }
-  S.i = i; markSeen(f.id, i);
+  const f = S.f; if (i < 0 || i >= f.steps.length) return;
+  S.i = i; S.hist = pathTo(i); markSeen(f.id, i);
   const s = f.steps[i];
   history.replaceState(null, '', '#/flow/' + f.id + '/' + (i + 1));
-  // nodes
-  const visited = new Set(); f.steps.slice(0, i + 1).forEach(x => { visited.add(x.from); visited.add(x.to); });
+  const visited = new Set(); S.hist.concat([i]).forEach(k => { visited.add(f.steps[k].from); visited.add(f.steps[k].to); });
   $$('.sd-node', $('#cv')).forEach(el => {
     const id = el.dataset.node;
     el.classList.toggle('src', id === s.from && s.from !== s.to);
@@ -474,16 +591,27 @@ function go(i, user, fromBar) {
     el.classList.toggle('dim', !visited.has(id));
   });
   drawWires();
-  // caption
   const a = f.nodes.find(n => n.id === s.from), b = f.nodes.find(n => n.id === s.to);
-  $('#cap').innerHTML = '<div class="sn"><span>Step ' + (i + 1) + ' of ' + f.steps.length + '</span><span>·</span><span>' + esc(a.label) + (s.from === s.to ? ' (internal)' : ' → ' + esc(b.label)) + '</span>' + (s.async ? '<span class="sd-tag">async</span>' : '') + '</div><h2>' + rich(s.title) + '</h2><p>' + rich(s.caption) + '</p>';
-  $('#bPrev').disabled = i === 0; $('#bNext').disabled = i === f.steps.length - 1;
-  $('#mPrev').disabled = i === 0; $('#mNext').disabled = i === f.steps.length - 1;
+  $('#cap').innerHTML = '<div class="sn"><span>Step ' + (i + 1) + ' of ' + f.steps.length + '</span><span>·</span><span>' + esc(a.label) + (s.from === s.to ? ' (internal)' : ' → ' + esc(b.label)) + '</span>' + (s.async ? '<span class="sd-tag">async</span>' : '') + (s.path ? '<span class="sd-tag sd-pathtag">if ' + esc(s.path) + '</span>' : '') + '</div><h2>' + rich(s.title) + '</h2><p>' + rich(s.caption) + '</p>';
+  // fork: choose the outcome at a branch, or come back to try the other one at the end of a path
+  let fk = '';
+  if (s.branch) {
+    fk = '<span class="q">' + rich(s.branch.q) + '</span>' + s.branch.options.map((o, k) => '<button class="sd-chip' + ((S.choice[i] || 0) === k ? ' on' : '') + '" data-bi="' + i + '" data-opt="' + k + '" data-go="' + idxOf(o.goto) + '">' + esc(o.label) + ' →</button>').join('');
+  } else if (nextIndex(i) < 0) {
+    const bi = S.hist.slice().reverse().find(k => f.steps[k].branch);
+    if (bi !== undefined) { const br = f.steps[bi].branch, ch = S.choice[bi] || 0;
+      fk = '<span class="q">End of this path. Other outcome' + (br.options.length > 2 ? 's' : '') + ' of step ' + (bi + 1) + ':</span>' + br.options.map((o, k) => k === ch ? '' : '<button class="sd-chip" data-bi="' + bi + '" data-opt="' + k + '" data-go="' + idxOf(o.goto) + '">if ' + esc(o.label) + ' →</button>').join(''); }
+  }
+  $('#fork').innerHTML = fk; $('#fork').classList.toggle('show', !!fk);
+  const nx = nextIndex(i);
+  $('#bPrev').disabled = !S.hist.length; $('#bNext').disabled = nx < 0;
+  $('#mPrev').disabled = !S.hist.length; $('#mNext').disabled = nx < 0;
   $('#mCount').textContent = (i + 1) + ' / ' + f.steps.length;
   $$('#dots .sd-dot').forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('seen', (progress[f.id] || []).includes(k)); });
   $$('#steplist li').forEach((li, k) => li.classList.toggle('on', k === i));
   $('.sd-progressbar').style.width = ((i + 1) / f.steps.length * 100) + '%';
   renderTabs();
+  updatePseudo();
   $('#ninfo').classList.remove('show');
   if (user && fromBar) {
     const st = $('.sd-stage'); const top = st.getBoundingClientRect().top;
@@ -525,7 +653,7 @@ function payloadHTML(s) {
   let h = '';
   let prev = null;
   if (s.diff !== false) {
-    for (let k = S.i - 1; k >= 0; k--) { const p = f.steps[k].payload; if (p !== undefined) { prev = p; break; } }
+    for (let j = S.hist.length - 1; j >= 0; j--) { const p = f.steps[S.hist[j]].payload; if (p !== undefined) { prev = p; break; } }
     if (prev && (typeof prev !== 'object' || typeof s.payload !== 'object')) prev = null;
     if (prev) { // only diff when the two payloads are recognisably the same message
       const pf = flatten(prev, ''), cf = Object.keys(flatten(s.payload, ''));
@@ -563,7 +691,7 @@ function showNode(id) {
 function setPlaying(on) {
   S.playing = on; clearInterval(S.timer);
   $('#bPlay').innerHTML = on ? UI.pause : UI.play; $('#bPlay').setAttribute('aria-label', on ? 'Pause' : 'Play');
-  if (on) { if (S.i >= S.f.steps.length - 1) go(0, true); S.timer = setInterval(() => go(S.i + 1, true), 4200 / S.speed); }
+  if (on) { if (nextIndex(S.i) < 0) go(0, true); S.timer = setInterval(() => { if (nextIndex(S.i) < 0) setPlaying(false); else forward(); }, 4200 / S.speed); }
 }
 function stopAll() { if (S) { clearInterval(S.timer); cancelAnimationFrame(S.raf); } }
 
@@ -620,8 +748,8 @@ function copyText(t, btn) {
 }
 document.addEventListener('keydown', e => {
   if (!S || !$('#cv') || e.target.closest('input,textarea')) return;
-  if (e.key === 'ArrowRight') { go(S.i + 1, true); e.preventDefault(); }
-  else if (e.key === 'ArrowLeft') { go(S.i - 1, true); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { forward(); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { back(); e.preventDefault(); }
   else if (e.key === ' ' && !e.target.closest('button')) { setPlaying(!S.playing); e.preventDefault(); }
 });
 let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(layout, 120); });
