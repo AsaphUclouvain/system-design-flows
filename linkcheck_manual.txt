@@ -5,3 +5,5 @@ https://www.cloudflare.com/learning/cdn/glossary/anycast-network/
 https://nlp.stanford.edu/IR-book/html/htmledition/web-crawling-and-indexes-1.html
 https://github.com/video-dev/hls.js/blob/master/docs/API.md
 https://netflixtechblog.com/high-quality-video-encoding-at-scale-d159db052746
+https://genai.owasp.org/llm-top-10/
+https://genai.owasp.org/llmrisk/llm01-prompt-injection/
