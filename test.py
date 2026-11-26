@@ -12,7 +12,7 @@ CHECK_JS = r"""
 () => {
   const F = window.SD_FLOWS, G = window.SD_GLOSSARY, problems = [];
   const ids = new Set();
-  const kinds = ['client','edge','service','worker','db','cache','queue','storage','external'];
+  const kinds = ['client','edge','service','worker','db','cache','queue','storage','external','ai'];
   F.forEach(f => {
     if (ids.has(f.id)) problems.push('duplicate flow id ' + f.id); ids.add(f.id);
     ['id','title','category','summary','grid','nodes','steps'].forEach(k => { if (!f[k]) problems.push(f.id + ': missing ' + k); });

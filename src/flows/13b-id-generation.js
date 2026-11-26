@@ -235,7 +235,7 @@ CREATE INDEX ON orders (user_id, id DESC);`,
     ] }
   ],
   refs: [
-    { label: 'Twitter Engineering: Announcing Snowflake (2010)', url: 'https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake' },
+    { label: 'Twitter: Snowflake source code and README (2010 release)', url: 'https://github.com/twitter-archive/snowflake/tree/snowflake-2010' },
     { label: 'RFC 9562: UUID version 7', url: 'https://www.rfc-editor.org/rfc/rfc9562' },
     { label: 'MDN: Number.MAX_SAFE_INTEGER', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER' }
   ]

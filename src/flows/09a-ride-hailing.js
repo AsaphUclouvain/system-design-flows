@@ -230,7 +230,7 @@ CREATE UNIQUE INDEX one_active_trip ON trips (driver_id)
   ],
   refs: [
     { label: 'Redis: GEOSEARCH', url: 'https://redis.io/docs/latest/commands/geosearch/' },
-    { label: 'Uber: H3, hexagonal hierarchical spatial index', url: 'https://www.uber.com/blog/h3/' },
+    { label: 'Uber: H3, hexagonal hierarchical spatial index', url: 'https://www.uber.com/us/en/blog/h3/' },
     { label: 'PostgreSQL: Partial indexes', url: 'https://www.postgresql.org/docs/current/indexes-partial.html' }
   ]
 });

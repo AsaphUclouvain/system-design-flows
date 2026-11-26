@@ -43,10 +43,20 @@ def agentic_rag(q, max_rounds=3):
       caption: 'The agent first decides where to look. Compatibility is a product-manual question, not an order lookup, so it picks the docs index.',
       text: ['Routing is a single LLM call with a constrained output (one of the source names). It saves calls to sources that cannot help.'],
       payloadKind: 'Routing decision',
-      payload: { options: ['docs', 'orders_sql', 'web'], chosen: 'docs', reason: 'hardware compatibility question' }
+      payload: { options: ['docs', 'orders_sql', 'web'], chosen: 'docs', reason: 'hardware compatibility question' },
+      branch: { q: 'What kind of question is it?', options: [ { label: 'product question → docs', goto: 'r1' }, { label: 'order question → SQL tool', goto: 'sqlq' } ] }
     },
     {
-      from: 'agent', to: 'docs', label: 'search "X2 old dock compatible"', pc: ['chunks = retrieve'],
+      id: 'sqlq', path: 'order question', from: 'agent', to: 'sql', label: 'SELECT status FROM orders WHERE id = 88125', pc: ['llm.route'],
+      title: 'Other route: a structured lookup',
+      caption: 'Had the customer asked "Where is my order 88125?", the router would pick the read-only SQL tool instead of the vector index. A vector search is the wrong tool for an exact lookup.',
+      text: ['The SQL tool runs with a read-only database role and a row filter on the customer\'s own orders, so a bad generated query cannot change data or read other people\'s orders.'],
+      payloadKind: 'Tool result',
+      payload: { sql: 'SELECT status, carrier, eta FROM orders WHERE id = 88125 AND customer_id = \'c_5521\'', rows: [{ status: 'shipped', carrier: 'bpost', eta: '2026-11-28' }] },
+      next: 'gen'
+    },
+    {
+      id: 'r1', from: 'agent', to: 'docs', label: 'search "X2 old dock compatible"', pc: ['chunks = retrieve'],
       title: 'Round 1: retrieve',
       caption: 'The query is searched as written. The top results are about the X2\'s battery and a generic dock page, scored high by similarity because they share words.',
       text: [],
@@ -84,7 +94,17 @@ def agentic_rag(q, max_rounds=3):
       caption: 'Both chunks directly answer the question. The loop ends.',
       text: ['If round 2 had also failed, the corrective step would switch to web search (as CRAG does for static corpora) before giving up after round 3.'],
       payloadKind: 'Grades',
-      payload: { 'compat#2': 'relevant', 'release-x2#5': 'relevant', passed: 2 }
+      payload: { 'compat#2': 'relevant', 'release-x2#5': 'relevant', passed: 2 },
+      branch: { q: 'Did round 2 find enough?', options: [ { label: 'yes: generate', goto: 'gen' }, { label: 'still weak: web fallback', goto: 'webq' } ] }
+    },
+    {
+      id: 'webq', path: 'web fallback', from: 'agent', to: 'web', label: 'web search "X2 headset D1 dock"', pc: ['source = "web"'],
+      title: 'Corrective fallback: search the web',
+      caption: 'If the internal index still had nothing useful, the agent would switch source to a web search API, grade those results the same way, and answer only from what passes.',
+      text: ['CRAG uses large-scale web search to extend retrieval when the internal results are judged wrong or ambiguous. The answer should then say that it comes from outside sources.'],
+      payloadKind: 'Web results',
+      payload: { results: [{ url: 'https://forum.example.com/x2-d1', snippet: 'D1 dock does not charge the X2…' }], graded_relevant: 1, note: 'answer flagged as based on external sources' },
+      next: 'gen'
     },
     {
       id: 'gen', from: 'agent', to: 'user', reply: true, label: 'answer with both cases + citations', pc: ['return llm.generate'],

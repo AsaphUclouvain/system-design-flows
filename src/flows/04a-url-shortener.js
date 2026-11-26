@@ -313,7 +313,7 @@ CREATE TABLE idempotency_keys (
     ] }
   ],
   refs: [
-    { label: 'X (Twitter) engineering: Announcing Snowflake', url: 'https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake', note: 'The original id layout.' },
+    { label: 'Twitter: Snowflake source code (2010 release)', url: 'https://github.com/twitter-archive/snowflake/tree/snowflake-2010', note: 'The original id layout.' },
     { label: 'MDN: 302 Found', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302' },
     { label: 'MDN: 301 Moved Permanently', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301' },
     { label: 'ClickHouse: Kafka table engine', url: 'https://clickhouse.com/docs/en/engines/table-engines/integrations/kafka' }

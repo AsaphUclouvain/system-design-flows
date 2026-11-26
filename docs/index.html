@@ -1958,7 +1958,7 @@ CREATE TABLE stock (
     { label: 'Apache Kafka documentation', url: 'https://kafka.apache.org/documentation/', note: 'Producers, acks, idempotence, consumer groups.' },
     { label: 'Confluent: Kafka consumer design', url: 'https://docs.confluent.io/platform/current/clients/consumer.html', note: 'Groups, offsets, rebalancing.' },
     { label: 'Confluent: Schema evolution and compatibility', url: 'https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html', note: 'BACKWARD, FORWARD, FULL.' },
-    { label: 'Uber Engineering: Reliable reprocessing with Kafka', url: 'https://www.uber.com/blog/reliable-reprocessing/', note: 'The retry-topic and DLQ design.' },
+    { label: 'Uber Engineering: Reliable reprocessing with Kafka', url: 'https://www.uber.com/us/en/blog/reliable-reprocessing/', note: 'The retry-topic and DLQ design.' },
     { label: 'microservices.io: Idempotent consumer', url: 'https://microservices.io/patterns/communication-style/idempotent-consumer.html' }
   ]
 });
@@ -3479,7 +3479,7 @@ CREATE TABLE idempotency_keys (
     ] }
   ],
   refs: [
-    { label: 'X (Twitter) engineering: Announcing Snowflake', url: 'https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake', note: 'The original id layout.' },
+    { label: 'Twitter: Snowflake source code (2010 release)', url: 'https://github.com/twitter-archive/snowflake/tree/snowflake-2010', note: 'The original id layout.' },
     { label: 'MDN: 302 Found', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/302' },
     { label: 'MDN: 301 Moved Permanently', url: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301' },
     { label: 'ClickHouse: Kafka table engine', url: 'https://clickhouse.com/docs/en/engines/table-engines/integrations/kafka' }
@@ -5547,7 +5547,7 @@ CREATE UNIQUE INDEX one_active_trip ON trips (driver_id)
   ],
   refs: [
     { label: 'Redis: GEOSEARCH', url: 'https://redis.io/docs/latest/commands/geosearch/' },
-    { label: 'Uber: H3, hexagonal hierarchical spatial index', url: 'https://www.uber.com/blog/h3/' },
+    { label: 'Uber: H3, hexagonal hierarchical spatial index', url: 'https://www.uber.com/us/en/blog/h3/' },
     { label: 'PostgreSQL: Partial indexes', url: 'https://www.postgresql.org/docs/current/indexes-partial.html' }
   ]
 });
@@ -7276,7 +7276,7 @@ CREATE TABLE doc_snapshots (
   refs: [
     { label: 'Yjs documentation', url: 'https://docs.yjs.dev/' },
     { label: 'Kleppmann et al.: Local-first software', url: 'https://www.inkandswitch.com/local-first/' },
-    { label: 'Nicolaescu et al.: YATA (Yjs algorithm)', url: 'https://www.researchgate.net/publication/310212186_Near_Real-Time_Peer-to-Peer_Shared_Editing_on_Extensible_Data_Types' }
+    { label: 'Yjs on GitHub (implements the YATA algorithm; links the paper)', url: 'https://github.com/yjs/yjs' }
   ]
 });
 
@@ -7517,7 +7517,7 @@ CREATE INDEX ON orders (user_id, id DESC);`,
     ] }
   ],
   refs: [
-    { label: 'Twitter Engineering: Announcing Snowflake (2010)', url: 'https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake' },
+    { label: 'Twitter: Snowflake source code and README (2010 release)', url: 'https://github.com/twitter-archive/snowflake/tree/snowflake-2010' },
     { label: 'RFC 9562: UUID version 7', url: 'https://www.rfc-editor.org/rfc/rfc9562' },
     { label: 'MDN: Number.MAX_SAFE_INTEGER', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER' }
   ]
@@ -11182,10 +11182,20 @@ def agentic_rag(q, max_rounds=3):
       caption: 'The agent first decides where to look. Compatibility is a product-manual question, not an order lookup, so it picks the docs index.',
       text: ['Routing is a single LLM call with a constrained output (one of the source names). It saves calls to sources that cannot help.'],
       payloadKind: 'Routing decision',
-      payload: { options: ['docs', 'orders_sql', 'web'], chosen: 'docs', reason: 'hardware compatibility question' }
+      payload: { options: ['docs', 'orders_sql', 'web'], chosen: 'docs', reason: 'hardware compatibility question' },
+      branch: { q: 'What kind of question is it?', options: [ { label: 'product question → docs', goto: 'r1' }, { label: 'order question → SQL tool', goto: 'sqlq' } ] }
     },
     {
-      from: 'agent', to: 'docs', label: 'search "X2 old dock compatible"', pc: ['chunks = retrieve'],
+      id: 'sqlq', path: 'order question', from: 'agent', to: 'sql', label: 'SELECT status FROM orders WHERE id = 88125', pc: ['llm.route'],
+      title: 'Other route: a structured lookup',
+      caption: 'Had the customer asked "Where is my order 88125?", the router would pick the read-only SQL tool instead of the vector index. A vector search is the wrong tool for an exact lookup.',
+      text: ['The SQL tool runs with a read-only database role and a row filter on the customer\'s own orders, so a bad generated query cannot change data or read other people\'s orders.'],
+      payloadKind: 'Tool result',
+      payload: { sql: 'SELECT status, carrier, eta FROM orders WHERE id = 88125 AND customer_id = \'c_5521\'', rows: [{ status: 'shipped', carrier: 'bpost', eta: '2026-11-28' }] },
+      next: 'gen'
+    },
+    {
+      id: 'r1', from: 'agent', to: 'docs', label: 'search "X2 old dock compatible"', pc: ['chunks = retrieve'],
       title: 'Round 1: retrieve',
       caption: 'The query is searched as written. The top results are about the X2\'s battery and a generic dock page, scored high by similarity because they share words.',
       text: [],
@@ -11223,7 +11233,17 @@ def agentic_rag(q, max_rounds=3):
       caption: 'Both chunks directly answer the question. The loop ends.',
       text: ['If round 2 had also failed, the corrective step would switch to web search (as CRAG does for static corpora) before giving up after round 3.'],
       payloadKind: 'Grades',
-      payload: { 'compat#2': 'relevant', 'release-x2#5': 'relevant', passed: 2 }
+      payload: { 'compat#2': 'relevant', 'release-x2#5': 'relevant', passed: 2 },
+      branch: { q: 'Did round 2 find enough?', options: [ { label: 'yes: generate', goto: 'gen' }, { label: 'still weak: web fallback', goto: 'webq' } ] }
+    },
+    {
+      id: 'webq', path: 'web fallback', from: 'agent', to: 'web', label: 'web search "X2 headset D1 dock"', pc: ['source = "web"'],
+      title: 'Corrective fallback: search the web',
+      caption: 'If the internal index still had nothing useful, the agent would switch source to a web search API, grade those results the same way, and answer only from what passes.',
+      text: ['CRAG uses large-scale web search to extend retrieval when the internal results are judged wrong or ambiguous. The answer should then say that it comes from outside sources.'],
+      payloadKind: 'Web results',
+      payload: { results: [{ url: 'https://forum.example.com/x2-d1', snippet: 'D1 dock does not charge the X2…' }], graded_relevant: 1, note: 'answer flagged as based on external sources' },
+      next: 'gen'
     },
     {
       id: 'gen', from: 'agent', to: 'user', reply: true, label: 'answer with both cases + citations', pc: ['return llm.generate'],
@@ -11367,6 +11387,519 @@ results = catalogue.hydrate(hnsw_search(qv, k=10))`,
   verify: {
     checked: ['Random max layer with exponentially decaying probability, search from the upper layer, logarithmic scaling: HNSW paper abstract.', 'Greedy routing, degree vs recall trade-off: Pinecone article. Faiss scope: its README.'],
     uncertain: ['Layer sizes, distance-check counts and timings are illustrative orders of magnitude, not benchmarks.', 'The embedding model name is an example.']
+  }
+});
+
+flow({
+  id: 'agent-tool-calling',
+  title: 'AI agent with tool calling: the agent loop',
+  category: 'AI & machine learning',
+  tags: ['Agent loop', 'Tool schemas (JSON Schema)', 'tool_use / tool_result', 'Human approval', 'Idempotent side effects', 'Max-turn limit'],
+  summary: 'An LLM cannot touch your database or call your payment API. It can only ask. Follow a support agent as the model asks for an order lookup, your backend runs it, the model asks for a refund, a human approves it, and the loop ends with a final answer. The model decides what to do next; your code decides what is allowed.',
+  requirements: {
+    functional: ['Answer a customer and take actions (look up an order, refund it) through tools.', 'Money-moving actions above a limit need a human approval.'],
+    nonFunctional: ['The model never gets credentials: tools run in your backend with your permissions.', 'Bounded: at most 10 model turns per request.', 'Every tool call is logged and side effects are idempotent, so a retry cannot refund twice.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Customer', sub: 'support chat', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Types a request in the help widget.' },
+    { id: 'app', label: 'Agent runtime', sub: 'your FastAPI backend', kind: 'service', icon: 'robot', x: 1, y: 1, desc: 'Runs the loop: send messages + tool definitions to the model, execute the tool calls it asks for, send the results back, repeat until the model stops asking. Holds the credentials and the policy.' },
+    { id: 'llm', label: 'LLM', sub: 'Messages API', kind: 'ai', icon: 'brain', x: 1, y: 0, desc: 'Reads the conversation and the tool list, and replies either with text or with a structured request to call a tool. It never executes anything.' },
+    { id: 'db', label: 'Orders DB', sub: 'PostgreSQL', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Behind the lookup_order tool, through a read-only role.' },
+    { id: 'pay', label: 'Payments API', sub: 'Stripe-like', kind: 'external', icon: 'card', x: 3, y: 2, desc: 'Behind the issue_refund tool. Accepts an Idempotency-Key header.' },
+    { id: 'human', label: 'Support lead', sub: 'approval queue', kind: 'client', icon: 'check', x: 1, y: 2, desc: 'Approves or rejects actions that policy says a human must see.' }
+  ],
+  pseudo: `
+def run_agent(messages, max_turns=10):
+    for turn in range(max_turns):
+        resp = llm.create(model=M, messages=messages, tools=TOOLS)
+        messages.append({"role": "assistant", "content": resp.content})
+        if resp.stop_reason != "tool_use":
+            return resp.text                       # final answer
+        results = []
+        for call in resp.tool_calls:
+            if needs_approval(call): wait_for_human(call)
+            out = TOOL_IMPL[call.name](**call.input)  # your code runs it
+            results.append({"type": "tool_result", "tool_use_id": call.id, "content": out})
+        messages.append({"role": "user", "content": results})
+    raise TooManyTurns()`,
+  steps: [
+    {
+      from: 'user', to: 'app', label: '"Order 88125 arrived broken. Refund?"', pc: ['def run_agent'],
+      title: 'A request that needs actions',
+      caption: 'The customer asks for a refund. Answering needs data (the order) and an action (the refund), neither of which the model can reach by itself.',
+      text: ['Anthropic\'s "Building effective agents" describes an agent as an LLM using tools in a loop, based on feedback from the environment. This flow is that loop, written out.'],
+      payloadKind: 'Chat message',
+      payload: { session: 's_19f2', customer_id: 'c_5521', text: 'Order 88125 arrived broken. Can I get a refund?' }
+    },
+    {
+      from: 'app', to: 'llm', label: 'messages + 2 tool schemas', pc: ['resp = llm.create'],
+      title: 'Send the conversation and the tool definitions',
+      caption: 'Each tool is a name, a description the model reads, and a JSON Schema for its input. The descriptions are prompts: they say when to use the tool.',
+      text: [],
+      payloadKind: 'Request',
+      payload: { model: 'claude-…', system: 'You are MadShop support. Refund only damaged or missing items.', tools: [{ name: 'lookup_order', description: 'Get an order by id, with items, total and delivery status.', input_schema: { type: 'object', properties: { order_id: { type: 'string' } }, required: ['order_id'] } }, { name: 'issue_refund', description: 'Refund an order. Use only after checking the order.', input_schema: { type: 'object', properties: { order_id: { type: 'string' }, amount_eur: { type: 'number' }, reason: { type: 'string' } }, required: ['order_id', 'amount_eur', 'reason'] } }], messages: [{ role: 'user', content: 'Order 88125 arrived broken…' }] }
+    },
+    {
+      from: 'llm', to: 'app', reply: true, label: 'stop_reason: tool_use → lookup_order', pc: ['if resp.stop_reason != "tool_use"'],
+      title: 'The model asks for a tool',
+      caption: 'Instead of text, the reply contains a tool_use block with an id, the tool name and arguments that match the schema. stop_reason "tool_use" tells the loop to keep going.',
+      text: ['OpenAI\'s API has the same shape under other names: a tool_calls array whose function.arguments is a JSON string.'],
+      payloadKind: 'Response',
+      payload: { stop_reason: 'tool_use', content: [{ type: 'text', text: 'Let me check that order.' }, { type: 'tool_use', id: 'toolu_01A', name: 'lookup_order', input: { order_id: '88125' } }] }
+    },
+    {
+      from: 'app', to: 'db', label: 'SELECT … WHERE id=88125 AND customer_id=c_5521', pc: ['TOOL_IMPL[call.name]'],
+      title: 'Your code runs the tool',
+      caption: 'The runtime maps the name to a Python function and runs it with the customer\'s scope added by the server, not by the model. The model cannot widen it to someone else\'s order.',
+      text: [],
+      payloadKind: 'Tool output',
+      payload: { order_id: '88125', items: [{ sku: 'MUG-RED', qty: 1, price_eur: 59.9 }], status: 'delivered', delivered_at: '2026-11-24' }
+    },
+    {
+      from: 'app', to: 'llm', label: 'tool_result → model asks issue_refund 59.90', pc: ['"tool_result"', 'messages.append({"role": "user"'],
+      title: 'Feed the result back; the model picks the next action',
+      caption: 'The result goes back as a tool_result linked by tool_use_id. The model reads it and asks for the second tool: issue_refund for €59.90, reason "damaged".',
+      text: ['The whole history is resent on every turn. Long tool outputs make each turn slower and more expensive, so tools should return only what the model needs.'],
+      payloadKind: 'Turn 2',
+      payload: { sent: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_01A', content: '{"status":"delivered","total":59.9}' }] }, received: { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_02B', name: 'issue_refund', input: { order_id: '88125', amount_eur: 59.9, reason: 'damaged' } }] } },
+      branch: { q: 'Does policy require a human for this call?', options: [ { label: 'yes: refunds need approval', goto: 'ask' }, { label: 'no: run it', goto: 'refund' } ] }
+    },
+    {
+      id: 'ask', path: 'human in the loop', from: 'app', to: 'human', label: 'approve refund €59.90 for 88125?', pc: ['needs_approval(call)'],
+      title: 'Pause for a human',
+      caption: 'needs_approval() is plain code: any issue_refund call waits in the support lead\'s queue with the order and the model\'s reason. Approved after 40 seconds.',
+      text: ['Keep the gate outside the model. A prompt that says "always ask first" can be talked around; an if-statement in the runtime cannot.'],
+      payloadKind: 'Approval request',
+      payload: { tool: 'issue_refund', input: { order_id: '88125', amount_eur: 59.9 }, decision: 'approved', by: 'lead_07', after_s: 40 }
+    },
+    {
+      id: 'refund', from: 'app', to: 'pay', label: 'POST /refunds  Idempotency-Key: toolu_02B', pc: ['TOOL_IMPL[call.name]'],
+      title: 'Run the side effect, safely',
+      caption: 'The tool_use id doubles as the idempotency key. If the runtime crashes and replays this turn, the payments API returns the first refund instead of making a second one.',
+      text: [],
+      payloadKind: 'API call',
+      payload: { request: { charge: 'ch_3Pq…', amount: 5990, currency: 'eur' }, headers: { 'Idempotency-Key': 'toolu_02B' }, response: { id: 're_1Qa…', status: 'succeeded' } },
+      failure: 'If the API times out, retry with the same key. Return errors to the model as a tool_result with is_error: true so it can explain or try something else instead of inventing success.'
+    },
+    {
+      from: 'app', to: 'llm', label: 'tool_result → stop_reason: end_turn', pc: ['return resp.text'],
+      title: 'The model stops asking',
+      caption: 'With the refund confirmed, the model replies with text only. stop_reason "end_turn" ends the loop. Turns used: 3 of 10.',
+      text: [],
+      payloadKind: 'Final response',
+      payload: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Sorry about the broken mug. I\'ve refunded €59.90 to your card; it shows in 5–10 days.' }], usage: { input_tokens: 1840, output_tokens: 62 } }
+    },
+    {
+      from: 'app', to: 'user', reply: true, label: 'answer + audit log', pc: ['return resp.text'],
+      title: 'Answer the customer',
+      caption: 'The text goes to the chat. The runtime also stores every tool call, its input, output and approver, so a person can audit what the agent did.',
+      text: [],
+      payloadKind: 'Audit record',
+      payload: { session: 's_19f2', turns: 3, tools: ['lookup_order', 'issue_refund'], approvals: ['lead_07'], refund: 're_1Qa…' }
+    }
+  ],
+  decisions: [
+    { q: 'Workflow or agent?', options: [
+      { name: 'Fixed workflow', verdict: 'good', why: 'Your code calls the LLM at fixed points. Predictable and cheap; Anthropic recommends starting here.' },
+      { name: 'Agent loop', verdict: 'good', why: 'The model chooses the steps. Use it when the steps cannot be known in advance, with limits and approvals.' } ] },
+    { q: 'Where do permissions live?', options: [
+      { name: 'In the prompt', verdict: 'bad', why: 'The model can be persuaded or confused into ignoring it.' },
+      { name: 'In the tool code', verdict: 'great', why: 'Scope by the authenticated user, read-only roles, approval gates and idempotency keys.' } ] }
+  ],
+  refs: [
+    { label: 'Anthropic: Building effective agents (workflows vs agents)', url: 'https://www.anthropic.com/engineering/building-effective-agents' },
+    { label: 'Anthropic docs: Tool use with Claude (tool_use, tool_result, stop_reason)', url: 'https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview' },
+    { label: 'OpenAI docs: Function calling', url: 'https://platform.openai.com/docs/guides/function-calling' },
+    { label: 'ByteByteGo: The agent loop, how AI goes from answering to acting', url: 'https://blog.bytebytego.com/p/the-agent-loop-how-ai-goes-from-answering' },
+    { label: 'Stripe docs: Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' }
+  ],
+  verify: {
+    checked: ['Agent = LLM using tools in a loop with environment feedback; start with workflows: Anthropic\'s post.', 'Block names tool_use / tool_result, tool_use_id and stop_reason "tool_use": Anthropic tool-use docs.', 'Idempotency-Key behaviour: Stripe docs.'],
+    uncertain: ['Using the tool_use id as the idempotency key is a design choice of this example, not an API feature.', 'Token counts, amounts and the 10-turn cap are illustrative.']
+  }
+});
+
+flow({
+  id: 'react-agent',
+  title: 'ReAct: reason, act, observe (and reflect on failure)',
+  category: 'AI & machine learning',
+  tags: ['Thought / Action / Observation', 'Interleaved reasoning', 'Grounding in tool results', 'Reflexion', 'Stop condition'],
+  summary: 'ReAct is the pattern under most agents: the model writes a short thought, picks one action, reads the observation, and repeats. Follow a multi-hop question where the first search misses, the agent notices and adjusts, and a final self-check catches an error before answering.',
+  requirements: {
+    functional: ['Answer questions that need several lookups in a row, where each lookup depends on the last result.'],
+    nonFunctional: ['Every fact in the answer comes from an observation, not from the model\'s memory.', 'Stops after 8 actions.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User', sub: 'question', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks a question no single lookup answers.' },
+    { id: 'agent', label: 'ReAct loop', sub: 'controller', kind: 'service', icon: 'robot', x: 1, y: 1, desc: 'Appends Thought, Action and Observation lines to one growing transcript and sends it back to the model each time.' },
+    { id: 'llm', label: 'LLM', sub: 'writes thoughts + actions', kind: 'ai', icon: 'brain', x: 1, y: 0, desc: 'Generates the next Thought and Action given the transcript so far.' },
+    { id: 'search', label: 'search[]', sub: 'Wikipedia-style API', kind: 'external', icon: 'search', x: 3, y: 0, desc: 'Returns the first paragraph of the best matching page, or similar titles if there is no exact match.' },
+    { id: 'calc', label: 'calculate[]', sub: 'Python sandbox', kind: 'worker', icon: 'cpu', x: 3, y: 2, desc: 'Evaluates arithmetic exactly, because models make arithmetic slips.' },
+    { id: 'mem', label: 'Reflection notes', sub: 'Reflexion memory', kind: 'cache', icon: 'doc', x: 2, y: 2, desc: 'Short lessons the agent writes after a failed attempt, given to the next attempt.' }
+  ],
+  pseudo: `
+transcript = PROMPT + "Question: " + q
+for i in range(8):
+    step = llm(transcript, stop=["Observation:"])   # Thought + Action
+    transcript += step
+    action, arg = parse(step)                  # e.g. search["Atomium"]
+    if action == "finish": break
+    obs = TOOLS[action](arg)
+    transcript += "Observation: " + obs
+check = llm("Verify each number against the observations:" + transcript)
+if not check.ok: lessons.add(check.note); retry()`,
+  steps: [
+    {
+      from: 'user', to: 'agent', label: '"How much older is the Atomium than someone born in 2005?"', pc: ['transcript = PROMPT'],
+      title: 'A multi-hop question',
+      caption: 'One fact is missing (when the Atomium was built), then arithmetic is needed. The model should look the fact up, not recall it.',
+      text: ['Yao et al. (2022) showed that interleaving reasoning traces with actions beat both reasoning-only (chain of thought, which can hallucinate facts) and acting-only baselines on question answering and decision-making tasks.'],
+      payloadKind: 'Question',
+      payload: { q: 'How many years older is the Atomium than a person born in 2005?' }
+    },
+    {
+      from: 'agent', to: 'llm', label: 'transcript so far', pc: ['step = llm(transcript'],
+      title: 'The model thinks, then picks one action',
+      caption: 'The model writes a Thought and an Action, then generation is stopped at "Observation:" so it cannot invent the result itself.',
+      text: [],
+      payloadKind: 'Model output',
+      payload: 'Thought: I need the year the Atomium was built.\nAction: search["Atomium construction"]'
+    },
+    {
+      from: 'agent', to: 'search', label: 'search["Atomium construction"]', pc: ['obs = TOOLS[action](arg)'],
+      title: 'Act: the first search misses',
+      caption: 'No page has that exact title. The tool returns similar titles instead of facts.',
+      text: [],
+      payloadKind: 'Observation',
+      payload: 'Observation: Could not find "Atomium construction". Similar: ["Atomium", "Expo 58", "Heysel Plateau"]'
+    },
+    {
+      from: 'agent', to: 'llm', label: 'Thought: use exact title', pc: ['transcript += "Observation: "'],
+      title: 'Observe and adjust',
+      caption: 'The observation is appended. The next Thought reacts to it: search the exact title "Atomium". This is what reasoning-only prompting cannot do.',
+      text: [],
+      payloadKind: 'Model output',
+      payload: 'Thought: The page is called "Atomium". Search that.\nAction: search["Atomium"]'
+    },
+    {
+      from: 'search', to: 'agent', reply: true, label: '"…built for Expo 58…"', pc: ['obs = TOOLS[action](arg)'],
+      title: 'A useful observation',
+      caption: 'The paragraph says it was built for the 1958 Brussels World\'s Fair (Expo 58). The fact now sits in the transcript, where it can be checked later.',
+      text: [],
+      payloadKind: 'Observation',
+      payload: 'Observation: The Atomium is a landmark in Brussels, built for the 1958 Brussels World\'s Fair (Expo 58)…'
+    },
+    {
+      from: 'agent', to: 'calc', label: 'calculate["2005 - 1958"]', pc: ['obs = TOOLS[action](arg)'],
+      title: 'Act: compute instead of guessing',
+      caption: 'The model asks the sandbox for the subtraction rather than doing it in its head. Observation: 47.',
+      text: [],
+      payloadKind: 'Observation',
+      payload: 'Action: calculate["2005 - 1958"]\nObservation: 47'
+    },
+    {
+      from: 'agent', to: 'llm', label: 'self-check every number', pc: ['check = llm('],
+      title: 'Verify before answering',
+      caption: 'A final pass asks the model to tie every number in the draft answer to an observation. 1958 and 47 are both grounded.',
+      text: ['Reflexion (Shinn et al., 2023) adds this kind of self-evaluation: after a failed attempt the agent writes a verbal lesson and keeps it in memory for the next attempt, without retraining.'],
+      payloadKind: 'Check',
+      payload: { claims: [{ value: '1958', source: 'Observation 2' }, { value: '47', source: 'Observation 3' }], ok: true },
+      branch: { q: 'Did the check pass?', options: [ { label: 'yes: finish', goto: 'fin' }, { label: 'no: write a lesson and retry', goto: 'lesson' } ] }
+    },
+    {
+      id: 'lesson', path: 'reflexion', from: 'agent', to: 'mem', label: 'lesson: "use exact page titles"', pc: ['lessons.add'],
+      title: 'Other outcome: learn from the miss',
+      caption: 'If the check had failed, the agent would store a one-line lesson (for example "search exact page titles first") and start a new attempt with it in the prompt.',
+      text: [],
+      payloadKind: 'Reflection',
+      payload: { attempt: 1, lesson: 'Search the exact page title first; use calculate[] for arithmetic.' },
+      next: 'fin'
+    },
+    {
+      id: 'fin', from: 'agent', to: 'user', reply: true, label: 'Action: finish["47 years"]', pc: ['if action == "finish"'],
+      title: 'Finish',
+      caption: 'The model emits the special finish action and the loop returns its argument: 47 years. Four actions used of eight.',
+      text: [],
+      payloadKind: 'Answer',
+      payload: { answer: '47 years (Atomium: 1958, Expo 58).', actions_used: 4 }
+    }
+  ],
+  decisions: [
+    { q: 'Text ReAct or native tool calling?', options: [
+      { name: 'Text format (Thought/Action lines)', verdict: 'good', why: 'The original paper\'s format; works with any completion model but needs a parser.' },
+      { name: 'Native tool calls', verdict: 'great', why: 'Same loop with structured tool_use blocks; no parsing errors. Most production agents do this.' } ] }
+  ],
+  refs: [
+    { label: 'Yao et al. (2022): ReAct: Synergizing reasoning and acting in language models', url: 'https://arxiv.org/abs/2210.03629' },
+    { label: 'Shinn et al. (2023): Reflexion: language agents with verbal reinforcement learning', url: 'https://arxiv.org/abs/2303.11366' },
+    { label: 'Wei et al. (2022): Chain-of-thought prompting', url: 'https://arxiv.org/abs/2201.11903' },
+    { label: 'Wikipedia: Atomium (the fact used in this example)', url: 'https://en.wikipedia.org/wiki/Atomium' },
+    { label: 'ByteByteGo: Top AI agentic workflow patterns', url: 'https://blog.bytebytego.com/p/top-ai-agentic-workflow-patterns' }
+  ],
+  verify: {
+    checked: ['Interleaved thought/action/observation and its advantage over reasoning-only and acting-only: ReAct abstract.', 'search[] returning similar titles and finish[] action: ReAct paper\'s Wikipedia action space.', 'Verbal self-reflection stored in memory: Reflexion abstract.', 'Atomium built for Expo 58 (1958): Wikipedia article on the Atomium.'],
+    uncertain: ['The calculate[] tool and the final self-check are additions of this example; the original ReAct action space had search, lookup and finish.']
+  }
+});
+
+flow({
+  id: 'multi-agent-research',
+  title: 'Multi-agent orchestration: lead agent and parallel subagents',
+  category: 'AI & machine learning',
+  tags: ['Orchestrator–worker', 'Parallel subagents', 'Separate context windows', 'Plan saved to memory', 'Citation pass', 'Token cost'],
+  summary: 'One agent with one context window runs out of room on broad questions. Follow a research request through an orchestrator–worker system like Anthropic\'s Research feature: a lead agent writes a plan, saves it, starts subagents that search in parallel with their own context windows, merges their condensed findings, and hands the report to a citation agent.',
+  requirements: {
+    functional: ['Answer broad research questions that need many independent searches.', 'Every claim in the report is linked to a source.'],
+    nonFunctional: ['Wall-clock time close to the slowest subagent, not the sum of all searches.', 'Spend is bounded: a cap on subagents and on tool calls per subagent.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User', sub: 'research request', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks a question with many parts.' },
+    { id: 'lead', label: 'Lead agent', sub: 'large model, plans', kind: 'ai', icon: 'robot', x: 1, y: 1, desc: 'Breaks the question into subtasks, writes clear instructions for each subagent, merges results and decides whether more research is needed.' },
+    { id: 'mem', label: 'Memory store', sub: 'plan + notes', kind: 'cache', icon: 'doc', x: 1, y: 0, desc: 'Persists the plan outside the context window, so it survives truncation of a long session.' },
+    { id: 'sa', label: 'Subagent A', sub: 'smaller model', kind: 'ai', icon: 'robot', x: 2, y: 0, desc: 'Gets one subtask, an output format and a tool budget. Searches in its own context window and returns only a condensed summary.' },
+    { id: 'sb', label: 'Subagent B', sub: 'smaller model', kind: 'ai', icon: 'robot', x: 2, y: 2, desc: 'Same as A, on another subtask, at the same time.' },
+    { id: 'web', label: 'Search + fetch tools', sub: 'web, docs, MCP', kind: 'external', icon: 'globe', x: 3, y: 1, desc: 'The tools the subagents call, often several in parallel.' },
+    { id: 'cite', label: 'Citation agent', sub: 'post-processing', kind: 'ai', icon: 'check', x: 0, y: 2, desc: 'Reads the report and the collected documents and attaches each claim to the exact source passage.' }
+  ],
+  pseudo: `
+plan = lead.think(query)
+memory.save("plan", plan)                 # survives context truncation
+while True:
+    tasks = lead.split(plan, max_subagents=5)
+    results = await gather(*[subagent(t, tool_budget=15) for t in tasks])
+    lead.add(condensed(results))
+    if lead.enough(): break
+    plan = lead.refine(plan, results)
+report = lead.write()
+return citation_agent(report, sources=all_documents)`,
+  steps: [
+    {
+      from: 'user', to: 'lead', label: '"Compare EU and US rules for AI in hiring"', pc: ['plan = lead.think'],
+      title: 'A broad question',
+      caption: 'The question has independent parts (EU law, US federal guidance, state laws such as New York City\'s). A single agent would search them one after another and fill its context with raw pages.',
+      text: ['Anthropic reports that agents use about 4× the tokens of a chat, and multi-agent systems about 15×. The pattern pays off only for valuable, parallelizable tasks.'],
+      payloadKind: 'Request',
+      payload: { query: 'Compare EU and US rules for using AI in hiring decisions', mode: 'research' }
+    },
+    {
+      from: 'lead', to: 'mem', label: 'save plan', pc: ['memory.save'],
+      title: 'Plan first, and save it',
+      caption: 'The lead thinks through the approach and writes the plan to memory. Long sessions can exceed the context window; the saved plan is what keeps the job on track if earlier turns get truncated.',
+      text: [],
+      payloadKind: 'Plan',
+      payload: { subtasks: [{ id: 'A', goal: 'EU AI Act: how hiring systems are classified and what obligations follow', sources: 'official EU texts' }, { id: 'B', goal: 'US: federal guidance + NYC Local Law 144 on automated employment decision tools', sources: 'agency and city sites' }], output: 'bullet findings with URLs' }
+    },
+    {
+      from: 'lead', to: 'sa', label: 'task A + format + budget', pc: ['tasks = lead.split', 'gather('],
+      title: 'Delegate with precise instructions',
+      caption: 'Each subagent gets an objective, an output format, which tools and sources to use, and clear boundaries. Vague delegation was a main failure mode: subagents duplicated each other\'s work.',
+      text: ['Anthropic\'s lead agent starts 3–5 subagents in parallel, and subagents call 3+ tools in parallel; they report this cut research time by up to 90% on complex queries.'],
+      payloadKind: 'Subagent brief',
+      payload: { objective: 'How does the EU AI Act classify AI used in recruitment, and what must providers and deployers do?', tools: ['web_search', 'fetch'], prefer: 'eur-lex.europa.eu', budget: { tool_calls: 15 }, return: '≤ 300 words, every claim with URL' }
+    },
+    {
+      from: 'lead', to: 'sb', async: true, label: 'task B (in parallel)', pc: ['gather('],
+      title: 'A second subagent starts at the same time',
+      caption: 'Subagent B gets the US half. The two run concurrently, each with its own fresh context window.',
+      text: [],
+      payloadKind: 'Subagent brief',
+      payload: { objective: 'US federal guidance and NYC Local Law 144 (bias audits for automated employment decision tools)', budget: { tool_calls: 15 } }
+    },
+    {
+      from: 'sa', to: 'web', label: 'search ×3 in parallel, fetch 4 pages', pc: ['subagent(t, tool_budget=15)'],
+      title: 'Subagents search widely, then narrow',
+      caption: 'Subagent A starts with short broad queries, reads the results, then fetches the official text. Its context fills with raw pages, the lead\'s does not.',
+      text: [],
+      payloadKind: 'Tool calls',
+      payload: { calls: ['web_search("AI Act recruitment high-risk")', 'web_search("AI Act Annex III employment")', 'fetch(eur-lex …)'], tokens_read: 41000 }
+    },
+    {
+      from: 'sa', to: 'lead', reply: true, label: 'condensed findings (≈300 words)', pc: ['lead.add(condensed'],
+      title: 'Return a summary, not the pages',
+      caption: 'Subagent A compresses 41,000 tokens of reading into a short summary with URLs. B does the same. The lead\'s context stays small enough to reason over both.',
+      text: [],
+      payloadKind: 'Findings',
+      payload: { subtask: 'A', findings: ['AI systems used for recruitment or selection are listed as high-risk (Annex III).', 'Deployers must follow instructions for use and ensure human oversight.'], urls: ['https://eur-lex.europa.eu/…'] },
+      branch: { q: 'Is there enough to answer?', options: [ { label: 'yes: write the report', goto: 'write' }, { label: 'gap found: refine and spawn again', goto: 'more' } ] }
+    },
+    {
+      id: 'more', path: 'another round', from: 'lead', to: 'sb', label: 'new subtask: state laws beyond NYC', pc: ['plan = lead.refine'],
+      title: 'Other outcome: another research round',
+      caption: 'If the lead finds a gap (for example other US states), it refines the plan and starts new subagents. The loop is bounded by the subagent cap.',
+      text: [],
+      payloadKind: 'Refinement',
+      payload: { gap: 'US state laws other than NYC', new_subtasks: 1 },
+      next: 'write'
+    },
+    {
+      id: 'write', from: 'lead', to: 'cite', label: 'draft report + all documents', pc: ['report = lead.write()', 'citation_agent('],
+      title: 'Write, then cite',
+      caption: 'The lead writes the comparison. A separate citation agent reads it alongside every collected document and attaches each claim to a specific passage.',
+      text: [],
+      payloadKind: 'Citation pass',
+      payload: { claims: 14, cited: 14, unsupported_removed: 0 }
+    },
+    {
+      from: 'cite', to: 'user', reply: true, label: 'report with citations', pc: ['return citation_agent'],
+      title: 'Deliver',
+      caption: 'The user gets one report. Behind it: 1 lead, 2 subagents, 31 tool calls, roughly 15× the tokens of a plain chat answer.',
+      text: [],
+      payloadKind: 'Run summary',
+      payload: { subagents: 2, tool_calls: 31, wall_clock_s: 140, tokens_total: 310000 }
+    }
+  ],
+  decisions: [
+    { q: 'One agent or many?', options: [
+      { name: 'Single agent', verdict: 'good', why: 'Cheaper, simpler, better when steps depend tightly on each other (most coding tasks).' },
+      { name: 'Orchestrator + subagents', verdict: 'good', why: 'Wins on breadth-first tasks with independent parts; Anthropic measured 90.2% better than a single agent on their internal research eval, at much higher token cost.' } ] },
+    { q: 'How do agents hand work over?', options: [
+      { name: 'Subagents as tools (results return to the lead)', verdict: 'great', why: 'The lead keeps control and context; the pattern in this flow.' },
+      { name: 'Handoffs (control moves to another agent)', verdict: 'good', why: 'Good for routing a conversation to a specialist, as in the OpenAI Agents SDK.' } ] }
+  ],
+  refs: [
+    { label: 'Anthropic: How we built our multi-agent research system', url: 'https://www.anthropic.com/engineering/multi-agent-research-system' },
+    { label: 'ByteByteGo: How Anthropic built a multi-agent research system', url: 'https://blog.bytebytego.com/p/how-anthropic-built-a-multi-agent' },
+    { label: 'OpenAI Agents SDK: Handoffs', url: 'https://openai.github.io/openai-agents-python/handoffs/' },
+    { label: 'Anthropic: Building effective agents (orchestrator–workers)', url: 'https://www.anthropic.com/engineering/building-effective-agents' }
+  ],
+  verify: {
+    checked: ['Orchestrator–worker design, plan saved to Memory because context over 200,000 tokens is truncated, CitationAgent, 3–5 parallel subagents, up to 90% faster, 4× and 15× token use, 90.2% eval gain: Anthropic engineering post (read in full).', 'AI for recruitment listed as high-risk in Annex III of the EU AI Act: used only as example content.'],
+    uncertain: ['The query, budgets, token counts and timings are illustrative.', 'The legal findings are a simplified example, not legal guidance.']
+  }
+});
+
+flow({
+  id: 'a2a-protocol',
+  title: 'Agent2Agent (A2A): one agent delegating a task to another',
+  category: 'AI & machine learning',
+  tags: ['Agent Card discovery', 'JSON-RPC over HTTP', 'Task lifecycle', 'input-required', 'SSE streaming', 'Push notifications', 'Artifacts'],
+  summary: 'MCP connects an agent to tools. A2A connects an agent to another agent, owned by someone else, that it cannot see inside. Follow a travel assistant as it discovers a hotel agent through its Agent Card, sends a booking task, answers a follow-up question when the task becomes input-required, streams progress, and receives the booking as an artifact.',
+  requirements: {
+    functional: ['Discover what a remote agent can do and how to authenticate.', 'Send it a task, follow its progress, answer its questions, receive results.', 'Support long tasks that finish after the client disconnects.'],
+    nonFunctional: ['Opaque: neither agent exposes its prompts, tools or memory.', 'Built on HTTP, JSON-RPC 2.0, SSE and standard auth schemes.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Traveller', sub: 'chat app', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks their assistant to book a hotel.' },
+    { id: 'client', label: 'Travel assistant', sub: 'A2A client agent', kind: 'ai', icon: 'robot', x: 1, y: 1, desc: 'The user\'s agent. It decides to delegate the hotel part to a specialist agent.' },
+    { id: 'card', label: 'Agent Card', sub: '/.well-known/agent-card.json', kind: 'edge', icon: 'doc', x: 2, y: 0, desc: 'A public JSON document: the agent\'s name, skills, endpoint URL, supported bindings, capabilities (streaming, push) and security schemes.' },
+    { id: 'server', label: 'Hotel agent', sub: 'A2A server agent', kind: 'ai', icon: 'robot', x: 2, y: 1, desc: 'A remote agent run by a hotel chain. Internally it may use its own LLM, tools and MCP servers; the client never sees them.' },
+    { id: 'pms', label: 'Booking system', sub: 'the chain\'s backend', kind: 'db', icon: 'building', x: 3, y: 1, desc: 'Where rooms are actually held and booked.' },
+    { id: 'hook', label: 'Webhook endpoint', sub: 'push notifications', kind: 'service', icon: 'bell', x: 1, y: 2, desc: 'The client\'s HTTPS endpoint that the server calls when a long task changes state.' }
+  ],
+  pseudo: `
+card = GET("https://hotels.example/.well-known/agent-card.json")
+token = oauth(card.securitySchemes)
+resp = rpc(card.url, "SendMessage", {message: {role: "ROLE_USER", parts: [{text: ask}]}})
+task = resp.task
+while task.status.state == "TASK_STATE_INPUT_REQUIRED":
+    answer = ask_user(task.status.message)
+    task = rpc(card.url, "SendMessage", {message: {taskId: task.id, contextId: task.contextId, parts: [{text: answer}]}}).task
+for event in rpc_stream(card.url, "SubscribeToTask", {id: task.id}):  # SSE
+    show(event)
+booking = task.artifacts[0]`,
+  steps: [
+    {
+      from: 'user', to: 'client', label: '"Book me a hotel in Lyon, 3–5 Dec"', pc: ['card = GET'],
+      title: 'The user asks their own agent',
+      caption: 'The travel assistant has no hotel inventory. It knows of a hotel chain\'s agent and decides to delegate.',
+      text: ['ByteByteGo contrasts the layers: MCP gives one agent its tools and data; A2A lets independent agents talk as peers.'],
+      payloadKind: 'Request',
+      payload: { text: 'Book me a hotel in Lyon, 3 to 5 December, near Part-Dieu station.' }
+    },
+    {
+      from: 'client', to: 'card', label: 'GET /.well-known/agent-card.json', pc: ['card = GET'],
+      title: 'Discover: read the Agent Card',
+      caption: 'The card says what the agent can do (skills), where to call it, which protocol binding and version it speaks, whether it streams, and how to authenticate.',
+      text: [],
+      payloadKind: 'Agent Card',
+      payload: { name: 'Hotel booking agent', url: 'https://hotels.example/a2a/v1', protocolBinding: 'JSONRPC', capabilities: { streaming: true, pushNotifications: true }, skills: [{ id: 'book-room', name: 'Book a room', description: 'Find and book rooms by city, dates and budget' }], securitySchemes: { oauth: { type: 'oauth2' } } }
+    },
+    {
+      from: 'client', to: 'server', label: 'SendMessage (JSON-RPC 2.0)', pc: ['token = oauth', 'resp = rpc(card.url, "SendMessage"'],
+      title: 'Send a task',
+      caption: 'After getting a token for the declared scheme, the client sends a message. The server creates a Task with an id and a contextId that groups related messages.',
+      text: [],
+      payloadKind: 'JSON-RPC request',
+      payload: { jsonrpc: '2.0', id: 1, method: 'SendMessage', params: { message: { role: 'ROLE_USER', messageId: 'm-1', parts: [{ text: 'Room in Lyon near Part-Dieu, check-in 3 Dec, check-out 5 Dec, 1 adult, max €140/night' }] } } }
+    },
+    {
+      from: 'server', to: 'client', reply: true, label: 'task state: INPUT_REQUIRED', pc: ['TASK_STATE_INPUT_REQUIRED'],
+      title: 'The remote agent needs more information',
+      caption: 'Two rooms fit. The hotel agent pauses the task in the input-required state with a question: breakfast included (€138) or not (€119)?',
+      text: ['input-required and auth-required are interrupted states: the task is not finished, it waits for the client.'],
+      payloadKind: 'Task',
+      payload: { task: { id: 't-7781', contextId: 'c-12', status: { state: 'TASK_STATE_INPUT_REQUIRED', message: { role: 'ROLE_AGENT', parts: [{ text: 'Room with breakfast €138/night or without €119/night?' }] } } } }
+    },
+    {
+      from: 'client', to: 'user', label: '"With breakfast (€138) or without (€119)?"', pc: ['answer = ask_user'],
+      title: 'Ask the human',
+      caption: 'The travel assistant cannot decide a price for the user, so it relays the question. The user picks "without".',
+      text: [],
+      payloadKind: 'Question / answer',
+      payload: { asked: 'With breakfast (€138) or without (€119)?', answer: 'Without' }
+    },
+    {
+      from: 'client', to: 'server', label: 'SendMessage (same taskId, contextId)', pc: ['taskId: task.id'],
+      title: 'Continue the same task',
+      caption: 'The answer goes back as a new message carrying the same taskId and contextId, so the server resumes instead of starting over.',
+      text: [],
+      payloadKind: 'JSON-RPC request',
+      payload: { method: 'SendMessage', params: { message: { taskId: 't-7781', contextId: 'c-12', role: 'ROLE_USER', parts: [{ text: 'Without breakfast' }] } } }
+    },
+    {
+      from: 'server', to: 'pms', label: 'hold + book room 412', pc: ['task = rpc(card.url'],
+      title: 'The remote agent works with its own tools',
+      caption: 'Inside, the hotel agent books through its own backend. The client sees only state changes, not the steps.',
+      text: [],
+      payloadKind: 'Internal (not visible to the client)',
+      payload: { hotel: 'Lyon Part-Dieu', room: 412, nights: 2, rate_eur: 119 },
+      branch: { q: 'Is the client still connected?', options: [ { label: 'yes: stream updates (SSE)', goto: 'sse' }, { label: 'no: push to webhook', goto: 'push' } ] }
+    },
+    {
+      id: 'sse', from: 'server', to: 'client', reply: true, label: 'SSE: WORKING … COMPLETED + artifact', pc: ['rpc_stream'],
+      title: 'Stream progress',
+      caption: 'With streaming, the server keeps an HTTP response open (text/event-stream) and sends status and artifact updates as they happen.',
+      text: [],
+      payloadKind: 'SSE events',
+      payload: 'data: {"result":{"statusUpdate":{"taskId":"t-7781","status":{"state":"TASK_STATE_WORKING"}}}}\n\ndata: {"result":{"statusUpdate":{"taskId":"t-7781","status":{"state":"TASK_STATE_COMPLETED"}}}}',
+      next: 'done'
+    },
+    {
+      id: 'push', path: 'disconnected client', from: 'server', to: 'hook', label: 'POST webhook: task completed', pc: ['rpc_stream'],
+      title: 'Other outcome: push notification',
+      caption: 'For long tasks the client registers a push-notification config (URL + token). When the state changes the server POSTs to it; the client then fetches the task with GetTask.',
+      text: [],
+      payloadKind: 'Webhook',
+      payload: { url: 'https://travel-assistant.example/a2a/hook', headers: { Authorization: 'Bearer …' }, body: { taskId: 't-7781', state: 'TASK_STATE_COMPLETED' } },
+      next: 'done'
+    },
+    {
+      id: 'done', from: 'client', to: 'user', reply: true, label: 'artifact → "Booked: room 412, €238"', pc: ['booking = task.artifacts[0]'],
+      title: 'Use the artifact',
+      caption: 'The result arrives as an artifact (the task\'s output, made of parts such as text or structured data). The assistant confirms the booking to the user.',
+      text: [],
+      payloadKind: 'Artifact',
+      payload: { artifactId: 'booking-1', name: 'Booking confirmation', parts: [{ data: { confirmation: 'LYN-58Q2', room: 412, total_eur: 238, cancel_until: '2026-12-02' } }] }
+    }
+  ],
+  decisions: [
+    { q: 'MCP or A2A?', options: [
+      { name: 'MCP', verdict: 'good', why: 'Your agent calls a tool or reads data: one request, one structured result.' },
+      { name: 'A2A', verdict: 'good', why: 'Your agent delegates to another autonomous agent that may ask questions, run for hours and return artifacts. Many systems use both.' } ] }
+  ],
+  refs: [
+    { label: 'A2A Protocol specification (latest)', url: 'https://a2a-protocol.org/latest/specification/' },
+    { label: 'A2A project on GitHub', url: 'https://github.com/a2aproject/A2A' },
+    { label: 'Google Developers Blog: Announcing the Agent2Agent protocol', url: 'https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/' },
+    { label: 'ByteByteGo: MCP vs A2A vs ACP, how AI agents actually talk', url: 'https://blog.bytebytego.com/p/mcp-vs-a2a-vs-acp-how-ai-agents-actually' }
+  ],
+  verify: {
+    checked: ['Agent Card at /.well-known/agent-card.json with capabilities and securitySchemes; SendMessage, SendStreamingMessage, GetTask, SubscribeToTask; TASK_STATE_* names; input-required continued with same taskId and contextId; SSE (text/event-stream); push notification configs; parts as {text}: A2A specification v1.0 pages read on Nov 26, 2026.'],
+    uncertain: ['The exact shape of SSE events and the webhook body are simplified.', 'Hotel, prices and ids are illustrative. Earlier A2A versions used other method names (message/send) and a "kind" field.']
   }
 });
 

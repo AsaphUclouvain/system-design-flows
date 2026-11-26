@@ -1,0 +1,7 @@
+# Links that block curl (Cloudflare challenge, rate limits, IPv6-only reachability) but were opened and read with a real browser or a reader tool. Date: 2026-11-26
+https://www.w3.org/TR/trace-context/
+https://www.w3.org/WAI/ARIA/apg/patterns/combobox/
+https://www.cloudflare.com/learning/cdn/glossary/anycast-network/
+https://nlp.stanford.edu/IR-book/html/htmledition/web-crawling-and-indexes-1.html
+https://github.com/video-dev/hls.js/blob/master/docs/API.md
+https://netflixtechblog.com/high-quality-video-encoding-at-scale-d159db052746

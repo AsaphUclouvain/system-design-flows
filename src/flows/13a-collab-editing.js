@@ -233,6 +233,6 @@ CREATE TABLE doc_snapshots (
   refs: [
     { label: 'Yjs documentation', url: 'https://docs.yjs.dev/' },
     { label: 'Kleppmann et al.: Local-first software', url: 'https://www.inkandswitch.com/local-first/' },
-    { label: 'Nicolaescu et al.: YATA (Yjs algorithm)', url: 'https://www.researchgate.net/publication/310212186_Near_Real-Time_Peer-to-Peer_Shared_Editing_on_Extensible_Data_Types' }
+    { label: 'Yjs on GitHub (implements the YATA algorithm; links the paper)', url: 'https://github.com/yjs/yjs' }
   ]
 });

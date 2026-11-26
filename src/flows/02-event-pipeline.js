@@ -323,7 +323,7 @@ CREATE TABLE stock (
     { label: 'Apache Kafka documentation', url: 'https://kafka.apache.org/documentation/', note: 'Producers, acks, idempotence, consumer groups.' },
     { label: 'Confluent: Kafka consumer design', url: 'https://docs.confluent.io/platform/current/clients/consumer.html', note: 'Groups, offsets, rebalancing.' },
     { label: 'Confluent: Schema evolution and compatibility', url: 'https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html', note: 'BACKWARD, FORWARD, FULL.' },
-    { label: 'Uber Engineering: Reliable reprocessing with Kafka', url: 'https://www.uber.com/blog/reliable-reprocessing/', note: 'The retry-topic and DLQ design.' },
+    { label: 'Uber Engineering: Reliable reprocessing with Kafka', url: 'https://www.uber.com/us/en/blog/reliable-reprocessing/', note: 'The retry-topic and DLQ design.' },
     { label: 'microservices.io: Idempotent consumer', url: 'https://microservices.io/patterns/communication-style/idempotent-consumer.html' }
   ]
 });
