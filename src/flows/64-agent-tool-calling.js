@@ -117,7 +117,7 @@ def run_agent(messages, max_turns=10):
   ],
   refs: [
     { label: 'Anthropic: Building effective agents (workflows vs agents)', url: 'https://www.anthropic.com/engineering/building-effective-agents' },
-    { label: 'Anthropic docs: Tool use with Claude (tool_use, tool_result, stop_reason)', url: 'https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview' },
+    { label: 'Anthropic docs: Tool use with Claude (tool_use, tool_result, stop_reason)', url: 'https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview' },
     { label: 'OpenAI docs: Function calling', url: 'https://platform.openai.com/docs/guides/function-calling' },
     { label: 'ByteByteGo: The agent loop, how AI goes from answering to acting', url: 'https://blog.bytebytego.com/p/the-agent-loop-how-ai-goes-from-answering' },
     { label: 'Stripe docs: Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' }

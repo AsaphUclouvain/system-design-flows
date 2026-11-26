@@ -16,7 +16,7 @@ flow({
   grid: { cols: 5, rows: 3 },
   nodes: [
     { id: 'docs', label: 'Document sources', sub: 'Confluence, Drive, PDFs', kind: 'storage', icon: 'doc', x: 0, y: 0, desc: 'Where the knowledge lives. Connectors pull new and changed documents with their permissions.' },
-    { id: 'ingest', label: 'Ingestion worker', sub: 'parse → chunk', kind: 'worker', icon: 'gear', x: 1, y: 0, desc: 'Extracts text, cleans it, splits it into chunks, and attaches metadata (title, URL, section, ACL).' },
+    { id: 'ingest', label: 'Ingestion worker', sub: 'parse → chunk', kind: 'worker', icon: 'tool', x: 1, y: 0, desc: 'Extracts text, cleans it, splits it into chunks, and attaches metadata (title, URL, section, ACL).' },
     { id: 'embed', label: 'Embedding model', sub: 'text → 1536-d vector', kind: 'ai', icon: 'vector', x: 2, y: 0, desc: 'Turns text into a vector so that texts with similar meaning are close together. Used for chunks offline and for questions online.' },
     { id: 'vdb', label: 'Vector + keyword index', sub: 'HNSW + BM25', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Stores each chunk\'s vector (approximate nearest-neighbour index) and its words (BM25 inverted index), plus metadata filters.' },
     { id: 'user', label: 'Employee', sub: 'chat UI', kind: 'client', icon: 'user', x: 0, y: 2, desc: 'Asks a question in natural language.' },

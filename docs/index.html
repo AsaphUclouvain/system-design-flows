@@ -11005,7 +11005,7 @@ flow({
   grid: { cols: 5, rows: 3 },
   nodes: [
     { id: 'docs', label: 'Document sources', sub: 'Confluence, Drive, PDFs', kind: 'storage', icon: 'doc', x: 0, y: 0, desc: 'Where the knowledge lives. Connectors pull new and changed documents with their permissions.' },
-    { id: 'ingest', label: 'Ingestion worker', sub: 'parse → chunk', kind: 'worker', icon: 'gear', x: 1, y: 0, desc: 'Extracts text, cleans it, splits it into chunks, and attaches metadata (title, URL, section, ACL).' },
+    { id: 'ingest', label: 'Ingestion worker', sub: 'parse → chunk', kind: 'worker', icon: 'tool', x: 1, y: 0, desc: 'Extracts text, cleans it, splits it into chunks, and attaches metadata (title, URL, section, ACL).' },
     { id: 'embed', label: 'Embedding model', sub: 'text → 1536-d vector', kind: 'ai', icon: 'vector', x: 2, y: 0, desc: 'Turns text into a vector so that texts with similar meaning are close together. Used for chunks offline and for questions online.' },
     { id: 'vdb', label: 'Vector + keyword index', sub: 'HNSW + BM25', kind: 'db', icon: 'db', x: 3, y: 0, desc: 'Stores each chunk\'s vector (approximate nearest-neighbour index) and its words (BM25 inverted index), plus metadata filters.' },
     { id: 'user', label: 'Employee', sub: 'chat UI', kind: 'client', icon: 'user', x: 0, y: 2, desc: 'Asks a question in natural language.' },
@@ -11509,7 +11509,7 @@ def run_agent(messages, max_turns=10):
   ],
   refs: [
     { label: 'Anthropic: Building effective agents (workflows vs agents)', url: 'https://www.anthropic.com/engineering/building-effective-agents' },
-    { label: 'Anthropic docs: Tool use with Claude (tool_use, tool_result, stop_reason)', url: 'https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview' },
+    { label: 'Anthropic docs: Tool use with Claude (tool_use, tool_result, stop_reason)', url: 'https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview' },
     { label: 'OpenAI docs: Function calling', url: 'https://platform.openai.com/docs/guides/function-calling' },
     { label: 'ByteByteGo: The agent loop, how AI goes from answering to acting', url: 'https://blog.bytebytego.com/p/the-agent-loop-how-ai-goes-from-answering' },
     { label: 'Stripe docs: Idempotent requests', url: 'https://docs.stripe.com/api/idempotent_requests' }
@@ -11900,6 +11900,698 @@ booking = task.artifacts[0]`,
   verify: {
     checked: ['Agent Card at /.well-known/agent-card.json with capabilities and securitySchemes; SendMessage, SendStreamingMessage, GetTask, SubscribeToTask; TASK_STATE_* names; input-required continued with same taskId and contextId; SSE (text/event-stream); push notification configs; parts as {text}: A2A specification v1.0 pages read on Nov 26, 2026.'],
     uncertain: ['The exact shape of SSE events and the webhook body are simplified.', 'Hotel, prices and ids are illustrative. Earlier A2A versions used other method names (message/send) and a "kind" field.']
+  }
+});
+
+flow({
+  id: 'agent-memory',
+  title: 'Agent memory: short-term context and long-term recall',
+  category: 'AI & machine learning',
+  tags: ['Context window budget', 'Summarize / compact', 'Memory extraction', 'Vector recall', 'Memory tiers (MemGPT)', 'User controls'],
+  summary: 'An LLM remembers nothing between calls: "memory" is whatever your app puts back into the prompt. Follow a study assistant that keeps a running chat within its token budget, compacts old turns into a summary, extracts durable facts into a long-term store, and weeks later recalls the right ones for a new question.',
+  requirements: {
+    functional: ['Continue long conversations without losing the thread.', 'Remember durable facts across sessions (exam date, preferences).', 'Let the user see and delete what is remembered.'],
+    nonFunctional: ['Prompt stays under a token budget (here 24k of a 200k window) for cost and focus.', 'Recall adds < 50 ms.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Student', sub: 'chat app', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Talks to the assistant over many sessions.' },
+    { id: 'app', label: 'Assistant backend', sub: 'context builder', kind: 'service', icon: 'robot', x: 1, y: 1, desc: 'Assembles each prompt: system prompt + recalled memories + summary of old turns + recent turns. Decides what to keep, compress or drop.' },
+    { id: 'llm', label: 'LLM', sub: 'stateless', kind: 'ai', icon: 'brain', x: 1, y: 0, desc: 'Sees only the prompt it is given on each call.' },
+    { id: 'hist', label: 'Session store', sub: 'Redis / Postgres', kind: 'cache', icon: 'layers', x: 2, y: 2, desc: 'Raw turns of the current session plus the rolling summary. Short-term memory.' },
+    { id: 'ext', label: 'Memory extractor', sub: 'small LLM, async', kind: 'worker', icon: 'filter', x: 3, y: 2, desc: 'After a session, pulls out durable facts and decides to add, update or ignore each one.' },
+    { id: 'ltm', label: 'Long-term memory', sub: 'vector + rows', kind: 'db', icon: 'vector', x: 3, y: 0, desc: 'Facts as rows (user_id, text, created_at) with an embedding, searchable by meaning. The user can list and delete them.' }
+  ],
+  pseudo: `
+def build_prompt(user, msg):
+    mems = ltm.search(user, embed(msg), k=5)       # long-term recall
+    s = session.load(user)
+    if tokens(s.turns) > 16_000:                   # short-term budget
+        s.summary = llm("Summarize, keep decisions:", s.summary, s.turns[:-6])
+        s.turns = s.turns[-6:]
+    return [SYSTEM, *mems, s.summary, *s.turns, msg]
+
+on_session_end(user):
+    for fact in extractor(session.turns):
+        old = ltm.nearest(user, fact)
+        ltm.update(old, fact) if conflicts(old, fact) else ltm.add(fact)`,
+  steps: [
+    {
+      from: 'user', to: 'app', label: '"Quiz me on Dijkstra again"', pc: ['def build_prompt'],
+      title: 'A new message in a long session',
+      caption: 'The session already has 140 turns. Sending all of them would cost about 31,000 tokens per call and bury the important parts.',
+      text: ['"Lost in the Middle" (Liu et al., 2023) found that models use information at the start and end of a long context better than information in the middle, one reason to keep prompts lean.'],
+      payloadKind: 'Message',
+      payload: { user: 'u_swampi', session: 's_88', text: 'Quiz me on Dijkstra again', session_turns: 140 }
+    },
+    {
+      from: 'app', to: 'ltm', label: 'search(u_swampi, embed(msg), k=5)', pc: ['mems = ltm.search'],
+      title: 'Recall long-term memories',
+      caption: 'The message is embedded and compared with this user\'s stored facts. The top matches come back with their dates.',
+      text: [],
+      payloadKind: 'Recalled',
+      payload: { memories: [{ text: 'Graph theory exam on 2026-12-08', score: 0.71, saved: '2026-11-24' }, { text: 'Confuses Dijkstra with Prim when edges tie', score: 0.69, saved: '2026-11-25' }, { text: 'Prefers questions before explanations', score: 0.52 }] }
+    },
+    {
+      from: 'app', to: 'hist', label: 'load session s_88', pc: ['s = session.load'],
+      title: 'Load short-term memory',
+      caption: 'The session store returns the rolling summary and the raw turns. The raw turns are over the 16,000-token budget.',
+      text: [],
+      payloadKind: 'Session',
+      payload: { summary: '(summary of turns 1–80)', raw_turns: 60, raw_tokens: 18400, budget: 16000 },
+      branch: { q: 'Raw turns over budget?', options: [ { label: 'yes: compact old turns', goto: 'compact' }, { label: 'no: use as is', goto: 'call' } ] }
+    },
+    {
+      id: 'compact', from: 'app', to: 'llm', label: 'summarize turns 81–134, keep decisions', pc: ['s.summary = llm("Summarize'],
+      title: 'Compact: fold old turns into the summary',
+      caption: 'Everything except the last 6 turns is summarized into the running summary. Decisions and open questions are kept; small talk is dropped.',
+      text: ['Anthropic calls this "compaction" in its context-engineering guide; MemGPT treats it like an OS moving data between fast memory (the context) and slow memory (storage).'],
+      payloadKind: 'Summary update',
+      payload: { before_tokens: 18400, after_tokens: 2100, summary_excerpt: 'Covered BFS/DFS, Dijkstra (2 mistakes on ties), started Prim. Next: mixed quiz.' }
+    },
+    {
+      id: 'call', from: 'app', to: 'llm', label: 'prompt ≈ 6k tokens', pc: ['return [SYSTEM, *mems'],
+      title: 'Call the model with the assembled context',
+      caption: 'Order matters: system prompt, recalled facts, summary, recent turns, new message. The model now "remembers" the exam date and the tie mistake.',
+      text: [],
+      payloadKind: 'Prompt layout',
+      payload: { system: 420, memories: 90, summary: 2100, recent_turns: 3300, message: 8, total_tokens: 5918 }
+    },
+    {
+      from: 'llm', to: 'user', reply: true, label: 'quiz with an equal-weight edge trap', pc: ['return [SYSTEM'],
+      title: 'A personalised answer',
+      caption: 'The quiz targets the known weakness: a graph with tied edges, 12 days before the exam.',
+      text: [],
+      payloadKind: 'Answer',
+      payload: { text: 'Exam in 12 days, so mixed practice. Q1: Dijkstra from A on this graph; edges A–B and A–C both weigh 3…' }
+    },
+    {
+      from: 'app', to: 'ext', async: true, label: 'session ended → extract facts', pc: ['on_session_end', 'for fact in extractor'],
+      title: 'After the session: extract durable facts',
+      caption: 'A background job reads the finished session and proposes facts worth keeping beyond today.',
+      text: [],
+      payloadKind: 'Extracted',
+      payload: { candidates: ['Graph theory exam moved to 2026-12-10', 'Now gets Dijkstra ties right', 'Ate pasta for lunch'], kept: 2, ignored: ['Ate pasta for lunch (not durable)'] }
+    },
+    {
+      from: 'ext', to: 'ltm', label: 'UPDATE exam date, ADD progress', pc: ['ltm.update(old, fact) if conflicts'],
+      title: 'Update, don\'t just append',
+      caption: 'The new exam date conflicts with the stored one, so the old fact is replaced rather than kept beside it. Two contradicting memories would confuse the next recall.',
+      text: ['Memory layers such as Mem0 run this add / update / delete decision with an LLM; ChatGPT shows saved memories to the user, who can delete them.'],
+      payloadKind: 'Writes',
+      payload: { update: { id: 'm_31', old: 'exam on 2026-12-08', new: 'exam on 2026-12-10' }, add: { text: 'Dijkstra ties: fixed on 2026-11-26' } },
+      failure: 'If the extractor wrongly stores something sensitive or false, the user must be able to see and delete it; store memories per user and never mix them across accounts.'
+    }
+  ],
+  decisions: [
+    { q: 'How to keep the session in budget?', options: [
+      { name: 'Sliding window (drop oldest)', verdict: 'ok', why: 'Simple, but forgets early decisions.' },
+      { name: 'Rolling summary + recent turns', verdict: 'great', why: 'Keeps decisions in few tokens; the pattern shown here.' } ] },
+    { q: 'Long-term memory store?', options: [
+      { name: 'Vector search over facts', verdict: 'good', why: 'Finds facts by meaning.' },
+      { name: 'Structured profile fields', verdict: 'good', why: 'Exact and editable (exam_date). Many systems use both.' } ] }
+  ],
+  refs: [
+    { label: 'Packer et al. (2023): MemGPT, LLMs as operating systems', url: 'https://arxiv.org/abs/2310.08560' },
+    { label: 'Liu et al. (2023): Lost in the middle, how LMs use long contexts', url: 'https://arxiv.org/abs/2307.03172' },
+    { label: 'Anthropic: Effective context engineering for AI agents', url: 'https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents' },
+    { label: 'Mem0 documentation (memory layer for agents)', url: 'https://docs.mem0.ai/' },
+    { label: 'OpenAI: Memory and new controls for ChatGPT', url: 'https://openai.com/index/memory-and-new-controls-for-chatgpt/' }
+  ],
+  verify: {
+    checked: ['Virtual context management between memory tiers, multi-session chat: MemGPT abstract.', 'Performance highest when information is at the beginning or end of the context: Lost in the Middle abstract.'],
+    uncertain: ['Budgets, token counts, scores and the 6-turn window are illustrative.', 'Details of compaction (Anthropic guide), Mem0\'s update logic and ChatGPT\'s memory controls are summarized from their pages, not tested.']
+  }
+});
+
+flow({
+  id: 'llm-inference-serving',
+  title: 'LLM inference serving: tokens, KV cache, batching, streaming',
+  category: 'AI & machine learning',
+  tags: ['Tokenization', 'Prefill vs decode', 'KV cache', 'PagedAttention', 'Continuous batching', 'Prefix caching', 'SSE streaming', 'TTFT / TPOT'],
+  summary: 'What happens between "send" and the first word appearing? Follow one chat request into a GPU server like vLLM: the prompt is tokenized, a shared system-prompt prefix is found in cache, the rest is processed in one parallel prefill pass, then tokens are generated one at a time while other users\' requests join and leave the same batch, and each token streams back over SSE.',
+  requirements: {
+    functional: ['Serve chat completions for many users on a pool of GPUs.', 'Stream tokens as they are generated.'],
+    nonFunctional: ['Time to first token (TTFT) < 500 ms at p95.', 'High GPU utilization: many requests share each forward pass.', 'Fit as many concurrent sequences as GPU memory allows.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'Chat UI', sub: 'browser', kind: 'client', icon: 'browser', x: 0, y: 1, desc: 'Sends the request and renders tokens as they arrive.' },
+    { id: 'api', label: 'API server', sub: 'OpenAI-compatible', kind: 'service', icon: 'api', x: 1, y: 1, desc: 'Authenticates, applies the chat template, tokenizes, and opens the SSE stream.' },
+    { id: 'sched', label: 'Scheduler', sub: 'continuous batching', kind: 'worker', icon: 'clock', x: 2, y: 1, desc: 'Every iteration it decides which sequences run in the next forward pass: adds new ones, removes finished ones.' },
+    { id: 'gpu', label: 'GPU worker', sub: 'model weights', kind: 'ai', icon: 'gpu', x: 3, y: 1, desc: 'Runs the transformer forward pass for the whole batch at once.' },
+    { id: 'kv', label: 'KV cache blocks', sub: 'GPU memory', kind: 'cache', icon: 'layers', x: 3, y: 0, desc: 'Attention keys/values of every token seen so far, per sequence, stored in fixed-size blocks like OS memory pages.' },
+    { id: 'tok', label: 'Tokenizer', sub: 'BPE vocabulary', kind: 'worker', icon: 'hash', x: 1, y: 0, desc: 'Turns text into token ids with the model\'s own vocabulary, and token ids back into text.' },
+    { id: 'pfx', label: 'Prefix cache', sub: 'hash → blocks', kind: 'cache', icon: 'key', x: 2, y: 0, desc: 'Maps a hash of a token block (and everything before it) to KV blocks already computed, so identical prefixes are reused.' }
+  ],
+  pseudo: `
+ids = tokenizer.apply_chat_template(messages)    # text -> token ids
+hit = prefix_cache.match(ids)                     # reuse shared prefix
+seq = Sequence(ids, kv=hit.blocks)
+scheduler.add(seq)
+while scheduler.running:                          # one iteration
+    batch = scheduler.pick()                      # new + ongoing seqs
+    logits = model.forward(batch)                 # prefill new, decode old
+    for s in batch:
+        tok = sample(logits[s], temperature=0.7)
+        s.kv.append_block_if_full()
+        stream(s, tokenizer.decode(tok))          # SSE chunk
+        if tok == EOS or s.len == max_tokens: scheduler.finish(s)`,
+  steps: [
+    {
+      from: 'user', to: 'api', label: 'POST /v1/chat/completions stream:true', pc: ['ids = tokenizer'],
+      title: 'The request',
+      caption: 'An OpenAI-compatible request with stream: true. The 1,200-token system prompt is the same for every user of this app.',
+      text: [],
+      payloadKind: 'Request',
+      payload: { model: 'llama-3.1-8b-instruct', stream: true, max_tokens: 300, temperature: 0.7, messages: [{ role: 'system', content: '(1,200-token app prompt)' }, { role: 'user', content: 'Explain a KV cache in one paragraph.' }] }
+    },
+    {
+      from: 'api', to: 'tok', label: 'chat template → 1,214 token ids', pc: ['apply_chat_template'],
+      title: 'Tokenize',
+      caption: 'The messages are wrapped in the model\'s chat template (special role markers) and split into subword tokens. The model only ever sees integers.',
+      text: ['A token is often a word piece: "caching" may be one token or two. Prices and context limits are counted in tokens, not characters.'],
+      payloadKind: 'Tokens',
+      payload: { text: '…Explain a KV cache in one paragraph.', ids: ['…', 849, 21435, 264, 85748, 6636, 304, 832, 14646, 13], count: 1214 }
+    },
+    {
+      from: 'api', to: 'pfx', label: 'match blocks of 16 tokens by hash', pc: ['hit = prefix_cache.match'],
+      title: 'Reuse the shared prefix',
+      caption: 'The ids are cut into blocks; each block\'s hash includes all earlier tokens. The first 75 blocks (1,200 tokens of system prompt) are already in the cache from other users.',
+      text: ['vLLM calls this automatic prefix caching. Hosted APIs offer the same idea as "prompt caching", billed cheaper for cached input tokens.'],
+      payloadKind: 'Cache match',
+      payload: { block_size: 16, blocks: 76, cached_blocks: 75, tokens_to_compute: 14 },
+      branch: { q: 'Prefix found?', options: [ { label: 'yes: compute only 14 tokens', goto: 'add' }, { label: 'no: full prefill', goto: 'full' } ] }
+    },
+    {
+      id: 'full', path: 'cold prefix', from: 'sched', to: 'gpu', label: 'prefill all 1,214 tokens', pc: ['logits = model.forward(batch)'],
+      title: 'Other outcome: a full prefill',
+      caption: 'Without a cache hit, all 1,214 tokens go through the model in one parallel pass. That is compute-heavy and is most of the time to first token for long prompts.',
+      text: [],
+      payloadKind: 'Prefill',
+      payload: { tokens: 1214, ttft_ms: 380 },
+      next: 'decode'
+    },
+    {
+      id: 'add', from: 'api', to: 'sched', label: 'add sequence #5531', pc: ['scheduler.add(seq)'],
+      title: 'Join the running batch',
+      caption: 'The scheduler does not wait for a batch to finish. At the next iteration it adds the new sequence alongside 37 others that are mid-answer.',
+      text: ['This iteration-level scheduling was introduced by Orca (OSDI 2022) and is usually called continuous batching. Static batching made short answers wait for the longest one in their batch.'],
+      payloadKind: 'Scheduler state',
+      payload: { running: 38, waiting: 0, new: ['#5531 (prefill 14 tokens)'], finished_this_step: ['#5502'] }
+    },
+    {
+      id: 'decode', from: 'sched', to: 'gpu', label: 'forward(batch of 38)', pc: ['batch = scheduler.pick()', 'logits = model.forward(batch)'],
+      title: 'One forward pass for everyone',
+      caption: 'In one iteration the GPU prefills #5531\'s 14 new tokens and produces the next token for the 37 others. Reading the weights once for 38 sequences is what makes batching efficient.',
+      text: [],
+      payloadKind: 'Iteration',
+      payload: { iteration: 90412, prefill_tokens: 14, decode_tokens: 37, step_ms: 21 }
+    },
+    {
+      from: 'gpu', to: 'kv', label: 'append K,V; new block when full', pc: ['s.kv.append_block_if_full()'],
+      title: 'Grow the KV cache in pages',
+      caption: 'Each new token adds its keys and values. Instead of reserving room for 300 tokens up front, a new 16-token block is allocated only when the last one fills, anywhere in GPU memory.',
+      text: ['PagedAttention (the vLLM paper) borrows OS paging: a block table maps a sequence\'s logical blocks to physical ones. It reports near-zero KV waste and 2–4× throughput over earlier systems.'],
+      payloadKind: 'Block table #5531',
+      payload: { logical: [0, 1, '…', 75, 76], physical: ['shared 812', 'shared 813', '…', 'shared 991', 'own 2207'], free_blocks: 1840 },
+      failure: 'If GPU memory runs out of blocks, the scheduler preempts a sequence: frees its blocks and recomputes (or swaps to CPU) later.'
+    },
+    {
+      from: 'api', to: 'user', reply: true, label: 'SSE: data: {"delta":"A KV"}', pc: ['stream(s, tokenizer.decode(tok))'],
+      title: 'Stream each token',
+      caption: 'Each sampled token is detokenized and sent as an SSE chunk. The first one arrived 140 ms after the request (TTFT); the rest come every ~21 ms (time per output token).',
+      text: [],
+      payloadKind: 'SSE stream',
+      payload: 'data: {"choices":[{"delta":{"content":"A KV"}}]}\n\ndata: {"choices":[{"delta":{"content":" cache"}}]}\n\n…\n\ndata: [DONE]'
+    },
+    {
+      from: 'sched', to: 'kv', label: 'EOS → free own blocks, keep shared', pc: ['if tok == EOS', 'scheduler.finish(s)'],
+      title: 'Finish and free memory',
+      caption: 'After 212 tokens the model emits end-of-sequence. The sequence\'s own blocks are freed for others; the shared prefix blocks stay cached for the next user.',
+      text: [],
+      payloadKind: 'Done',
+      payload: { output_tokens: 212, finish_reason: 'stop', ttft_ms: 140, tpot_ms: 21, blocks_freed: 14 }
+    }
+  ],
+  decisions: [
+    { q: 'How to batch?', options: [
+      { name: 'Static batching', verdict: 'bad', why: 'Short requests wait for the longest in the batch; GPU idles as sequences finish.' },
+      { name: 'Continuous batching', verdict: 'great', why: 'Sequences join and leave every iteration; standard in vLLM, TGI, TensorRT-LLM.' } ] },
+    { q: 'Optimise for what?', options: [
+      { name: 'Latency (TTFT, TPOT)', verdict: 'good', why: 'Smaller batches, chat products.' },
+      { name: 'Throughput (tokens/s/GPU)', verdict: 'good', why: 'Larger batches, offline jobs. The batch size is the dial between them.' } ] }
+  ],
+  refs: [
+    { label: 'Kwon et al. (2023): Efficient memory management for LLM serving with PagedAttention (vLLM)', url: 'https://arxiv.org/abs/2309.06180' },
+    { label: 'Yu et al., OSDI 2022: Orca, iteration-level scheduling', url: 'https://www.usenix.org/conference/osdi22/presentation/yu' },
+    { label: 'vLLM docs: Automatic prefix caching', url: 'https://docs.vllm.ai/en/latest/design/prefix_caching.html' },
+    { label: 'Hugging Face: Summary of the tokenizers', url: 'https://huggingface.co/docs/transformers/tokenizer_summary' },
+    { label: 'OpenAI docs: Streaming API responses', url: 'https://platform.openai.com/docs/guides/streaming-responses' },
+    { label: 'ByteByteGo: How LLMs see the world (tokens)', url: 'https://blog.bytebytego.com/p/how-llms-see-the-world' }
+  ],
+  verify: {
+    checked: ['KV cache grows and shrinks per request; PagedAttention inspired by OS paging; near-zero waste; 2–4× throughput vs FasterTransformer and Orca: vLLM abstract.', 'Iteration-level scheduling: Orca OSDI 2022 page.', 'Block hashing that includes prefix tokens: vLLM prefix-caching design doc.'],
+    uncertain: ['Token ids, timings, batch sizes and block numbers are illustrative; the block size of 16 is vLLM\'s common default, not universal.', 'The SSE chunk is simplified (real chunks carry id, model and index fields).']
+  }
+});
+
+flow({
+  id: 'speculative-decoding',
+  title: 'Speculative decoding: draft fast, verify in one pass',
+  category: 'AI & machine learning',
+  tags: ['Memory-bound decoding', 'Draft model', 'Parallel verification', 'Acceptance / rejection sampling', 'Same output distribution', 'Medusa heads'],
+  summary: 'Generating K tokens normally takes K slow passes of the big model, one after another. Speculative decoding lets a small draft model guess the next few tokens, then the big model checks all the guesses in one pass, keeping the longest correct run plus one token of its own. The output is provably the same as the big model alone, just faster.',
+  requirements: {
+    functional: ['Generate text from a large target model.'],
+    nonFunctional: ['Lower time per output token without changing what the model would output.', 'Extra GPU memory for the draft model must be small.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Serving engine', sub: 'vLLM / TensorRT-LLM', kind: 'service', icon: 'server', x: 0, y: 1, desc: 'Runs the draft-then-verify loop for each sequence.' },
+    { id: 'draft', label: 'Draft model', sub: '1B params, fast', kind: 'ai', icon: 'spark', x: 1, y: 0, desc: 'A small model with the same tokenizer. Cheap to run, often right on easy tokens.' },
+    { id: 'target', label: 'Target model', sub: '70B params', kind: 'ai', icon: 'brain', x: 2, y: 1, desc: 'The model whose output we want. Checking 5 tokens costs about the same as producing 1, because decoding is limited by reading the weights from memory, not by arithmetic.' },
+    { id: 'acc', label: 'Accept / reject', sub: 'rejection sampling', kind: 'worker', icon: 'check', x: 3, y: 1, desc: 'Compares draft and target probabilities token by token and keeps the longest accepted run.' },
+    { id: 'out', label: 'Output stream', sub: 'to the user', kind: 'client', icon: 'browser', x: 3, y: 2, desc: 'Receives accepted tokens.' }
+  ],
+  pseudo: `
+while not done:
+    guesses = draft.generate(prefix, k=5)          # 5 cheap serial steps
+    p = target.forward(prefix + guesses)           # ONE big pass, 6 positions
+    for i, g in enumerate(guesses):
+        if random() < min(1, p[i][g] / q[i][g]):   # accept with prob p/q
+            prefix.append(g)
+        else:
+            prefix.append(sample(norm(max(0, p[i] - q[i]))))  # fix-up token
+            break
+    else:
+        prefix.append(sample(p[k]))                # bonus token`,
+  steps: [
+    {
+      from: 'app', to: 'draft', label: 'prefix: "The capital of Belgium is"', pc: ['guesses = draft.generate'],
+      title: 'The draft model guesses 5 tokens',
+      caption: 'The small model runs 5 quick steps and proposes " Brussels , which is also". Each guess comes with the draft\'s probability q.',
+      text: ['Leviathan et al. (2022) observe that hard language-modeling tasks contain easier subtasks a smaller model can approximate well.'],
+      payloadKind: 'Draft',
+      payload: { guesses: [' Brussels', ',', ' which', ' is', ' also'], q: [0.92, 0.81, 0.40, 0.66, 0.30], draft_ms: 6 }
+    },
+    {
+      from: 'app', to: 'target', label: 'verify prefix + 5 guesses in 1 pass', pc: ['p = target.forward'],
+      title: 'The big model checks all guesses at once',
+      caption: 'Like a prefill, the target processes all 5 guessed positions in parallel and returns its own probability p at every position, plus one extra position after the last guess.',
+      text: ['Decoding one token at a time is memory-bandwidth bound: the GPU spends most of each step loading weights. Scoring 6 positions instead of 1 barely changes the step time.'],
+      payloadKind: 'Target probabilities',
+      payload: { p_of_guess: [0.97, 0.88, 0.05, '—', '—'], target_ms: 24 }
+    },
+    {
+      from: 'target', to: 'acc', label: 'accept " Brussels" "," … reject " which"', pc: ['if random() < min(1, p[i][g] / q[i][g])'],
+      title: 'Accept the longest agreeing run',
+      caption: '" Brussels" and "," pass (p ≥ q). " which" fails: the target gives it only 0.05 against the draft\'s 0.40, so it is rejected with high probability, and the rest is thrown away.',
+      text: [],
+      payloadKind: 'Decision',
+      payload: { accepted: [' Brussels', ','], rejected_at: 2, discarded: [' is', ' also'] },
+      branch: { q: 'Were all 5 guesses accepted?', options: [ { label: 'no: add a fix-up token', goto: 'fix' }, { label: 'yes: add a bonus token', goto: 'bonus' } ] }
+    },
+    {
+      id: 'fix', from: 'acc', to: 'out', label: '+ " the" (sampled from p − q)', pc: ['prefix.append(sample(norm(max(0, p[i] - q[i]))))'],
+      title: 'Fix-up token from the target',
+      caption: 'At the rejected position, a replacement is sampled from the normalised difference between the target and draft distributions. This correction is what keeps the output distribution exactly the target\'s.',
+      text: [],
+      payloadKind: 'Emitted this round',
+      payload: { tokens: [' Brussels', ',', ' the'], target_passes: 1, speedup_this_round: '3 tokens for ~1 target pass' },
+      next: 'loop'
+    },
+    {
+      id: 'bonus', path: 'all accepted', from: 'acc', to: 'out', label: '+ bonus token from position 6', pc: ['prefix.append(sample(p[k]))'],
+      title: 'Other outcome: everything accepted',
+      caption: 'When all 5 guesses pass, the target\'s extra position gives a 6th token for free: 6 tokens from one target pass.',
+      text: [],
+      payloadKind: 'Emitted',
+      payload: { tokens: 6, target_passes: 1 },
+      next: 'loop'
+    },
+    {
+      id: 'loop', from: 'app', to: 'draft', label: 'next round from "…Brussels, the"', pc: ['while not done'],
+      title: 'Repeat',
+      caption: 'The loop restarts from the new prefix. Over a whole answer the paper measured 2–3× faster generation on T5-XXL with identical outputs; the gain depends on how often the draft is right.',
+      text: ['Variants avoid a separate draft model: Medusa adds extra decoding heads to the target that predict several future tokens; n-gram or prompt-lookup drafting copies likely spans from the prompt.'],
+      payloadKind: 'Run stats',
+      payload: { mean_accepted_per_round: 2.6, rounds: 81, tokens: 292, plain_decoding_passes_needed: 292, target_passes_used: 81 }
+    }
+  ],
+  decisions: [
+    { q: 'Where do drafts come from?', options: [
+      { name: 'Separate small model', verdict: 'good', why: 'Original method; needs a compatible model and extra memory.' },
+      { name: 'Extra heads (Medusa / EAGLE)', verdict: 'good', why: 'No second model; heads are trained on the target.' },
+      { name: 'Prompt lookup / n-grams', verdict: 'good', why: 'Free; great when output repeats the input (code edits, summaries).' } ] }
+  ],
+  refs: [
+    { label: 'Leviathan et al. (2022): Fast inference from transformers via speculative decoding', url: 'https://arxiv.org/abs/2211.17192' },
+    { label: 'Cai et al. (2024): Medusa, multiple decoding heads', url: 'https://arxiv.org/abs/2401.10774' },
+    { label: 'vLLM docs: Speculative decoding', url: 'https://docs.vllm.ai/en/latest/features/spec_decode.html' }
+  ],
+  verify: {
+    checked: ['K tokens take K serial runs; draft + parallel verification; same output distribution; 2–3× on T5-XXL with identical outputs: Leviathan et al. abstract.', 'Medusa: extra decoding heads, tree attention, motivated by moving parameters from HBM each step: Medusa abstract.'],
+    uncertain: ['The acceptance rule shown (accept with probability min(1, p/q), fix-up from max(0, p−q)) follows the paper\'s method as commonly described; check the paper for the exact algorithm.', 'All probabilities, timings and counts are illustrative.']
+  }
+});
+
+flow({
+  id: 'mixture-of-experts',
+  title: 'Mixture of experts: routing each token to a few experts',
+  category: 'AI & machine learning',
+  tags: ['Sparse activation', 'Router / gating network', 'Top-k experts', 'Expert parallelism (all-to-all)', 'Load-balancing loss', 'Capacity factor'],
+  summary: 'A mixture-of-experts layer replaces one big feed-forward block with many smaller "experts" and a router that sends each token to only a couple of them. Follow one token through an MoE layer like Mixtral\'s: the router scores 8 experts, picks 2, the token travels to the GPUs that hold them, and their outputs are blended back. The model has 47B parameters but uses about 13B per token.',
+  requirements: {
+    functional: ['Run a transformer layer whose feed-forward part is split into experts.'],
+    nonFunctional: ['Compute per token close to a much smaller dense model.', 'Experts get roughly equal traffic, so no GPU becomes the bottleneck.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'attn', label: 'Attention block', sub: 'shared by all tokens', kind: 'service', icon: 'layers', x: 0, y: 1, desc: 'The usual self-attention. Every token uses it. Its output goes to the MoE block instead of a single feed-forward network.' },
+    { id: 'router', label: 'Router', sub: 'linear layer + softmax', kind: 'edge', icon: 'route', x: 1, y: 1, desc: 'A small learned layer that scores every expert for this token and keeps the top 2.' },
+    { id: 'e3', label: 'Expert 3', sub: 'FFN on GPU 1', kind: 'ai', icon: 'cpu', x: 2, y: 0, desc: 'A feed-forward network. Through training, experts tend to specialize, though not in human-readable topics.' },
+    { id: 'e6', label: 'Expert 6', sub: 'FFN on GPU 3', kind: 'ai', icon: 'cpu', x: 2, y: 2, desc: 'Another feed-forward network, on another GPU.' },
+    { id: 'others', label: 'Experts 1,2,4,5,7,8', sub: 'idle for this token', kind: 'storage', icon: 'box', x: 3, y: 1, desc: 'Their weights exist (and use memory) but do no work for this token.' },
+    { id: 'mix', label: 'Weighted sum', sub: 'combine', kind: 'worker', icon: 'split', x: 1, y: 2, desc: 'Adds the two expert outputs weighted by the router\'s scores and passes the result to the next layer.' }
+  ],
+  pseudo: `
+def moe_layer(x):                              # x: one token's hidden state
+    logits = x @ W_router                      # 8 scores
+    top2 = topk(logits, k=2)
+    w = softmax(logits[top2])                  # weights over the 2 chosen
+    y = sum(w[i] * experts[e](x) for i, e in enumerate(top2))
+    return y
+# training only:
+loss += alpha * load_balance(router_probs, tokens_per_expert)`,
+  steps: [
+    {
+      from: 'attn', to: 'router', label: 'hidden state of token " Brussels"', pc: ['def moe_layer(x)'],
+      title: 'A token arrives at the MoE block',
+      caption: 'After attention, the token\'s hidden vector (4,096 numbers in Mixtral) would normally go through one large feed-forward network. Here it goes to the router first.',
+      text: ['Mixtral 8x7B has the same architecture as Mistral 7B except that each layer has 8 feed-forward blocks (experts).'],
+      payloadKind: 'Input',
+      payload: { token: ' Brussels', layer: 17, hidden: '[0.12, -0.40, …] (4096)' }
+    },
+    {
+      from: 'router', to: 'router', label: 'scores for 8 experts → top-2: 3 and 6', pc: ['logits = x @ W_router', 'top2 = topk'],
+      title: 'Score and pick the top 2',
+      caption: 'The router multiplies the vector by a small matrix to get 8 scores, keeps the best 2 and turns those into weights that sum to 1.',
+      text: [],
+      payloadKind: 'Routing',
+      payload: { logits: [0.1, -1.2, 2.3, 0.4, -0.5, 1.9, 0.0, -0.8], chosen: [3, 6], weights: { e3: 0.6, e6: 0.4 } }
+    },
+    {
+      from: 'router', to: 'e3', label: 'all-to-all: send to GPU 1 (w=0.6)', pc: ['experts[e](x)'],
+      title: 'Dispatch to the first expert',
+      caption: 'With expert parallelism, different experts live on different GPUs. Tokens are exchanged in an all-to-all step: each GPU sends every token to the GPUs of its chosen experts.',
+      text: ['GShard used this to scale a translation model with sparsely-gated MoE beyond 600 billion parameters. The network exchange is a major cost of MoE.'],
+      payloadKind: 'Dispatch',
+      payload: { to_gpu: 1, expert: 3, tokens_in_this_batch_for_e3: 512 }
+    },
+    {
+      from: 'router', to: 'e6', label: 'all-to-all: send to GPU 3 (w=0.4)', pc: ['experts[e](x)'],
+      title: 'Dispatch to the second expert',
+      caption: 'The same token also goes to expert 6. The other six experts never see it.',
+      text: [],
+      payloadKind: 'Dispatch',
+      payload: { to_gpu: 3, expert: 6, tokens_in_this_batch_for_e6: 498 },
+      branch: { q: 'Is expert 6 over capacity this batch?', options: [ { label: 'no: process normally', goto: 'mix1' }, { label: 'yes: token overflows', goto: 'drop' } ] }
+    },
+    {
+      id: 'drop', path: 'overflow', from: 'e6', to: 'mix', label: 'over capacity → skip (residual only)', pc: ['loss += alpha * load_balance'],
+      title: 'Other outcome: an overloaded expert',
+      caption: 'Training systems such as GShard and Switch Transformer give each expert a fixed capacity per batch. Overflow tokens skip that expert and pass through the residual connection (some systems drop them entirely). An auxiliary load-balancing loss pushes the router to spread tokens evenly so this stays rare.',
+      text: [],
+      payloadKind: 'Overflow',
+      payload: { expert: 6, capacity: 640, assigned: 702, dropped: 62 },
+      next: 'mix1'
+    },
+    {
+      id: 'mix1', from: 'e3', to: 'mix', label: '0.6·E3(x) + 0.4·E6(x)', pc: ['y = sum(w[i] * experts[e](x)'],
+      title: 'Combine the two outputs',
+      caption: 'Both outputs come back through another all-to-all and are summed with the router weights. The result continues to layer 18.',
+      text: [],
+      payloadKind: 'Output',
+      payload: { y: '[0.31, -0.07, …] (4096)', experts_used: 2, experts_total: 8 }
+    },
+    {
+      from: 'mix', to: 'others', label: 'total 47B params, ~13B active per token', pc: ['return y'],
+      title: 'Why it pays off',
+      caption: 'Every token touches only 2 of 8 experts per layer. Mixtral reports 47B total parameters with 13B active per token, outperforming or matching Llama 2 70B on its benchmarks. But all 47B must sit in GPU memory.',
+      text: [],
+      payloadKind: 'Trade-off',
+      payload: { total_params: '47B', active_params_per_token: '13B', memory_needed_for: '47B', compute_like: '13B dense' }
+    }
+  ],
+  decisions: [
+    { q: 'Top-1 or top-2 routing?', options: [
+      { name: 'Top-1 (Switch Transformer)', verdict: 'good', why: 'Simplest routing and least communication.' },
+      { name: 'Top-2 (Mixtral, GShard)', verdict: 'good', why: 'Blends two experts; a bit more compute and traffic per token.' } ] }
+  ],
+  refs: [
+    { label: 'Jiang et al. (2024): Mixtral of Experts', url: 'https://arxiv.org/abs/2401.04088' },
+    { label: 'Fedus et al. (2021): Switch Transformers', url: 'https://arxiv.org/abs/2101.03961' },
+    { label: 'Lepikhin et al. (2020): GShard', url: 'https://arxiv.org/abs/2006.16668' },
+    { label: 'Hugging Face blog: Mixture of Experts explained', url: 'https://huggingface.co/blog/moe' }
+  ],
+  verify: {
+    checked: ['8 feed-forward experts per layer, router picks 2 per token per layer, 47B total vs 13B active, matches or beats Llama 2 70B: Mixtral abstract.', 'MoE selects different parameters per input with constant compute; simplified routing: Switch Transformers abstract.', 'Sparsely-gated MoE beyond 600B parameters with automatic sharding: GShard abstract.'],
+    uncertain: ['Capacity factor, token dropping and the auxiliary load-balancing loss are from the Hugging Face MoE explainer (read), not from the paper abstracts.', 'Hidden size 4,096, the layer number, scores and token counts are illustrative.']
+  }
+});
+
+flow({
+  id: 'llm-gateway',
+  title: 'LLM gateway: routing, budgets, retries and fallbacks',
+  category: 'AI & machine learning',
+  tags: ['One API for many providers', 'Virtual keys', 'Rate limits & budgets', 'Model routing', 'Retry + fallback', 'Cooldown', 'Cost logging'],
+  summary: 'Once several teams call several model providers, companies put a gateway in front of them. Follow one request through a gateway like LiteLLM Proxy: the team\'s virtual key is checked against its budget, a router picks a deployment by load, the first provider returns 429, the gateway cools that deployment down and falls back to another model, and the token cost is logged to the team.',
+  requirements: {
+    functional: ['One OpenAI-compatible endpoint for every model the company uses.', 'Per-team keys, budgets and rate limits.', 'Automatic retry and fallback when a provider fails.'],
+    nonFunctional: ['Adds < 20 ms of latency.', 'Provider API keys never leave the gateway.', 'Every call is attributed to a team for cost reports.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'app', label: 'Team app', sub: 'OpenAI SDK', kind: 'client', icon: 'laptop', x: 0, y: 1, desc: 'Calls the gateway exactly as if it were OpenAI, with a virtual key instead of a provider key.' },
+    { id: 'gw', label: 'LLM gateway', sub: 'LiteLLM-style proxy', kind: 'edge', icon: 'shield', x: 1, y: 1, desc: 'Authenticates the virtual key, enforces limits, routes to a deployment, retries and falls back, translates request formats between providers.' },
+    { id: 'redis', label: 'Redis', sub: 'limits + cooldowns', kind: 'cache', icon: 'cache', x: 1, y: 0, desc: 'Shared counters for requests/tokens per minute and the list of deployments currently cooling down, so all gateway replicas agree.' },
+    { id: 'pa', label: 'Provider A', sub: 'gpt-4o, eu region', kind: 'external', icon: 'cloud', x: 3, y: 0, desc: 'Primary deployment for the "smart" model group.' },
+    { id: 'pb', label: 'Provider B', sub: 'claude, fallback', kind: 'external', icon: 'cloud', x: 3, y: 2, desc: 'Fallback model group, configured for when the primary group fails.' },
+    { id: 'logs', label: 'Spend DB', sub: 'Postgres', kind: 'db', icon: 'chart', x: 2, y: 2, desc: 'One row per call: team, model, tokens, cost, latency, status.' }
+  ],
+  pseudo: `
+key = auth(req.headers["Authorization"])          # virtual key -> team
+if spend[key.team] >= key.budget: return 400 "budget exceeded"
+if not ratelimit.allow(key, tpm=req.est_tokens): return 429
+for group in [req.model] + FALLBACKS[req.model]:
+    for dep in router.pick(group, strategy="usage-based", skip=cooldown):
+        try:
+            resp = call(dep, translate(req, dep.provider))
+            log_spend(key.team, dep, resp.usage); return resp
+        except (RateLimit, Timeout, ServerError):
+            fails[dep] += 1
+            if fails[dep] > ALLOWED_FAILS: cooldown.add(dep, secs=60)
+return 503`,
+  steps: [
+    {
+      from: 'app', to: 'gw', label: 'POST /v1/chat/completions  model:"smart"', pc: ['key = auth'],
+      title: 'A team calls one stable endpoint',
+      caption: 'The app asks for the model alias "smart", not a provider model. The platform team can change what "smart" means without touching any app.',
+      text: [],
+      payloadKind: 'Request',
+      payload: { headers: { Authorization: 'Bearer sk-team-search-…' }, body: { model: 'smart', messages: [{ role: 'user', content: 'Summarize this ticket…' }] } }
+    },
+    {
+      from: 'gw', to: 'redis', label: 'check budget, RPM/TPM for team-search', pc: ['if spend[key.team] >= key.budget', 'ratelimit.allow'],
+      title: 'Authenticate and enforce limits',
+      caption: 'The virtual key maps to team-search: €2,000/month budget, €1,412 spent, 60k tokens per minute. Counters live in Redis so every gateway replica sees the same numbers.',
+      text: [],
+      payloadKind: 'Limits',
+      payload: { team: 'search', budget_eur: 2000, spent_eur: 1412.3, tpm_limit: 60000, tpm_used: 18200, decision: 'allow' }
+    },
+    {
+      from: 'gw', to: 'pa', label: 'route: least-used deployment of "smart"', pc: ['router.pick(group'],
+      title: 'Pick a deployment',
+      caption: '"smart" has two deployments of the same model in different regions. Usage-based routing picks the one with the most headroom under its own rate limit.',
+      text: ['LiteLLM\'s router documents strategies such as simple-shuffle, least-busy, usage-based and latency-based routing.'],
+      payloadKind: 'Routing',
+      payload: { group: 'smart', deployments: [{ id: 'oai-eu', tpm_used: '71%' }, { id: 'oai-us', tpm_used: '93%' }], picked: 'oai-eu' }
+    },
+    {
+      from: 'pa', to: 'gw', reply: true, label: '429 Too Many Requests', pc: ['except (RateLimit, Timeout, ServerError)'],
+      title: 'The provider pushes back',
+      caption: 'The provider returns 429. The gateway counts the failure for that deployment; after too many failures in a minute it puts the deployment in cooldown so no replica sends it traffic for a while.',
+      text: [],
+      payloadKind: 'Failure',
+      payload: { status: 429, deployment: 'oai-eu', fails_this_minute: 4, allowed_fails: 3, action: 'cooldown 60 s' },
+      branch: { q: 'Another deployment in the same group?', options: [ { label: 'no healthy one: fall back to next group', goto: 'fb' }, { label: 'yes: retry there', goto: 'retry' } ] }
+    },
+    {
+      id: 'retry', path: 'retry same model', from: 'gw', to: 'pa', label: 'retry on oai-us', pc: ['for dep in router.pick'],
+      title: 'Other outcome: retry another deployment',
+      caption: 'If the other region had room, the gateway would retry the same model there and the app would never notice.',
+      text: [],
+      payloadKind: 'Retry',
+      payload: { deployment: 'oai-us', attempt: 2 },
+      next: 'log'
+    },
+    {
+      id: 'fb', from: 'gw', to: 'pb', label: 'fallback "smart" → "smart-backup" (format translated)', pc: ['FALLBACKS[req.model]', 'translate(req, dep.provider)'],
+      title: 'Fall back to another provider',
+      caption: 'The other deployment is also near its limit, so the gateway moves to the configured fallback group on another provider, translating the OpenAI-format request into that provider\'s format.',
+      text: [],
+      payloadKind: 'Fallback request',
+      payload: { from_group: 'smart', to_group: 'smart-backup', provider_format: 'Anthropic Messages', max_tokens_added: 1024 }
+    },
+    {
+      id: 'log', from: 'gw', to: 'logs', async: true, label: 'INSERT spend row', pc: ['log_spend'],
+      title: 'Attribute the cost',
+      caption: 'The response usage is priced with the provider\'s rates and logged against the team. Budgets, dashboards and alerts read from this table.',
+      text: [],
+      payloadKind: 'Spend row',
+      payload: { team: 'search', model: 'smart-backup', input_tokens: 1830, output_tokens: 210, cost_eur: 0.0087, latency_ms: 1420, fallback: true }
+    },
+    {
+      from: 'gw', to: 'app', reply: true, label: '200, OpenAI format', pc: ['return resp'],
+      title: 'The app gets a normal answer',
+      caption: 'The reply is translated back to the OpenAI shape. A response header tells which model actually answered, for debugging.',
+      text: [],
+      payloadKind: 'Response',
+      payload: { model: 'smart-backup', choices: [{ message: { role: 'assistant', content: 'The customer reports…' } }], headers: { 'x-litellm-model-group': 'smart-backup' } }
+    }
+  ],
+  decisions: [
+    { q: 'Build or buy?', options: [
+      { name: 'Open-source proxy (LiteLLM, Envoy AI Gateway)', verdict: 'good', why: 'Self-hosted, keys stay in your network.' },
+      { name: 'Managed (Cloudflare AI Gateway, Portkey)', verdict: 'good', why: 'Less to run; traffic goes through a third party.' } ] }
+  ],
+  refs: [
+    { label: 'LiteLLM docs: Router, load balancing and routing strategies', url: 'https://docs.litellm.ai/docs/routing' },
+    { label: 'LiteLLM docs: Proxy fallbacks, retries and timeouts', url: 'https://docs.litellm.ai/docs/proxy/reliability' },
+    { label: 'Cloudflare AI Gateway docs', url: 'https://developers.cloudflare.com/ai-gateway/' },
+    { label: 'ByteByteGo: Design a rate limiter (book chapter overview)', url: 'https://bytebytego.com/courses/system-design-interview/design-a-rate-limiter' }
+  ],
+  verify: {
+    checked: ['Routing strategies, allowed_fails and cooldown of failing deployments, fallbacks between model groups, Redis for shared state across instances: LiteLLM routing and reliability docs (read).'],
+    uncertain: ['Budgets, percentages, header names and costs are illustrative.']
+  }
+});
+
+flow({
+  id: 'semantic-cache',
+  title: 'Semantic caching for LLM responses',
+  category: 'AI & machine learning',
+  tags: ['Embedding similarity', 'Similarity threshold', 'Exact-match first', 'Cache scoping', 'TTL / invalidation', 'False hits'],
+  summary: 'Many users ask the same thing in different words. A semantic cache embeds each question, looks for a stored question with a close enough meaning, and returns the saved answer in milliseconds instead of paying for a new LLM call. Follow a hit, a near miss that must not be served, and a miss that fills the cache.',
+  requirements: {
+    functional: ['Return a stored answer when a new question means the same as an earlier one.'],
+    nonFunctional: ['Hits in < 30 ms.', 'Almost no false hits: a wrong cached answer is worse than a slow right one.', 'Never share cached answers across tenants or for personalised prompts.']
+  },
+  grid: { cols: 4, rows: 3 },
+  nodes: [
+    { id: 'user', label: 'User', sub: 'help bot', kind: 'client', icon: 'user', x: 0, y: 1, desc: 'Asks a support question.' },
+    { id: 'app', label: 'Bot backend', sub: 'cache layer', kind: 'service', icon: 'server', x: 1, y: 1, desc: 'Tries the exact cache, then the semantic cache, then the LLM.' },
+    { id: 'exact', label: 'Exact cache', sub: 'Redis, hash key', kind: 'cache', icon: 'cache', x: 1, y: 0, desc: 'Key = hash of normalised prompt + model + tenant. Cheapest check, zero false hits.' },
+    { id: 'emb', label: 'Embedding model', sub: 'small, fast', kind: 'ai', icon: 'vector', x: 2, y: 0, desc: 'Turns the question into a vector so similar meanings land close together.' },
+    { id: 'vec', label: 'Semantic cache', sub: 'vector index', kind: 'db', icon: 'vector', x: 3, y: 1, desc: 'Stores (question vector, question, answer, tenant, created_at). Finds the nearest stored question.' },
+    { id: 'llm', label: 'LLM', sub: 'slow + paid', kind: 'ai', icon: 'brain', x: 2, y: 2, desc: 'Called only on a miss.' }
+  ],
+  pseudo: `
+key = sha256(tenant + model + normalize(q))
+if (a := redis.get(key)): return a                 # exact hit
+v = embed(q)
+hit = vec.search(v, k=1, filter={"tenant": tenant})
+if hit and hit.similarity >= 0.95 and not personal(q):
+    return hit.answer                              # semantic hit
+a = llm(q)
+vec.insert(v, q, a, tenant, ttl=7*86400)
+redis.set(key, a, ex=7*86400)
+return a`,
+  steps: [
+    {
+      from: 'user', to: 'app', label: '"how can I reset my password?"', pc: ['key = sha256'],
+      title: 'A question comes in',
+      caption: 'Yesterday someone asked "How do I change my password?". Same meaning, different words, so an exact cache would miss.',
+      text: [],
+      payloadKind: 'Question',
+      payload: { tenant: 'madshop', q: 'how can I reset my password?' }
+    },
+    {
+      from: 'app', to: 'exact', label: 'GET llm:9f1c… → nil', pc: ['redis.get(key)'],
+      title: 'Exact cache first',
+      caption: 'The cheapest check: a hash of the normalised text. No entry, because nobody typed exactly this.',
+      text: [],
+      payloadKind: 'Exact lookup',
+      payload: { key: 'llm:9f1c…', result: null }
+    },
+    {
+      from: 'app', to: 'emb', label: 'embed(q) → 384-d vector', pc: ['v = embed(q)'],
+      title: 'Embed the question',
+      caption: 'A small embedding model turns the question into a vector in about 5 ms.',
+      text: [],
+      payloadKind: 'Vector',
+      payload: { dims: 384, v: '[0.021, -0.113, …]' }
+    },
+    {
+      from: 'app', to: 'vec', label: 'nearest within tenant madshop', pc: ['hit = vec.search'],
+      title: 'Find the closest stored question',
+      caption: 'The index returns the nearest stored question for this tenant only, with its cosine similarity.',
+      text: ['GPTCache, an open-source semantic cache, is built from the same parts: an embedding step, a vector store, a similarity evaluator with a threshold, and cache storage with eviction.'],
+      payloadKind: 'Nearest',
+      payload: { stored_q: 'How do I change my password?', similarity: 0.962, answer_id: 'a_771' },
+      branch: { q: 'Similarity ≥ 0.95 and not personal?', options: [ { label: 'yes: serve cached answer', goto: 'hit' }, { label: 'no: call the LLM', goto: 'miss' } ] }
+    },
+    {
+      id: 'hit', from: 'vec', to: 'user', reply: true, label: 'cached answer, 18 ms, €0', pc: ['return hit.answer'],
+      title: 'Semantic hit',
+      caption: '0.962 is above the threshold. The saved answer is returned in 18 ms with no LLM cost.',
+      text: ['The danger is the opposite case: "How do I delete my account?" can score close to "How do I delete my order?". The threshold is tuned on labelled pairs to keep false hits near zero.'],
+      payloadKind: 'Response',
+      payload: { answer: 'Go to Settings → Security → Reset password…', source: 'semantic_cache', similarity: 0.962, latency_ms: 18 },
+      next: 'end'
+    },
+    {
+      id: 'miss', path: 'miss', from: 'app', to: 'llm', label: '"cancel my order 88125" (personal) → LLM', pc: ['a = llm(q)'],
+      title: 'Other outcome: a miss',
+      caption: 'A question about the user\'s own order is personal: it must never be answered from someone else\'s cache, whatever the similarity. It goes to the LLM.',
+      text: [],
+      payloadKind: 'LLM call',
+      payload: { q: 'cancel my order 88125', personal: true, latency_ms: 1900, cost_eur: 0.004 }
+    },
+    {
+      from: 'llm', to: 'vec', label: 'store non-personal answers with TTL 7 d', pc: ['vec.insert', 'redis.set'],
+      title: 'Fill the cache (when allowed)',
+      caption: 'General answers are stored in both caches with a 7-day TTL, so a changed policy is not served forever. Personal answers are not stored.',
+      text: [],
+      payloadKind: 'Insert',
+      payload: { stored: false, reason: 'personal', example_stored: { q: 'What are your delivery times?', ttl_days: 7 } }
+    },
+    {
+      id: 'end', from: 'app', to: 'app', label: 'metrics: hit rate 31%', pc: ['return a'],
+      title: 'Measure it',
+      caption: 'Track hit rate, saved cost and reported wrong answers. If a support article changes, delete cache entries that came from it.',
+      text: [],
+      payloadKind: 'Daily stats',
+      payload: { requests: 42000, exact_hits: 4100, semantic_hits: 8900, hit_rate: 0.31, user_flagged_wrong: 3 }
+    }
+  ],
+  decisions: [
+    { q: 'Threshold?', options: [
+      { name: 'Low (0.85)', verdict: 'bad', why: 'More hits but serves wrong answers to different questions.' },
+      { name: 'High (0.95+) with exact-match first', verdict: 'good', why: 'Fewer hits, near-zero false hits. Tune on real pairs.' } ] },
+    { q: 'Semantic cache or provider prompt caching?', options: [
+      { name: 'Prompt caching (provider)', verdict: 'good', why: 'Reuses a shared prompt prefix; still runs the model, always correct.' },
+      { name: 'Semantic cache (yours)', verdict: 'good', why: 'Skips the model entirely; can be wrong. They solve different problems.' } ] }
+  ],
+  refs: [
+    { label: 'GPTCache on GitHub (semantic cache for LLMs)', url: 'https://github.com/zilliztech/GPTCache' },
+    { label: 'Redis docs: Semantic caching with RedisVL', url: 'https://redis.io/docs/latest/develop/ai/redisvl/user_guide/llmcache/' },
+    { label: 'Anthropic docs: Prompt caching', url: 'https://platform.claude.com/docs/en/build-with-claude/prompt-caching' }
+  ],
+  verify: {
+    checked: ['Semantic cache modules (embedding, vector store, similarity evaluator, cache storage, eviction): GPTCache README.'],
+    uncertain: ['The 0.95 threshold, TTL, dims and hit rates are illustrative; real thresholds depend on the embedding model.']
   }
 });
 
