@@ -669,5 +669,9 @@ Content-Type: application/json
     { label: 'IETF draft: RateLimit header fields for HTTP', url: 'https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/', note: 'Still a draft; check the latest version.' },
     { label: 'Stripe: Scaling your API with rate limiters', url: 'https://stripe.com/blog/rate-limiters' },
     { label: 'RFC 6585: HTTP 429 Too Many Requests', url: 'https://www.rfc-editor.org/rfc/rfc6585' }
-  ]
+  ],
+  verify: {
+    checked: ['Step 6 (the burst): test_content.js replays the token bucket with the flow\'s own numbers (13.42 tokens, capacity 20, 100/60 tokens per second, 25 requests 40 ms apart) and checks 15 allowed, 10 rejected and 0.09 tokens left.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Keys, timestamps and plan limits are illustrative.']
+  }
 });

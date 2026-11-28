@@ -236,5 +236,9 @@ CREATE TABLE season_standings (season TEXT, rank INT, player_id TEXT, points INT
     { label: 'Redis: Sorted sets', url: 'https://redis.io/docs/latest/develop/data-types/sorted-sets/' },
     { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' },
     { label: 'Redis source: server.h (ZSKIPLIST_P = 0.25)', url: 'https://github.com/redis/redis/blob/unstable/src/server.h' }
-  ]
+  ],
+  verify: {
+    checked: ['Scale card: Redis sorted-set skip lists use ZSKIPLIST_P = 0.25 (redis/src/server.h), so 10M members need about log4(10M) ≈ 12 levels; test_content.js checks the number.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Scores, ranks and sizes are illustrative.']
+  }
 });

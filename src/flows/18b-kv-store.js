@@ -161,11 +161,15 @@ ring            24 nodes x 256 vnodes, N=3 across zones, R=2, W=2`,
     ] },
     { q: 'How many replicas must answer?', options: [
       { verdict: 'ok', name: 'W=1, R=1', why: 'Fastest, but reads can miss the latest write.' },
-      { verdict: 'great', name: 'N=3, W=2, R=2', why: 'Survives one node down for reads and writes, and R + W > N gives overlapping quorums.' }
+      { verdict: 'great', name: 'N=3, W=2, R=2', why: 'Survives one node down for reads and writes, and R + W > N gives overlapping quorums while all three owners are reachable; under a sloppy quorum that overlap is not guaranteed.' }
     ] }
   ],
   refs: [
     { label: 'DeCandia et al.: Dynamo: Amazon\'s Highly Available Key-value Store (2007)', url: 'https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf' },
     { label: 'Apache Cassandra: Dynamo architecture', url: 'https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html' }
-  ]
+  ],
+  verify: {
+    checked: ['The node that coordinates a write increments its own vector-clock entry, and a write for a key is coordinated by one of its first N owners: Dynamo paper §4.4–4.5 (step 3).', 'Sloppy quorum with hinted handoff, and why R + W > N then no longer guarantees overlap: Dynamo paper §4.6 (step 1, glossary).', 'The test suite checks that step 3 increments only the coordinator\'s entry.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Latencies, node names and payload values are illustrative.']
+  },
 });

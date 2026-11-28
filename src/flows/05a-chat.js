@@ -303,5 +303,9 @@ CREATE TABLE read_state (
     { label: 'Discord: How Discord stores trillions of messages', url: 'https://discord.com/blog/how-discord-stores-trillions-of-messages', note: 'Partitioning messages by channel and time bucket.' },
     { label: 'Redis: Pub/Sub', url: 'https://redis.io/docs/latest/develop/interact/pubsub/' },
     { label: 'Redis: Replication (asynchronous by default)', url: 'https://redis.io/docs/latest/operate/oss_and_stack/management/replication/' }
-  ]
+  ],
+  verify: {
+    checked: ['Step 3: Redis replicates asynchronously by default, so a counter in Redis can repeat a value after failover: Redis replication docs.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. IDs, timings and payload values are illustrative.']
+  }
 });
