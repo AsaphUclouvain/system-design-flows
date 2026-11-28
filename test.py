@@ -8,6 +8,21 @@ SHOTS = ROOT / 'shots'; SHOTS.mkdir(exist_ok=True)
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 want_shots = '--shots' in sys.argv
 
+FAILED = False
+# Text labels drawn on the diagram that cover a box by more than a few pixels (the active label, badges, branch labels).
+LABEL_JS = r"""
+() => {
+  const boxes = [...document.querySelectorAll('#cv .sd-node')].map(e => [e.dataset.node, e.getBoundingClientRect()]);
+  const out = [];
+  document.querySelectorAll('#cv .sd-wlabel, #cv .sd-pbadge, #cv .sd-altlabel').forEach(l => {
+    const r = l.getBoundingClientRect();
+    boxes.forEach(([id, b]) => { const w = Math.min(r.right, b.right) - Math.max(r.left, b.left), h = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+      if (w > 3 && h > 3) out.push((l.className.split(' ')[0].replace('sd-', '')) + ' "' + l.textContent.slice(0, 30) + '" covers ' + id); });
+  });
+  return out;
+}
+"""
+
 CHECK_JS = r"""
 () => {
   const F = window.SD_FLOWS, G = window.SD_GLOSSARY, problems = [];
@@ -62,7 +77,7 @@ CHECK_JS = r"""
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch()
-        errors = []
+        errors = []; label_hits = []
         ctx = await b.new_context(viewport={'width': 1366, 'height': 900})
         pg = await ctx.new_page()
         pg.on('pageerror', lambda e: errors.append('pageerror: ' + str(e)))
@@ -99,10 +114,17 @@ async def main():
                 if ov['o']: errors.append(fid + ' @' + str(vw) + ' overlapping nodes ' + ','.join(ov['o']))
                 if ov['out']: errors.append(fid + ' @' + str(vw) + ' nodes outside canvas ' + ','.join(ov['out']))
                 if ov['docW'] > vw + 1: errors.append(fid + ' @' + str(vw) + ' horizontal page overflow ' + str(ov['docW']))
+                # wire labels and badges must not sit on top of a box (checked on every step)
+                for i in range(n):
+                    await pg.evaluate('i => window.SD_APP.go(i)', i)
+                    hits = await pg.evaluate(LABEL_JS)
+                    for h in hits: label_hits.append(fid + ' step ' + str(i+1) + ' @' + str(vw) + ': ' + h)
             await pg.set_viewport_size({'width': 1366, 'height': 900})
         await pg.goto(HTML.as_uri() + '#/'); await pg.wait_for_timeout(200)
         cards = await pg.eval_on_selector_all('.sd-card', 'e => e.length')
         print('home cards:', cards)
+        for h in label_hits: print('LABEL', h)
+        print('labels over boxes:', len(label_hits))
         for e in errors: print('ERR', e)
         if want_shots:
             for fid in ids[:6]:
@@ -118,5 +140,7 @@ async def main():
                 await pg2.screenshot(path=str(SHOTS / ('home_' + tag + '.png')))
                 await pg2.close()
         await b.close()
+        global FAILED; FAILED = bool(errors or res['problems'])
 
 asyncio.run(main())
+sys.exit(1 if FAILED else 0)
