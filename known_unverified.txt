@@ -1,0 +1,31 @@
+# Flows that have no verify panel yet: nobody has checked them line by line against their sources.
+# lint_flows.js accepts these, fails on any other flow without one, and fails if a flow here gains a panel (remove it from the list then).
+notification-system
+event-driven-pipeline
+webhook-delivery
+job-scheduler
+oauth-login
+jwt-refresh
+url-shortener
+news-feed
+file-upload
+video-streaming
+payment-checkout
+search-autocomplete
+full-text-search
+ride-hailing
+distributed-cache
+cdn-delivery
+load-balancing
+api-gateway
+saga-order
+ticket-booking
+collab-editing
+id-generation
+observability-pipeline
+email-delivery
+feature-flags
+nearby-places
+multi-region
+web-crawler
+stream-analytics

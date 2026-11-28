@@ -365,7 +365,7 @@ function renderFlow(f, start) {
     h += '<section class="sd-sec" id="sec-refs"><h2>References</h2><p class="sub">Primary sources to go deeper. Payloads and code on this page are illustrative.</p><ol class="sd-refs">' +
       f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol>' +
       (f.verify ? '<div class="sd-verify">' + (f.verify.checked ? '<div><h3>How this flow was checked</h3><ul class="sd-list">' + f.verify.checked.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') +
-        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '') + '</section>';
+        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '<div class="sd-verify"><div class="unc"><h3>Not checked yet</h3><ul class="sd-list"><li>This flow has not been checked line by line against its sources. Treat numbers, payloads and timings as illustrative, and use the references to verify.</li></ul></div></div>') + '</section>';
   }
   h += '<div class="sd-bar" id="bar"><button id="mPrev" aria-label="Previous step">' + UI.prev + 'Back</button><span class="mid" id="mCount"></span><button id="mNext" aria-label="Next step">Next' + UI.next + '</button></div>';
   app.innerHTML = h;

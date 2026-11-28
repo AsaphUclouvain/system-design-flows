@@ -7,6 +7,8 @@ const icons = new Set([...seg.matchAll(/^\s+([a-z0-9_]+):\s*'/gm)].map(m => m[1]
 const kinds = new Set([...fs.readFileSync(path.join(dir, 'src/app.css'), 'utf8').matchAll(/--k-([a-z]+)/g)].map(m => m[1]));
 let bad = 0; const err = (f, m) => { bad++; console.log('ERR', f.id, m); };
 const flows = window.SD_FLOWS; const ids = new Set();
+const known = new Set(fs.readFileSync(path.join(dir, 'known_unverified.txt'), 'utf8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')));
+let gaps = 0;
 for (const f of flows) {
   if (ids.has(f.id)) err(f, 'duplicate id'); ids.add(f.id);
   const nodes = new Set(f.nodes.map(n => n.id));
@@ -18,7 +20,10 @@ for (const f of flows) {
     (s.branch && s.branch.options || []).forEach(o => { if (!sids.has(o.goto)) err(f, 'goto ' + o.goto); });
     (s.pc || []).forEach(p => { if (f.pseudo && !f.pseudo.includes(p)) err(f, 'step ' + (i + 1) + ' pc not in pseudo: ' + p); });
   });
-  if (!(f.refs || []).length) err(f, 'no refs'); if (!f.verify) err(f, 'no verify panels');
+  if (!(f.refs || []).length) err(f, 'no refs'); if (!f.verify) { if (known.has(f.id)) gaps++; else err(f, 'no verify panel (add one, or list the flow in known_unverified.txt)'); }
+  else if (known.has(f.id)) err(f, 'has a verify panel now: remove it from known_unverified.txt');
 }
 const cats = {}; flows.forEach(f => cats[f.category] = (cats[f.category] || 0) + 1);
-console.log(flows.length, 'flows', JSON.stringify(cats)); console.log(bad, 'problems'); process.exit(bad ? 1 : 0);
+console.log(flows.length, 'flows', JSON.stringify(cats)); known.forEach(id => { if (!ids.has(id)) { bad++; console.log('ERR known_unverified.txt lists unknown flow', id); } });
+console.log(gaps, 'flows without a verify panel, listed as a known gap in known_unverified.txt');
+console.log(bad, 'problems'); process.exit(bad ? 1 : 0);
