@@ -3,7 +3,7 @@ flow({
   title: 'Inside a database write: B-tree vs LSM-tree storage engines',
   category: 'Databases & replication',
   tags: ['Write-ahead log', 'B-tree pages', 'Memtable', 'SSTables', 'Compaction', 'Bloom filters'],
-  summary: 'Two families of storage engines sit under almost every database. PostgreSQL and InnoDB update sorted pages in place (B-trees); RocksDB, Cassandra and LevelDB append to a memtable and merge sorted files later (LSM-trees). Follow one write and one read through each path, and see where each pays its cost.',
+  summary: 'Two families of storage engines sit under almost every database. MySQL InnoDB keeps rows in a B-tree and updates them in place, with old versions in an undo log; PostgreSQL appends new row versions to a heap and indexes them with B-trees; RocksDB, Cassandra and LevelDB append to a memtable and merge sorted files later (LSM-trees). Follow one write and one read through each path, and see where each pays its cost.',
   requirements: {
     functional: ['Durably store key → value and find it again.', 'Support range scans in key order.'],
     nonFunctional: ['Survive a crash at any instant (write-ahead log).', 'Choose between read-optimised (B-tree) and write-optimised (LSM) behaviour.']
@@ -12,7 +12,7 @@ flow({
   nodes: [
     { id: 'q', label: 'Query executor', sub: 'PUT / GET', kind: 'client', icon: 'api', x: 0, y: 1, desc: 'Receives a write or read for one key from the SQL layer or API.' },
     { id: 'wal', label: 'Write-ahead log', sub: 'append-only file', kind: 'queue', icon: 'log', x: 1, y: 0, desc: 'Every change is appended and flushed here first, so it can be replayed after a crash. Both engine types use one.' },
-    { id: 'bt', label: 'B-tree', sub: '8 KB pages: root → leaf', kind: 'db', icon: 'tree', x: 2, y: 0, desc: 'A balanced tree of fixed-size pages. Finding a key reads one page per level (3–4 levels for millions of rows). Writes modify the leaf page in place.' },
+    { id: 'bt', label: 'B-tree', sub: 'InnoDB, 16 KB pages', kind: 'db', icon: 'tree', x: 2, y: 0, desc: 'A balanced tree of fixed-size pages. Finding a key reads one page per level (3–4 levels for millions of rows). In InnoDB the rows live in the clustered index\'s leaf pages and are updated in place. PostgreSQL also uses B-trees, but for its indexes; its rows live in a separate heap.' },
     { id: 'mem', label: 'Memtable', sub: 'sorted, in memory', kind: 'cache', icon: 'cache', x: 1, y: 2, desc: 'LSM engines insert writes into an in-memory sorted structure (a skip list in RocksDB). Fast: no disk seek per write.' },
     { id: 'sst', label: 'SSTables L0…Ln', sub: 'immutable sorted files', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'When the memtable fills, it is written out as a sorted, immutable file. Background compaction merges files and drops overwritten or deleted values.' },
     { id: 'bloom', label: 'Bloom filters', sub: 'one per file', kind: 'cache', icon: 'filter', x: 2, y: 2, desc: 'A compact bit set that answers "definitely not in this file" or "maybe". Lets reads skip most SSTables.' }
@@ -41,15 +41,15 @@ def get(key):
       text: ['Appending is sequential and fast. If the machine crashes a moment later, replaying the log rebuilds the change. This is the same WAL that replication streams (see the primary–replica flow).'],
       payloadKind: 'WAL record',
       payload: { lsn: 88231, op: 'PUT', key: 'user:8812', value: { plan: 'pro' }, fsync: true },
-      branch: { q: 'Which storage engine is underneath?', options: [ { label: 'B-tree (PostgreSQL, InnoDB)', goto: 'btw' }, { label: 'LSM-tree (RocksDB, Cassandra)', goto: 'lsmw' } ] }
+      branch: { q: 'Which storage engine is underneath?', options: [ { label: 'B-tree (MySQL InnoDB)', goto: 'btw' }, { label: 'LSM-tree (RocksDB, Cassandra)', goto: 'lsmw' } ] }
     },
     {
       id: 'btw', path: 'B-tree', from: 'q', to: 'bt', label: 'descend root → inner → leaf #4471', pc: ['btree.descend', 'leaf.insert'],
-      title: 'B-tree: find the leaf page and update it in place',
-      caption: 'The engine walks from the root page down to the leaf that covers user:8812 (3 page reads, usually cached) and writes the new value into that page.',
-      text: ['If the leaf is full, it splits into two and the parent gets a new pointer. The modified page is written back to disk later by a checkpoint; the WAL covers the gap. Cost: random page writes, and a whole 8 KB page rewritten for a small change.'],
+      title: 'B-tree (InnoDB): find the leaf page and update the row in place',
+      caption: 'The engine walks from the root page down to the leaf that covers user:8812 (3 page reads, usually cached) and overwrites the row in that page. The old version is copied to the undo log, for rollback and for transactions that still need to read it.',
+      text: ['If the leaf is full, it splits into two and the parent gets a new pointer. The modified page is written back to disk later by a checkpoint; the WAL covers the gap. Cost: random page writes, and a whole 16 KB page rewritten for a small change.', 'PostgreSQL works differently: its table is a heap, so an UPDATE appends a new row version and leaves the old one for VACUUM. When no indexed column changes and the page has room, this is a HOT update and the B-tree indexes are not touched. The MVCC flow (step 3) shows this.'],
       payloadKind: 'Page access',
-      payload: { path: ['root p1', 'inner p212', 'leaf p4471'], leaf_fill: '71%', split: false, dirty_page: 'p4471 (flushed at next checkpoint)' }
+      payload: { engine: 'InnoDB', path: ['root p1', 'inner p212', 'leaf p4471'], leaf_fill: '71%', split: false, row: 'updated in place', old_version: 'undo log', dirty_page: 'p4471 (flushed at next checkpoint)' }
     },
     {
       path: 'B-tree', from: 'bt', to: 'q', reply: true, label: 'GET: 3 page reads → value', pc: ['return btree.descend(key).find'],
@@ -95,17 +95,20 @@ def get(key):
   ],
   decisions: [
     { q: 'Which engine for which workload?', options: [
-      { name: 'B-tree', verdict: 'good', why: 'Read-heavy OLTP with predictable lookups and in-place updates: PostgreSQL, MySQL InnoDB.' },
+      { name: 'B-tree', verdict: 'good', why: 'Read-heavy OLTP with predictable lookups: MySQL InnoDB (rows in a B-tree, updated in place) and PostgreSQL (B-tree indexes over a heap of row versions).' },
       { name: 'LSM-tree', verdict: 'good', why: 'Write-heavy, append-like data (events, time series, messages): RocksDB, Cassandra, ScyllaDB. Reads rely on Bloom filters and compaction.' } ] }
   ],
   refs: [
     { label: 'ByteByteGo newsletter: B-trees vs LSM-trees comparison', url: 'https://blog.bytebytego.com/p/b-trees-vs-lsm-trees-comparison-and', note: 'subscriber post; the free intro states the trade-off.' },
     { label: 'RocksDB wiki: overview (memtable, logfile, sstfile, compaction)', url: 'https://github.com/facebook/rocksdb/wiki/RocksDB-Overview' },
     { label: 'PostgreSQL docs: B-tree indexes', url: 'https://www.postgresql.org/docs/current/btree.html' },
+    { label: 'PostgreSQL docs: Heap-Only Tuples (HOT)', url: 'https://www.postgresql.org/docs/current/storage-hot.html' },
+    { label: 'MySQL docs: InnoDB clustered and secondary indexes', url: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html' },
+    { label: 'MySQL docs: InnoDB multi-versioning (undo logs)', url: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-multi-versioning.html' },
     { label: 'ByteByteGo, System Design Interview Vol. 1: Design a key-value store (write and read paths)', url: 'https://bytebytego.com/courses/system-design-interview/design-a-key-value-store' }
   ],
   verify: {
-    checked: ['Memtable → logfile → flush to sorted sstfile, compaction: RocksDB overview.', 'Write path (commit log, memory cache, SSTables) and read path with Bloom filters: ByteByteGo key-value store chapter.'],
+    checked: ['Memtable → logfile → flush to sorted sstfile, compaction: RocksDB overview.', 'Write path (commit log, memory cache, SSTables) and read path with Bloom filters: ByteByteGo key-value store chapter.', 'PostgreSQL appends row versions to a heap (HOT when no indexed column changes): PostgreSQL HOT docs. InnoDB rows live in the clustered index, with old versions in undo logs: MySQL 8.4 docs.'],
     uncertain: ['Page numbers, sizes and file names are illustrative; 64 MB is RocksDB\'s common default write buffer size but configurations vary.']
   }
 });
