@@ -20,7 +20,7 @@ flow({
     { label: 'Players', value: '10 million', note: 'Ranked on the weekly board.' },
     { label: 'Score writes', value: '5,000 / s', note: 'Match completions at peak.' },
     { label: 'Board memory', value: '≈ 1 GB', note: 'A sorted set costs roughly 80–100 bytes per member: 10M × ~100 B.' },
-    { label: 'Rank lookup', value: 'O(log n)', note: 'ZREVRANK on a skip list: ~23 levels for 10M members.' }
+    { label: 'Rank lookup', value: 'O(log n)', note: 'ZREVRANK on Redis\'s skip list (p = 1/4): about 12 levels for 10M members.' }
   ],
   grid: { cols: 4, rows: 3 },
   nodes: [
@@ -234,6 +234,7 @@ CREATE TABLE season_standings (season TEXT, rank INT, player_id TEXT, points INT
   ],
   refs: [
     { label: 'Redis: Sorted sets', url: 'https://redis.io/docs/latest/develop/data-types/sorted-sets/' },
-    { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' }
+    { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' },
+    { label: 'Redis source: server.h (ZSKIPLIST_P = 0.25)', url: 'https://github.com/redis/redis/blob/unstable/src/server.h' }
   ]
 });
