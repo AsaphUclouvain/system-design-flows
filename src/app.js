@@ -421,9 +421,41 @@ function layout() {
     el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--nw', nw + 'px');
     P[n.id] = { x, y, el };
   });
+  // a title word wider than its box shrinks a little instead of breaking mid-word (no hyphenation in every browser)
+  f.nodes.forEach(n => { const t = P[n.id].el.querySelector('b'); if (!t) return; t.style.fontSize = '';
+    let fs = parseFloat(getComputedStyle(t).fontSize); while (t.scrollWidth > t.clientWidth + 1 && fs > 8.5) { fs -= .5; t.style.fontSize = fs + 'px'; } });
   f.nodes.forEach(n => { const p = P[n.id]; p.w = p.el.offsetWidth; p.h = p.el.offsetHeight; });
   L = { W, H, P };
   drawWires();
+}
+
+/* ---------- label placement: slide a label along its wire until it clears every box ---------- */
+function nodeRects() { return Object.values(L.P).map(p => [p.x - p.w / 2 - 3, p.y - p.h / 2 - 3, p.x + p.w / 2 + 3, p.y + p.h / 2 + 3]); }
+function overlapArea(r, rects) { let a = 0; rects.forEach(q => { const w = Math.min(r[2], q[2]) - Math.max(r[0], q[0]), h = Math.min(r[3], q[3]) - Math.max(r[1], q[1]); if (w > 0 && h > 0) a += w * h; }); return a; }
+// el is centred on (left, top) by its CSS transform; returns the rectangle it ends up in
+function placeOnWire(el, g, blocked, t0) {
+  const w = el.offsetWidth, h = el.offsetHeight, dx = g.x2 - g.x1, dy = g.y2 - g.y1, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len, d = (Math.abs(nx) * w + Math.abs(ny) * h) / 2 + 5;
+  const ts = [t0, t0 - .1, t0 + .1, t0 - .2, t0 + .2, t0 - .28, t0 + .28].filter(t => t > .12 && t < .88);
+  let best = null;
+  const offs = [0]; for (let k = 1; k <= 6; k++) offs.push(-(d + (k - 1) * 14), d + (k - 1) * 14);
+  search: for (const off of offs) for (const t of ts) {
+    const cx = Math.min(L.W - w / 2 - 4, Math.max(w / 2 + 4, g.x1 + dx * t + nx * off));
+    const cy = Math.min(L.H - h / 2 - 2, Math.max(h / 2 + 2, g.y1 + dy * t + ny * off));
+    const r = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], a = overlapArea(r, blocked);
+    if (!best || a < best.a) best = { a, cx, cy, r };
+    if (!a) break search;
+  }
+  // nowhere free: a long label tries again on narrower lines, and keeps whichever covers less
+  if (best.a && !el.dataset.narrowed && w > 130) {
+    const keep = [el.className, el.style.whiteSpace, el.style.maxWidth];
+    el.dataset.narrowed = 1; el.classList.add('wrap'); el.style.whiteSpace = 'normal'; el.style.maxWidth = Math.max(120, Math.round(w / 2) + 16) + 'px';
+    const r = placeOnWire(el, g, blocked, t0), a2 = overlapArea(r, blocked);
+    if (a2 < best.a) return r;
+    [el.className, el.style.whiteSpace, el.style.maxWidth] = keep;
+  }
+  el.style.left = best.cx + 'px'; el.style.top = best.cy + 'px';
+  return best.r;
 }
 
 function edgeGeom(a, b, off) {
@@ -503,16 +535,17 @@ function drawWires() {
   const s = f.steps[S.i];
   $$('.sd-wlabel,.sd-busychip,.sd-pbadge,.sd-altlabel', $('#cv')).forEach(x => x.remove());
   const curKey = s.from + '>' + s.to;
+  // badges and branch labels are positioned after the active label, so they step around it
+  const later = [];
   // numbered badges on edges already travelled, so the diagram keeps the story
   seenNums.forEach((nums, key) => {
     if (key === curKey) return;
     const [a, b] = key.split('>'); const g = edgeGeom(a, b, offFor({ from: a, to: b }));
     const t = (dirs.has(b + '>' + a) && a > b) ? 0.38 : 0.5;
     const bd = document.createElement('i'); bd.className = 'sd-pbadge';
-    bd.style.left = (g.x1 + (g.x2 - g.x1) * t) + 'px'; bd.style.top = (g.y1 + (g.y2 - g.y1) * t) + 'px';
     const shown = nums.slice(-2); bd.textContent = shown.join(',');
     bd.title = shown.map(n => n + '. ' + (f.steps[n - 1].label || f.steps[n - 1].title)).join('\n');
-    $('#cv').appendChild(bd);
+    $('#cv').appendChild(bd); later.push([bd, g, t]);
   });
   // the other outcomes of a branch, drawn faintly with their labels
   if (s.branch) {
@@ -521,10 +554,11 @@ function drawWires() {
       const g = edgeGeom(t.from, t.to, offFor(t));
       out += '<line class="sd-wire alt" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
       const lb = document.createElement('div'); lb.className = 'sd-altlabel' + ((S.choice[S.i] || 0) === k ? ' on' : '');
-      lb.style.left = ((g.x1 + g.x2) / 2) + 'px'; lb.style.top = ((g.y1 + g.y2) / 2) + 'px';
-      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb);
+      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb); later.push([lb, g, 0.5]);
     });
   }
+  const blocked = nodeRects();
+  const placeLater = () => later.forEach(([el, g, t]) => blocked.push(placeOnWire(el, g, blocked, t)));
   if (s.from !== s.to) {
     const g = edgeGeom(s.from, s.to, offFor(s));
     const col = kc(f.nodes.find(n => n.id === s.from).kind);
@@ -539,14 +573,12 @@ function drawWires() {
     lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>' + esc(s.label || s.title);
     lab.title = s.label || s.title;
     $('#cv').appendChild(lab);
-    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
     const free = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
     const horizontal = Math.abs(g.x2 - g.x1) >= Math.abs(g.y2 - g.y1);
-    lab.style.left = mx + 'px'; lab.style.top = my + 'px';
-    // a long label on a short horizontal hop sits just above the line instead of hiding its text
-    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('above'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 120, 160)) + 'px'; }
-    // keep the label inside the canvas
-    const half = lab.offsetWidth / 2; lab.style.left = Math.min(L.W - half - 4, Math.max(half + 4, mx)) + 'px';
+    // a long label on a short horizontal hop wraps onto two lines instead of hiding its text
+    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('wrap'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 60, 150)) + 'px'; }
+    blocked.push(placeOnWire(lab, g, blocked, 0.5));
+    placeLater();
     animatePacket(g);
   } else {
     svg.innerHTML = out;
@@ -558,6 +590,8 @@ function drawWires() {
     $('#cv').appendChild(chip);
     const half = chip.offsetWidth / 2;
     chip.style.left = Math.min(L.W - half - 4, Math.max(half + 4, P.x)) + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
+    blocked.push([P.x - half, below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30, P.x + half, (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + chip.offsetHeight]);
+    placeLater();
     cancelAnimationFrame(S.raf);
   }
 }
