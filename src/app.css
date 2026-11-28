@@ -99,7 +99,7 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-wire.alt{stroke:var(--muted);stroke-width:1.6;stroke-dasharray:1 4;stroke-linecap:round;opacity:.75}
 .sd-altlabel{position:absolute;transform:translate(-50%,-50%);font:600 10px var(--mono);color:var(--muted);background:var(--panel2);border:1px dashed var(--rule2);border-radius:7px;padding:1px 6px;white-space:nowrap;z-index:3;pointer-events:none}
 .sd-altlabel.on{color:var(--ink);border-style:solid;border-color:var(--ink2)}
-.sd-wlabel.above{transform:translate(-50%,calc(-100% - 8px));white-space:normal;text-overflow:clip}
+.sd-wlabel.wrap{white-space:normal;text-overflow:clip;text-align:center}
 .sd-fork{display:none;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 16px 10px}
 .sd-fork.show{display:flex}
 .sd-fork .q{width:100%;font:600 12px var(--mono);color:var(--muted)}
@@ -141,8 +141,8 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-node .ic{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;background:var(--kc)}
 .sd-node .ic svg{width:18px;height:18px}
 .sd-node .tx{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center}
-.sd-node b{font-size:12.5px;line-height:1.15;font-weight:650;overflow-wrap:anywhere}
-.sd-node small{font:10px/1.2 var(--mono);color:var(--muted);margin-top:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sd-node b{font-size:12.5px;line-height:1.15;font-weight:650;overflow-wrap:normal;hyphens:manual;max-width:100%;overflow:hidden}
+.sd-node small{font:10px/1.2 var(--mono);color:var(--muted);margin-top:3px;max-width:100%;overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 .sd-node.dim{opacity:.55}
 .sd-node.src,.sd-node.dst{opacity:1;border-color:var(--kc);box-shadow:0 0 0 4px color-mix(in srgb,var(--kc) 18%,transparent),var(--shadow)}
 .sd-node.dst{transform:translate(-50%,-50%) scale(1.04)}
@@ -330,6 +330,8 @@ code,pre,kbd{font-family:var(--mono)}
   .sd-bar svg{width:18px;height:18px}
   .sd-dots{display:none}
   .sd-pbadge{font-size:9px;min-width:14px;height:14px;line-height:14px}
+  .sd-steplist button{flex-wrap:wrap;row-gap:2px}
+  .sd-steplist .hop{white-space:normal;overflow-wrap:anywhere;flex-basis:100%;margin-left:34px}
   .sd-altlabel{font-size:9px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
