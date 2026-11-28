@@ -95,7 +95,7 @@ async def ws(sock: WebSocket, ticket: str):
       from: 'gwa', to: 'chat', label: 'handle(msg.send)',
       title: 'The chat service checks and orders the message',
       caption: 'The service checks that Ana is a member, deduplicates on client_msg_id, and takes the next sequence number for this conversation.',
-      text: ['Ordering is per conversation, not global. An atomic `INCR` on a per-conversation counter in Redis gives a gap-free, increasing `seq`. Members sort and page by seq, and a client that sees seq 41 then 43 knows it missed 42 and fetches it.'],
+      text: ['Ordering is per conversation, not global. An atomic `INCR` on a per-conversation counter in Redis gives a unique, increasing `seq`, and members sort and page by it. It is not gap-free: a seq taken for an insert that then fails is never used, so a client that sees 41 then 43 fetches once and accepts that 42 may not exist.', 'Redis replicates asynchronously by default, so after a failover the new primary can lack the latest INCRs and hand out a seq again. For no gaps and no repeats, assign `seq` in the same database transaction as the insert.'],
       payloadKind: 'Enriched message',
       payload: { conversation_id: 'cnv_trip_ardennes', seq: 4812, message_id: 'msg_01JDQ6X3M8', client_msg_id: '01JDQ6X3K1V9Z8T2YQ7N4M5B6C', sender_id: 'usr_ana', body: { type: 'text', text: 'On my way! 🚗 ETA 15 min' }, server_ts: '2026-11-25T10:52:03.161Z' },
       fields: { seq: 'Added here. INCR conv_seq:cnv_trip_ardennes → 4812.', message_id: 'Added here. Server id used everywhere after this step.', server_ts: 'Added here. The authoritative time shown in the chat.' },
@@ -215,7 +215,7 @@ function onFrame(f: ServerFrame) {
   const conv = store.conversations[f.conversation_id];
   if (f.seq <= conv.lastSeq) return;                         // duplicate: ignore
   if (f.seq > conv.lastSeq + 1) {
-    void syncRange(f.conversation_id, conv.lastSeq + 1);      // fetch the missing ones
+    void syncRange(f.conversation_id, conv.lastSeq + 1);      // fetch once; the gap may be empty
   }
   conv.insert(f);                                            // kept sorted by seq
   conv.lastSeq = Math.max(conv.lastSeq, f.seq);
@@ -301,6 +301,7 @@ CREATE TABLE read_state (
     { label: 'RFC 6455: The WebSocket Protocol', url: 'https://www.rfc-editor.org/rfc/rfc6455' },
     { label: 'FastAPI: WebSockets', url: 'https://fastapi.tiangolo.com/advanced/websockets/' },
     { label: 'Discord: How Discord stores trillions of messages', url: 'https://discord.com/blog/how-discord-stores-trillions-of-messages', note: 'Partitioning messages by channel and time bucket.' },
-    { label: 'Redis: Pub/Sub', url: 'https://redis.io/docs/latest/develop/interact/pubsub/' }
+    { label: 'Redis: Pub/Sub', url: 'https://redis.io/docs/latest/develop/interact/pubsub/' },
+    { label: 'Redis: Replication (asynchronous by default)', url: 'https://redis.io/docs/latest/operate/oss_and_stack/management/replication/' }
   ]
 });
