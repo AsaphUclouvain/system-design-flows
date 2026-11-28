@@ -108,7 +108,7 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-wire.alt{stroke:var(--muted);stroke-width:1.6;stroke-dasharray:1 4;stroke-linecap:round;opacity:.75}
 .sd-altlabel{position:absolute;transform:translate(-50%,-50%);font:600 10px var(--mono);color:var(--muted);background:var(--panel2);border:1px dashed var(--rule2);border-radius:7px;padding:1px 6px;white-space:nowrap;z-index:3;pointer-events:none}
 .sd-altlabel.on{color:var(--ink);border-style:solid;border-color:var(--ink2)}
-.sd-wlabel.above{transform:translate(-50%,calc(-100% - 8px));white-space:normal;text-overflow:clip}
+.sd-wlabel.wrap{white-space:normal;text-overflow:clip;text-align:center}
 .sd-fork{display:none;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 16px 10px}
 .sd-fork.show{display:flex}
 .sd-fork .q{width:100%;font:600 12px var(--mono);color:var(--muted)}
@@ -150,8 +150,8 @@ code,pre,kbd{font-family:var(--mono)}
 .sd-node .ic{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;background:var(--kc)}
 .sd-node .ic svg{width:18px;height:18px}
 .sd-node .tx{min-width:0;max-width:100%;display:flex;flex-direction:column;align-items:center}
-.sd-node b{font-size:12.5px;line-height:1.15;font-weight:650;overflow-wrap:anywhere}
-.sd-node small{font:10px/1.2 var(--mono);color:var(--muted);margin-top:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sd-node b{font-size:12.5px;line-height:1.15;font-weight:650;overflow-wrap:normal;hyphens:manual;max-width:100%;overflow:hidden}
+.sd-node small{font:10px/1.2 var(--mono);color:var(--muted);margin-top:3px;max-width:100%;overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 .sd-node.dim{opacity:.55}
 .sd-node.src,.sd-node.dst{opacity:1;border-color:var(--kc);box-shadow:0 0 0 4px color-mix(in srgb,var(--kc) 18%,transparent),var(--shadow)}
 .sd-node.dst{transform:translate(-50%,-50%) scale(1.04)}
@@ -339,6 +339,8 @@ code,pre,kbd{font-family:var(--mono)}
   .sd-bar svg{width:18px;height:18px}
   .sd-dots{display:none}
   .sd-pbadge{font-size:9px;min-width:14px;height:14px;line-height:14px}
+  .sd-steplist button{flex-wrap:wrap;row-gap:2px}
+  .sd-steplist .hop{white-space:normal;overflow-wrap:anywhere;flex-basis:100%;margin-left:34px}
   .sd-altlabel{font-size:9px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -498,7 +500,7 @@ terms({
   'consistent hashing': 'A way to map keys to servers on a ring so that adding or removing a server moves only a small fraction of the keys, instead of nearly all of them.',
   'eventual consistency': 'If no new writes happen, all copies of the data eventually agree. Reads in the meantime may be stale.',
   'strong consistency': 'Every read sees the latest committed write, as if there were a single copy of the data.',
-  'quorum': 'The minimum number of replicas that must take part in a read or write. With N copies, choosing W + R > N guarantees a read overlaps the latest write.',
+  'quorum': 'The minimum number of replicas that must take part in a read or write. With N designated copies (a strict quorum), choosing W + R > N guarantees a read overlaps the latest write. A sloppy quorum, which counts fallback nodes while owners are down, loses that guarantee (Dynamo §4.6).',
   'base62': 'Writing a number with 62 symbols (0-9, a-z, A-Z). Seven Base62 characters can represent about 3.5 trillion values.',
   'cdn': 'Content delivery network: servers in many cities that cache your static files and media close to users, so they load fast and your origin serves less.',
   'origin': 'Your own server or bucket behind a CDN. The CDN fetches from the origin on a cache miss.',
@@ -3114,10 +3116,10 @@ Content-Type: application/json`
     {
       from: 'cli', to: 'mw', label: 'burst of 25 requests',
       title: 'The client bursts',
-      caption: 'A loop fires 25 requests in one second. The first 13 drain the bucket; the 14th onwards finds fewer than one token.',
+      caption: 'A loop fires 25 requests in one second, one every 40 ms. The 13.42 stored tokens plus the refill so far let the first 14 through; refills add one more token in time for request 24, and the other 10 get 429.',
       payloadKind: 'Bucket over one second',
       payload: { t0_tokens: 13.42, requests: 25, refilled_in_1s: 1.67, allowed: 15, rejected: 10, tokens_after: 0.09 },
-      text: ['13.42 tokens at the start plus 1.67 refilled during the second allow 15 requests; 10 are rejected.']
+      text: ['13.42 tokens at the start plus 1.67 refilled during the second allow 15 requests (1–14 and 24); 10 are rejected. The test suite replays this bucket to check the numbers.']
     },
     {
       from: 'mw', to: 'cli', label: '429 Retry-After: 1', reply: true,
@@ -3161,7 +3163,11 @@ Content-Type: application/json
     { label: 'IETF draft: RateLimit header fields for HTTP', url: 'https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/', note: 'Still a draft; check the latest version.' },
     { label: 'Stripe: Scaling your API with rate limiters', url: 'https://stripe.com/blog/rate-limiters' },
     { label: 'RFC 6585: HTTP 429 Too Many Requests', url: 'https://www.rfc-editor.org/rfc/rfc6585' }
-  ]
+  ],
+  verify: {
+    checked: ['Step 6 (the burst): test_content.js replays the token bucket with the flow\'s own numbers (13.42 tokens, capacity 20, 100/60 tokens per second, 25 requests 40 ms apart) and checks 15 allowed, 10 rejected and 0.09 tokens left.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Keys, timestamps and plan limits are illustrative.']
+  }
 });
 
 flow({
@@ -3847,7 +3853,7 @@ async def ws(sock: WebSocket, ticket: str):
       from: 'gwa', to: 'chat', label: 'handle(msg.send)',
       title: 'The chat service checks and orders the message',
       caption: 'The service checks that Ana is a member, deduplicates on client_msg_id, and takes the next sequence number for this conversation.',
-      text: ['Ordering is per conversation, not global. An atomic `INCR` on a per-conversation counter in Redis gives a gap-free, increasing `seq`. Members sort and page by seq, and a client that sees seq 41 then 43 knows it missed 42 and fetches it.'],
+      text: ['Ordering is per conversation, not global. An atomic `INCR` on a per-conversation counter in Redis gives a unique, increasing `seq`, and members sort and page by it. It is not gap-free: a seq taken for an insert that then fails is never used, so a client that sees 41 then 43 fetches once and accepts that 42 may not exist.', 'Redis replicates asynchronously by default, so after a failover the new primary can lack the latest INCRs and hand out a seq again. For no gaps and no repeats, assign `seq` in the same database transaction as the insert.'],
       payloadKind: 'Enriched message',
       payload: { conversation_id: 'cnv_trip_ardennes', seq: 4812, message_id: 'msg_01JDQ6X3M8', client_msg_id: '01JDQ6X3K1V9Z8T2YQ7N4M5B6C', sender_id: 'usr_ana', body: { type: 'text', text: 'On my way! 🚗 ETA 15 min' }, server_ts: '2026-11-25T10:52:03.161Z' },
       fields: { seq: 'Added here. INCR conv_seq:cnv_trip_ardennes → 4812.', message_id: 'Added here. Server id used everywhere after this step.', server_ts: 'Added here. The authoritative time shown in the chat.' },
@@ -3967,7 +3973,7 @@ function onFrame(f: ServerFrame) {
   const conv = store.conversations[f.conversation_id];
   if (f.seq <= conv.lastSeq) return;                         // duplicate: ignore
   if (f.seq > conv.lastSeq + 1) {
-    void syncRange(f.conversation_id, conv.lastSeq + 1);      // fetch the missing ones
+    void syncRange(f.conversation_id, conv.lastSeq + 1);      // fetch once; the gap may be empty
   }
   conv.insert(f);                                            // kept sorted by seq
   conv.lastSeq = Math.max(conv.lastSeq, f.seq);
@@ -4053,8 +4059,13 @@ CREATE TABLE read_state (
     { label: 'RFC 6455: The WebSocket Protocol', url: 'https://www.rfc-editor.org/rfc/rfc6455' },
     { label: 'FastAPI: WebSockets', url: 'https://fastapi.tiangolo.com/advanced/websockets/' },
     { label: 'Discord: How Discord stores trillions of messages', url: 'https://discord.com/blog/how-discord-stores-trillions-of-messages', note: 'Partitioning messages by channel and time bucket.' },
-    { label: 'Redis: Pub/Sub', url: 'https://redis.io/docs/latest/develop/interact/pubsub/' }
-  ]
+    { label: 'Redis: Pub/Sub', url: 'https://redis.io/docs/latest/develop/interact/pubsub/' },
+    { label: 'Redis: Replication (asynchronous by default)', url: 'https://redis.io/docs/latest/operate/oss_and_stack/management/replication/' }
+  ],
+  verify: {
+    checked: ['Step 3: Redis replicates asynchronously by default, so a counter in Redis can repeat a value after failover: Redis replication docs.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. IDs, timings and payload values are illustrative.']
+  }
 });
 
 flow({
@@ -8642,7 +8653,7 @@ flow({
     { label: 'Players', value: '10 million', note: 'Ranked on the weekly board.' },
     { label: 'Score writes', value: '5,000 / s', note: 'Match completions at peak.' },
     { label: 'Board memory', value: '≈ 1 GB', note: 'A sorted set costs roughly 80–100 bytes per member: 10M × ~100 B.' },
-    { label: 'Rank lookup', value: 'O(log n)', note: 'ZREVRANK on a skip list: ~23 levels for 10M members.' }
+    { label: 'Rank lookup', value: 'O(log n)', note: 'ZREVRANK on Redis\'s skip list (p = 1/4): about 12 levels for 10M members.' }
   ],
   grid: { cols: 4, rows: 3 },
   nodes: [
@@ -8856,8 +8867,13 @@ CREATE TABLE season_standings (season TEXT, rank INT, player_id TEXT, points INT
   ],
   refs: [
     { label: 'Redis: Sorted sets', url: 'https://redis.io/docs/latest/develop/data-types/sorted-sets/' },
-    { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' }
-  ]
+    { label: 'Redis: ZREVRANK', url: 'https://redis.io/docs/latest/commands/zrevrank/' },
+    { label: 'Redis source: server.h (ZSKIPLIST_P = 0.25)', url: 'https://github.com/redis/redis/blob/unstable/src/server.h' }
+  ],
+  verify: {
+    checked: ['Scale card: Redis sorted-set skip lists use ZSKIPLIST_P = 0.25 (redis/src/server.h), so 10M members need about log4(10M) ≈ 12 levels; test_content.js checks the number.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Scores, ranks and sizes are illustrative.']
+  }
 });
 
 flow({
@@ -10282,8 +10298,8 @@ flow({
   grid: { cols: 4, rows: 3 },
   nodes: [
     { id: 'api', label: 'Cart API', sub: 'FastAPI', kind: 'service', icon: 'cart', x: 0, y: 1, desc: 'Reads and writes carts through the store\'s client.' },
-    { id: 'coord', label: 'Coordinator', sub: 'node A', kind: 'service', icon: 'ring', x: 1, y: 1, desc: 'Any node can coordinate a request; it forwards to the key\'s replicas.' },
-    { id: 'b', label: 'Node B', sub: 'replica 1, zone a', kind: 'db', icon: 'server', x: 2, y: 0, desc: 'First owner of the key on the ring.' },
+    { id: 'coord', label: 'Entry node', sub: 'node A', kind: 'service', icon: 'ring', x: 1, y: 1, desc: 'Any node can receive a request. A write for a key it does not own is forwarded to the key\'s first owner, which coordinates it (Dynamo §4.5). Reads can be coordinated by any node.' },
+    { id: 'b', label: 'Node B', sub: 'replica 1, coordinator', kind: 'db', icon: 'server', x: 2, y: 0, desc: 'First owner of the key on the ring (zone a). It coordinates writes to this key: it increments the vector clock, stores the version and sends it to the other owners.' },
     { id: 'c', label: 'Node C', sub: 'replica 2, zone b', kind: 'db', icon: 'server', x: 3, y: 0, desc: 'Second owner.' },
     { id: 'd', label: 'Node D', sub: 'replica 3, zone c', kind: 'db', icon: 'server', x: 3, y: 1, desc: 'Third owner; about to be unreachable.' },
     { id: 'e', label: 'Node E', sub: 'next on ring', kind: 'db', icon: 'server', x: 2, y: 2, desc: 'Next healthy node after D; holds a hint while D is down.' },
@@ -10294,11 +10310,11 @@ flow({
     {
       from: 'api', to: 'coord', label: 'PUT cart:usr_ana',
       title: 'The API writes a cart',
-      caption: 'Ana adds trail socks to her cart. The Cart API sends PUT with the new cart and the version context it read earlier, to any node; node A coordinates.',
+      caption: 'Ana adds trail socks to her cart. The Cart API sends PUT with the new cart and the version context it read earlier, to any node; node A receives it.',
       text: ['The context (a vector clock) tells the store which version this write is based on. It is what lets the store tell "newer" apart from "concurrent".'],
       payloadKind: 'Request',
       payload: { op: 'PUT', key: 'cart:usr_ana', value: { items: [{ sku: 'SPG6-42-BLU', qty: 1 }, { sku: 'SOCK-TRL-M', qty: 2 }] }, context: { vclock: { B: 4 } }, consistency: { N: 3, W: 2, R: 2 } },
-      fields: { context: 'The version Ana\'s session last read: B had written 4 updates.', consistency: 'N replicas, W acks needed for a write, R replies needed for a read. R + W > N means a read always overlaps the latest write\'s replicas.' },
+      fields: { context: 'The version Ana\'s session last read: B had written 4 updates.', consistency: 'N replicas, W acks needed for a write, R replies needed for a read. With strict quorums, R + W > N makes every read overlap the latest write\'s replicas. This store uses a sloppy quorum with hinted handoff (step 5): while an owner is down, an ack can come from a fallback node, so a read can miss the latest write until the hint is handed back (Dynamo §4.6).' },
       code: [{ lang: 'python', title: 'Cart API using the store client', src: String.raw`
 @router.post("/v1/cart/items")
 async def add_item(item: CartItem, user=Depends(current_user)):
@@ -10319,26 +10335,26 @@ async def add_item(item: CartItem, user=Depends(current_user)):
       fields: { preference_list: 'The N owners of this key. Fallbacks are used when an owner is down (sloppy quorum).' }
     },
     {
-      from: 'coord', to: 'b', label: 'write v{B:5}',
-      title: 'Send the write to all three owners',
-      caption: 'The coordinator increments the vector clock (B was the last writer, so it becomes {B:5}) and sends the write to B, C and D in parallel. It needs 2 acknowledgements.',
-      text: ['Each replica appends to its commit log, updates its memtable, and acknowledges. Writing to an in-memory table plus an append-only log is what makes writes so fast (an LSM tree).'],
+      from: 'coord', to: 'b', label: 'forward → B: v{B:5}',
+      title: 'B coordinates the write to all three owners',
+      caption: 'A is not one of the key\'s owners, so it forwards the write to B, the first owner, which coordinates it. B increments its own entry in the vector clock ({B:4} → {B:5}), stores the version locally and sends it to C and D in parallel. It needs 2 acknowledgements, its own included.',
+      text: ['The vector clock entry belongs to the node that coordinates the write, not to whoever wrote last: B increments B\'s counter because B is coordinating (Dynamo §4.4–4.5).', 'Each replica appends to its commit log, updates its memtable, and acknowledges. Writing to an in-memory table plus an append-only log is what makes writes so fast (an LSM tree).'],
       payloadKind: 'Replica write',
-      payload: { key: 'cart:usr_ana', vclock: { B: 5 }, targets: ['B', 'C', 'D'], acks_needed: 2, replies: { B: 'ack 1.1 ms', C: 'ack 1.4 ms', D: 'timeout (no answer)' } }
+      payload: { forwarded_by: 'A', coordinator: 'B', key: 'cart:usr_ana', vclock: { before: { B: 4 }, after: { B: 5 } }, targets: ['B', 'C', 'D'], acks_needed: 2, replies: { B: 'local write 1.1 ms', C: 'ack 1.4 ms', D: 'timeout (no answer)' } }
     },
     {
-      from: 'coord', to: 'c', label: 'ack 2/2 → success',
+      from: 'c', to: 'b', label: 'ack 2/2 → success',
       title: 'Quorum reached with one node down',
-      caption: 'B and C acknowledge; that is W = 2, so the write succeeds and the API gets OK in about 2 ms. D did not answer: it is in the middle of a network problem.',
+      caption: 'B\'s own write and C\'s ack make W = 2, so B reports success and the API gets OK, through A, in about 2 ms. D did not answer: it is in the middle of a network problem.',
       text: ['A {{quorum}} write tolerates a minority of replicas failing. The API does not wait for D, so one sick node does not make writes slow.'],
       payloadKind: 'Response',
       payload: { status: 'OK', key: 'cart:usr_ana', vclock: { B: 5 }, acks: ['B', 'C'], latency_ms: 2.1 },
       failure: ['**Only one ack before the timeout:** the write returns an error to the API (it may still exist on one replica). The API retries; vector clocks make the retry safe.']
     },
     {
-      from: 'coord', to: 'e', label: 'hinted write for D',
+      from: 'b', to: 'e', label: 'hinted write for D',
       title: 'Hinted handoff: E keeps D\'s copy',
-      caption: 'To keep three copies, the coordinator writes D\'s copy to the next healthy node on the ring, E, with a hint saying "this belongs to D". E stores it separately.',
+      caption: 'To keep three copies, B (the coordinator) writes D\'s copy to the next healthy node on the ring, E, with a hint saying "this belongs to D". E stores it separately.',
       text: ['{{hinted handoff}} with a {{sloppy quorum}} keeps writes durable on N machines even when an owner is down. The hint is not used for normal reads of E\'s own data.'],
       payloadKind: 'Hint',
       payload: { stored_on: 'E', intended_for: 'D', key: 'cart:usr_ana', vclock: { B: 5 }, hint_created: '2026-11-25T11:41:44Z', hint_ttl_hours: 3 }
@@ -10362,7 +10378,7 @@ async def add_item(item: CartItem, user=Depends(current_user)):
     {
       from: 'coord', to: 'api', label: '2 siblings + context', reply: true,
       title: 'The read returns both versions',
-      caption: 'The coordinator gets replies from B and C and finds two versions that are concurrent. It returns both as siblings, with a combined context {B:5, C:1}, and lets the application merge.',
+      caption: 'Node A coordinates this read: it gets replies from B and C and finds two versions that are concurrent. It returns both as siblings, with a combined context {B:5, C:1}, and lets the application merge.',
       text: ['For a cart, the merge is a union of items (with removals tracked so a deleted item does not come back). Amazon\'s Dynamo paper describes exactly this: a deleted item can occasionally reappear, which is better than losing an added one.'],
       payloadKind: 'Response',
       payload: { key: 'cart:usr_ana', siblings: [{ items: ['SPG6 ×1', 'SOCK ×2'] }, { items: ['SPG6 ×1', 'BOTTLE ×1'], removed: ['SOCK'] }], context: { B: 5, C: 1 } },
@@ -10378,12 +10394,12 @@ def merge_siblings(versions: list[dict]) -> Cart:
 # -> SPG6 x1, BOTTLE x1   (the phone removed the socks after seeing them)` }]
     },
     {
-      from: 'coord', to: 'b', label: 'read repair',
+      from: 'coord', to: 'b', label: 'merged write → B',
       title: 'Read repair fixes stale replicas',
-      caption: 'The API writes back the merged cart with context {B:5, C:1}; the coordinator issues {A:1, B:5, C:1}, which dominates both siblings. Replicas replace their old versions, so the conflict disappears.',
+      caption: 'The API writes back the merged cart with context {B:5, C:1}. A forwards it to B, which coordinates again and issues {B:6, C:1}; that dominates both siblings. Replicas replace their old versions, so the conflict disappears.',
       text: ['{{read repair}} also fixes simpler cases: if one replica returns an older version during a read, the coordinator writes the newest one back to it in the background.'],
       payloadKind: 'Repair write',
-      payload: { key: 'cart:usr_ana', new_vclock: { A: 1, B: 5, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'], replaced_on: ['B', 'C', 'D'] }
+      payload: { key: 'cart:usr_ana', new_vclock: { B: 6, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'], replaced_on: ['B', 'C', 'D'] }
     },
     {
       from: 'ae', to: 'd', label: 'Merkle tree compare',
@@ -10418,13 +10434,17 @@ ring            24 nodes x 256 vnodes, N=3 across zones, R=2, W=2`,
     ] },
     { q: 'How many replicas must answer?', options: [
       { verdict: 'ok', name: 'W=1, R=1', why: 'Fastest, but reads can miss the latest write.' },
-      { verdict: 'great', name: 'N=3, W=2, R=2', why: 'Survives one node down for reads and writes, and R + W > N gives overlapping quorums.' }
+      { verdict: 'great', name: 'N=3, W=2, R=2', why: 'Survives one node down for reads and writes, and R + W > N gives overlapping quorums while all three owners are reachable; under a sloppy quorum that overlap is not guaranteed.' }
     ] }
   ],
   refs: [
     { label: 'DeCandia et al.: Dynamo: Amazon\'s Highly Available Key-value Store (2007)', url: 'https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf' },
     { label: 'Apache Cassandra: Dynamo architecture', url: 'https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html' }
-  ]
+  ],
+  verify: {
+    checked: ['The node that coordinates a write increments its own vector-clock entry, and a write for a key is coordinated by one of its first N owners: Dynamo paper §4.4–4.5 (step 3).', 'Sloppy quorum with hinted handoff, and why R + W > N then no longer guarantees overlap: Dynamo paper §4.6 (step 1, glossary).', 'The test suite checks that step 3 increments only the coordinator\'s entry.'],
+    uncertain: ['The other steps have not been checked line by line against the sources yet. Latencies, node names and payload values are illustrative.']
+  },
 });
 
 flow({
@@ -11453,7 +11473,7 @@ flow({
   title: 'Inside a database write: B-tree vs LSM-tree storage engines',
   category: 'Databases & replication',
   tags: ['Write-ahead log', 'B-tree pages', 'Memtable', 'SSTables', 'Compaction', 'Bloom filters'],
-  summary: 'Two families of storage engines sit under almost every database. PostgreSQL and InnoDB update sorted pages in place (B-trees); RocksDB, Cassandra and LevelDB append to a memtable and merge sorted files later (LSM-trees). Follow one write and one read through each path, and see where each pays its cost.',
+  summary: 'Two families of storage engines sit under almost every database. MySQL InnoDB keeps rows in a B-tree and updates them in place, with old versions in an undo log; PostgreSQL appends new row versions to a heap and indexes them with B-trees; RocksDB, Cassandra and LevelDB append to a memtable and merge sorted files later (LSM-trees). Follow one write and one read through each path, and see where each pays its cost.',
   requirements: {
     functional: ['Durably store key → value and find it again.', 'Support range scans in key order.'],
     nonFunctional: ['Survive a crash at any instant (write-ahead log).', 'Choose between read-optimised (B-tree) and write-optimised (LSM) behaviour.']
@@ -11462,7 +11482,7 @@ flow({
   nodes: [
     { id: 'q', label: 'Query executor', sub: 'PUT / GET', kind: 'client', icon: 'api', x: 0, y: 1, desc: 'Receives a write or read for one key from the SQL layer or API.' },
     { id: 'wal', label: 'Write-ahead log', sub: 'append-only file', kind: 'queue', icon: 'log', x: 1, y: 0, desc: 'Every change is appended and flushed here first, so it can be replayed after a crash. Both engine types use one.' },
-    { id: 'bt', label: 'B-tree', sub: '8 KB pages: root → leaf', kind: 'db', icon: 'tree', x: 2, y: 0, desc: 'A balanced tree of fixed-size pages. Finding a key reads one page per level (3–4 levels for millions of rows). Writes modify the leaf page in place.' },
+    { id: 'bt', label: 'B-tree', sub: 'InnoDB, 16 KB pages', kind: 'db', icon: 'tree', x: 2, y: 0, desc: 'A balanced tree of fixed-size pages. Finding a key reads one page per level (3–4 levels for millions of rows). In InnoDB the rows live in the clustered index\'s leaf pages and are updated in place. PostgreSQL also uses B-trees, but for its indexes; its rows live in a separate heap.' },
     { id: 'mem', label: 'Memtable', sub: 'sorted, in memory', kind: 'cache', icon: 'cache', x: 1, y: 2, desc: 'LSM engines insert writes into an in-memory sorted structure (a skip list in RocksDB). Fast: no disk seek per write.' },
     { id: 'sst', label: 'SSTables L0…Ln', sub: 'immutable sorted files', kind: 'db', icon: 'db', x: 3, y: 2, desc: 'When the memtable fills, it is written out as a sorted, immutable file. Background compaction merges files and drops overwritten or deleted values.' },
     { id: 'bloom', label: 'Bloom filters', sub: 'one per file', kind: 'cache', icon: 'filter', x: 2, y: 2, desc: 'A compact bit set that answers "definitely not in this file" or "maybe". Lets reads skip most SSTables.' }
@@ -11491,15 +11511,15 @@ def get(key):
       text: ['Appending is sequential and fast. If the machine crashes a moment later, replaying the log rebuilds the change. This is the same WAL that replication streams (see the primary–replica flow).'],
       payloadKind: 'WAL record',
       payload: { lsn: 88231, op: 'PUT', key: 'user:8812', value: { plan: 'pro' }, fsync: true },
-      branch: { q: 'Which storage engine is underneath?', options: [ { label: 'B-tree (PostgreSQL, InnoDB)', goto: 'btw' }, { label: 'LSM-tree (RocksDB, Cassandra)', goto: 'lsmw' } ] }
+      branch: { q: 'Which storage engine is underneath?', options: [ { label: 'B-tree (MySQL InnoDB)', goto: 'btw' }, { label: 'LSM-tree (RocksDB, Cassandra)', goto: 'lsmw' } ] }
     },
     {
       id: 'btw', path: 'B-tree', from: 'q', to: 'bt', label: 'descend root → inner → leaf #4471', pc: ['btree.descend', 'leaf.insert'],
-      title: 'B-tree: find the leaf page and update it in place',
-      caption: 'The engine walks from the root page down to the leaf that covers user:8812 (3 page reads, usually cached) and writes the new value into that page.',
-      text: ['If the leaf is full, it splits into two and the parent gets a new pointer. The modified page is written back to disk later by a checkpoint; the WAL covers the gap. Cost: random page writes, and a whole 8 KB page rewritten for a small change.'],
+      title: 'B-tree (InnoDB): find the leaf page and update the row in place',
+      caption: 'The engine walks from the root page down to the leaf that covers user:8812 (3 page reads, usually cached) and overwrites the row in that page. The old version is copied to the undo log, for rollback and for transactions that still need to read it.',
+      text: ['If the leaf is full, it splits into two and the parent gets a new pointer. The modified page is written back to disk later by a checkpoint; the WAL covers the gap. Cost: random page writes, and a whole 16 KB page rewritten for a small change.', 'PostgreSQL works differently: its table is a heap, so an UPDATE appends a new row version and leaves the old one for VACUUM. When no indexed column changes and the page has room, this is a HOT update and the B-tree indexes are not touched. The MVCC flow (step 3) shows this.'],
       payloadKind: 'Page access',
-      payload: { path: ['root p1', 'inner p212', 'leaf p4471'], leaf_fill: '71%', split: false, dirty_page: 'p4471 (flushed at next checkpoint)' }
+      payload: { engine: 'InnoDB', path: ['root p1', 'inner p212', 'leaf p4471'], leaf_fill: '71%', split: false, row: 'updated in place', old_version: 'undo log', dirty_page: 'p4471 (flushed at next checkpoint)' }
     },
     {
       path: 'B-tree', from: 'bt', to: 'q', reply: true, label: 'GET: 3 page reads → value', pc: ['return btree.descend(key).find'],
@@ -11545,17 +11565,20 @@ def get(key):
   ],
   decisions: [
     { q: 'Which engine for which workload?', options: [
-      { name: 'B-tree', verdict: 'good', why: 'Read-heavy OLTP with predictable lookups and in-place updates: PostgreSQL, MySQL InnoDB.' },
+      { name: 'B-tree', verdict: 'good', why: 'Read-heavy OLTP with predictable lookups: MySQL InnoDB (rows in a B-tree, updated in place) and PostgreSQL (B-tree indexes over a heap of row versions).' },
       { name: 'LSM-tree', verdict: 'good', why: 'Write-heavy, append-like data (events, time series, messages): RocksDB, Cassandra, ScyllaDB. Reads rely on Bloom filters and compaction.' } ] }
   ],
   refs: [
     { label: 'ByteByteGo newsletter: B-trees vs LSM-trees comparison', url: 'https://blog.bytebytego.com/p/b-trees-vs-lsm-trees-comparison-and', note: 'subscriber post; the free intro states the trade-off.' },
     { label: 'RocksDB wiki: overview (memtable, logfile, sstfile, compaction)', url: 'https://github.com/facebook/rocksdb/wiki/RocksDB-Overview' },
     { label: 'PostgreSQL docs: B-tree indexes', url: 'https://www.postgresql.org/docs/current/btree.html' },
+    { label: 'PostgreSQL docs: Heap-Only Tuples (HOT)', url: 'https://www.postgresql.org/docs/current/storage-hot.html' },
+    { label: 'MySQL docs: InnoDB clustered and secondary indexes', url: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html' },
+    { label: 'MySQL docs: InnoDB multi-versioning (undo logs)', url: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-multi-versioning.html' },
     { label: 'ByteByteGo, System Design Interview Vol. 1: Design a key-value store (write and read paths)', url: 'https://bytebytego.com/courses/system-design-interview/design-a-key-value-store' }
   ],
   verify: {
-    checked: ['Memtable → logfile → flush to sorted sstfile, compaction: RocksDB overview.', 'Write path (commit log, memory cache, SSTables) and read path with Bloom filters: ByteByteGo key-value store chapter.'],
+    checked: ['Memtable → logfile → flush to sorted sstfile, compaction: RocksDB overview.', 'Write path (commit log, memory cache, SSTables) and read path with Bloom filters: ByteByteGo key-value store chapter.', 'PostgreSQL appends row versions to a heap (HOT when no indexed column changes): PostgreSQL HOT docs. InnoDB rows live in the clustered index, with old versions in undo logs: MySQL 8.4 docs.'],
     uncertain: ['Page numbers, sizes and file names are illustrative; 64 MB is RocksDB\'s common default write buffer size but configurations vary.']
   }
 });
@@ -16874,7 +16897,7 @@ function renderFlow(f, start) {
     h += '<section class="sd-sec" id="sec-refs"><h2>References</h2><p class="sub">Primary sources to go deeper. Payloads and code on this page are illustrative.</p><ol class="sd-refs">' +
       f.refs.map(r => '<li><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' + esc(r.label) + '</a>' + (r.note ? ' <span>' + esc(r.note) + '</span>' : '') + '</li>').join('') + '</ol>' +
       (f.verify ? '<div class="sd-verify">' + (f.verify.checked ? '<div><h3>How this flow was checked</h3><ul class="sd-list">' + f.verify.checked.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') +
-        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '') + '</section>';
+        (f.verify.uncertain ? '<div class="unc"><h3>Simplified or not verified</h3><ul class="sd-list">' + f.verify.uncertain.map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') + '</div>' : '<div class="sd-verify"><div class="unc"><h3>Not checked yet</h3><ul class="sd-list"><li>This flow has not been checked line by line against its sources. Treat numbers, payloads and timings as illustrative, and use the references to verify.</li></ul></div></div>') + '</section>';
   }
   h += '<div class="sd-bar" id="bar"><button id="mPrev" aria-label="Previous step">' + UI.prev + 'Back</button><span class="mid" id="mCount"></span><button id="mNext" aria-label="Next step">Next' + UI.next + '</button></div>';
   app.innerHTML = h;
@@ -16930,9 +16953,41 @@ function layout() {
     el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.setProperty('--nw', nw + 'px');
     P[n.id] = { x, y, el };
   });
+  // a title word wider than its box shrinks a little instead of breaking mid-word (no hyphenation in every browser)
+  f.nodes.forEach(n => { const t = P[n.id].el.querySelector('b'); if (!t) return; t.style.fontSize = '';
+    let fs = parseFloat(getComputedStyle(t).fontSize); while (t.scrollWidth > t.clientWidth + 1 && fs > 8.5) { fs -= .5; t.style.fontSize = fs + 'px'; } });
   f.nodes.forEach(n => { const p = P[n.id]; p.w = p.el.offsetWidth; p.h = p.el.offsetHeight; });
   L = { W, H, P };
   drawWires();
+}
+
+/* ---------- label placement: slide a label along its wire until it clears every box ---------- */
+function nodeRects() { return Object.values(L.P).map(p => [p.x - p.w / 2 - 3, p.y - p.h / 2 - 3, p.x + p.w / 2 + 3, p.y + p.h / 2 + 3]); }
+function overlapArea(r, rects) { let a = 0; rects.forEach(q => { const w = Math.min(r[2], q[2]) - Math.max(r[0], q[0]), h = Math.min(r[3], q[3]) - Math.max(r[1], q[1]); if (w > 0 && h > 0) a += w * h; }); return a; }
+// el is centred on (left, top) by its CSS transform; returns the rectangle it ends up in
+function placeOnWire(el, g, blocked, t0) {
+  const w = el.offsetWidth, h = el.offsetHeight, dx = g.x2 - g.x1, dy = g.y2 - g.y1, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len, d = (Math.abs(nx) * w + Math.abs(ny) * h) / 2 + 5;
+  const ts = [t0, t0 - .1, t0 + .1, t0 - .2, t0 + .2, t0 - .28, t0 + .28].filter(t => t > .12 && t < .88);
+  let best = null;
+  const offs = [0]; for (let k = 1; k <= 6; k++) offs.push(-(d + (k - 1) * 14), d + (k - 1) * 14);
+  search: for (const off of offs) for (const t of ts) {
+    const cx = Math.min(L.W - w / 2 - 4, Math.max(w / 2 + 4, g.x1 + dx * t + nx * off));
+    const cy = Math.min(L.H - h / 2 - 2, Math.max(h / 2 + 2, g.y1 + dy * t + ny * off));
+    const r = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], a = overlapArea(r, blocked);
+    if (!best || a < best.a) best = { a, cx, cy, r };
+    if (!a) break search;
+  }
+  // nowhere free: a long label tries again on narrower lines, and keeps whichever covers less
+  if (best.a && !el.dataset.narrowed && w > 130) {
+    const keep = [el.className, el.style.whiteSpace, el.style.maxWidth];
+    el.dataset.narrowed = 1; el.classList.add('wrap'); el.style.whiteSpace = 'normal'; el.style.maxWidth = Math.max(120, Math.round(w / 2) + 16) + 'px';
+    const r = placeOnWire(el, g, blocked, t0), a2 = overlapArea(r, blocked);
+    if (a2 < best.a) return r;
+    [el.className, el.style.whiteSpace, el.style.maxWidth] = keep;
+  }
+  el.style.left = best.cx + 'px'; el.style.top = best.cy + 'px';
+  return best.r;
 }
 
 function edgeGeom(a, b, off) {
@@ -17012,16 +17067,17 @@ function drawWires() {
   const s = f.steps[S.i];
   $$('.sd-wlabel,.sd-busychip,.sd-pbadge,.sd-altlabel', $('#cv')).forEach(x => x.remove());
   const curKey = s.from + '>' + s.to;
+  // badges and branch labels are positioned after the active label, so they step around it
+  const later = [];
   // numbered badges on edges already travelled, so the diagram keeps the story
   seenNums.forEach((nums, key) => {
     if (key === curKey) return;
     const [a, b] = key.split('>'); const g = edgeGeom(a, b, offFor({ from: a, to: b }));
     const t = (dirs.has(b + '>' + a) && a > b) ? 0.38 : 0.5;
     const bd = document.createElement('i'); bd.className = 'sd-pbadge';
-    bd.style.left = (g.x1 + (g.x2 - g.x1) * t) + 'px'; bd.style.top = (g.y1 + (g.y2 - g.y1) * t) + 'px';
     const shown = nums.slice(-2); bd.textContent = shown.join(',');
     bd.title = shown.map(n => n + '. ' + (f.steps[n - 1].label || f.steps[n - 1].title)).join('\n');
-    $('#cv').appendChild(bd);
+    $('#cv').appendChild(bd); later.push([bd, g, t]);
   });
   // the other outcomes of a branch, drawn faintly with their labels
   if (s.branch) {
@@ -17030,10 +17086,11 @@ function drawWires() {
       const g = edgeGeom(t.from, t.to, offFor(t));
       out += '<line class="sd-wire alt" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
       const lb = document.createElement('div'); lb.className = 'sd-altlabel' + ((S.choice[S.i] || 0) === k ? ' on' : '');
-      lb.style.left = ((g.x1 + g.x2) / 2) + 'px'; lb.style.top = ((g.y1 + g.y2) / 2) + 'px';
-      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb);
+      lb.textContent = 'if ' + o.label; $('#cv').appendChild(lb); later.push([lb, g, 0.5]);
     });
   }
+  const blocked = nodeRects();
+  const placeLater = () => later.forEach(([el, g, t]) => blocked.push(placeOnWire(el, g, blocked, t)));
   if (s.from !== s.to) {
     const g = edgeGeom(s.from, s.to, offFor(s));
     const col = kc(f.nodes.find(n => n.id === s.from).kind);
@@ -17048,14 +17105,12 @@ function drawWires() {
     lab.innerHTML = '<b><span>' + (S.i + 1) + '</span></b>' + esc(s.label || s.title);
     lab.title = s.label || s.title;
     $('#cv').appendChild(lab);
-    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
     const free = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
     const horizontal = Math.abs(g.x2 - g.x1) >= Math.abs(g.y2 - g.y1);
-    lab.style.left = mx + 'px'; lab.style.top = my + 'px';
-    // a long label on a short horizontal hop sits just above the line instead of hiding its text
-    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('above'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 120, 160)) + 'px'; }
-    // keep the label inside the canvas
-    const half = lab.offsetWidth / 2; lab.style.left = Math.min(L.W - half - 4, Math.max(half + 4, mx)) + 'px';
+    // a long label on a short horizontal hop wraps onto two lines instead of hiding its text
+    if (horizontal && lab.offsetWidth > free - 10) { lab.classList.add('wrap'); lab.style.maxWidth = Math.min(L.W - 12, Math.max(free + 60, 150)) + 'px'; }
+    blocked.push(placeOnWire(lab, g, blocked, 0.5));
+    placeLater();
     animatePacket(g);
   } else {
     svg.innerHTML = out;
@@ -17067,6 +17122,8 @@ function drawWires() {
     $('#cv').appendChild(chip);
     const half = chip.offsetWidth / 2;
     chip.style.left = Math.min(L.W - half - 4, Math.max(half + 4, P.x)) + 'px'; chip.style.top = (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + 'px';
+    blocked.push([P.x - half, below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30, P.x + half, (below ? P.y + P.h / 2 + 8 : P.y - P.h / 2 - 30) + chip.offsetHeight]);
+    placeLater();
     cancelAnimationFrame(S.raf);
   }
 }
