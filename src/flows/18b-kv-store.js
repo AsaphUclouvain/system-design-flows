@@ -25,8 +25,8 @@ flow({
   grid: { cols: 4, rows: 3 },
   nodes: [
     { id: 'api', label: 'Cart API', sub: 'FastAPI', kind: 'service', icon: 'cart', x: 0, y: 1, desc: 'Reads and writes carts through the store\'s client.' },
-    { id: 'coord', label: 'Coordinator', sub: 'node A', kind: 'service', icon: 'ring', x: 1, y: 1, desc: 'Any node can coordinate a request; it forwards to the key\'s replicas.' },
-    { id: 'b', label: 'Node B', sub: 'replica 1, zone a', kind: 'db', icon: 'server', x: 2, y: 0, desc: 'First owner of the key on the ring.' },
+    { id: 'coord', label: 'Entry node', sub: 'node A', kind: 'service', icon: 'ring', x: 1, y: 1, desc: 'Any node can receive a request. A write for a key it does not own is forwarded to the key\'s first owner, which coordinates it (Dynamo §4.5). Reads can be coordinated by any node.' },
+    { id: 'b', label: 'Node B', sub: 'replica 1, coordinator', kind: 'db', icon: 'server', x: 2, y: 0, desc: 'First owner of the key on the ring (zone a). It coordinates writes to this key: it increments the vector clock, stores the version and sends it to the other owners.' },
     { id: 'c', label: 'Node C', sub: 'replica 2, zone b', kind: 'db', icon: 'server', x: 3, y: 0, desc: 'Second owner.' },
     { id: 'd', label: 'Node D', sub: 'replica 3, zone c', kind: 'db', icon: 'server', x: 3, y: 1, desc: 'Third owner; about to be unreachable.' },
     { id: 'e', label: 'Node E', sub: 'next on ring', kind: 'db', icon: 'server', x: 2, y: 2, desc: 'Next healthy node after D; holds a hint while D is down.' },
@@ -37,11 +37,11 @@ flow({
     {
       from: 'api', to: 'coord', label: 'PUT cart:usr_ana',
       title: 'The API writes a cart',
-      caption: 'Ana adds trail socks to her cart. The Cart API sends PUT with the new cart and the version context it read earlier, to any node; node A coordinates.',
+      caption: 'Ana adds trail socks to her cart. The Cart API sends PUT with the new cart and the version context it read earlier, to any node; node A receives it.',
       text: ['The context (a vector clock) tells the store which version this write is based on. It is what lets the store tell "newer" apart from "concurrent".'],
       payloadKind: 'Request',
       payload: { op: 'PUT', key: 'cart:usr_ana', value: { items: [{ sku: 'SPG6-42-BLU', qty: 1 }, { sku: 'SOCK-TRL-M', qty: 2 }] }, context: { vclock: { B: 4 } }, consistency: { N: 3, W: 2, R: 2 } },
-      fields: { context: 'The version Ana\'s session last read: B had written 4 updates.', consistency: 'N replicas, W acks needed for a write, R replies needed for a read. R + W > N means a read always overlaps the latest write\'s replicas.' },
+      fields: { context: 'The version Ana\'s session last read: B had written 4 updates.', consistency: 'N replicas, W acks needed for a write, R replies needed for a read. With strict quorums, R + W > N makes every read overlap the latest write\'s replicas. This store uses a sloppy quorum with hinted handoff (step 5): while an owner is down, an ack can come from a fallback node, so a read can miss the latest write until the hint is handed back (Dynamo §4.6).' },
       code: [{ lang: 'python', title: 'Cart API using the store client', src: String.raw`
 @router.post("/v1/cart/items")
 async def add_item(item: CartItem, user=Depends(current_user)):
@@ -62,26 +62,26 @@ async def add_item(item: CartItem, user=Depends(current_user)):
       fields: { preference_list: 'The N owners of this key. Fallbacks are used when an owner is down (sloppy quorum).' }
     },
     {
-      from: 'coord', to: 'b', label: 'write v{B:5}',
-      title: 'Send the write to all three owners',
-      caption: 'The coordinator increments the vector clock (B was the last writer, so it becomes {B:5}) and sends the write to B, C and D in parallel. It needs 2 acknowledgements.',
-      text: ['Each replica appends to its commit log, updates its memtable, and acknowledges. Writing to an in-memory table plus an append-only log is what makes writes so fast (an LSM tree).'],
+      from: 'coord', to: 'b', label: 'forward → B: v{B:5}',
+      title: 'B coordinates the write to all three owners',
+      caption: 'A is not one of the key\'s owners, so it forwards the write to B, the first owner, which coordinates it. B increments its own entry in the vector clock ({B:4} → {B:5}), stores the version locally and sends it to C and D in parallel. It needs 2 acknowledgements, its own included.',
+      text: ['The vector clock entry belongs to the node that coordinates the write, not to whoever wrote last: B increments B\'s counter because B is coordinating (Dynamo §4.4–4.5).', 'Each replica appends to its commit log, updates its memtable, and acknowledges. Writing to an in-memory table plus an append-only log is what makes writes so fast (an LSM tree).'],
       payloadKind: 'Replica write',
-      payload: { key: 'cart:usr_ana', vclock: { B: 5 }, targets: ['B', 'C', 'D'], acks_needed: 2, replies: { B: 'ack 1.1 ms', C: 'ack 1.4 ms', D: 'timeout (no answer)' } }
+      payload: { forwarded_by: 'A', coordinator: 'B', key: 'cart:usr_ana', vclock: { before: { B: 4 }, after: { B: 5 } }, targets: ['B', 'C', 'D'], acks_needed: 2, replies: { B: 'local write 1.1 ms', C: 'ack 1.4 ms', D: 'timeout (no answer)' } }
     },
     {
-      from: 'coord', to: 'c', label: 'ack 2/2 → success',
+      from: 'c', to: 'b', label: 'ack 2/2 → success',
       title: 'Quorum reached with one node down',
-      caption: 'B and C acknowledge; that is W = 2, so the write succeeds and the API gets OK in about 2 ms. D did not answer: it is in the middle of a network problem.',
+      caption: 'B\'s own write and C\'s ack make W = 2, so B reports success and the API gets OK, through A, in about 2 ms. D did not answer: it is in the middle of a network problem.',
       text: ['A {{quorum}} write tolerates a minority of replicas failing. The API does not wait for D, so one sick node does not make writes slow.'],
       payloadKind: 'Response',
       payload: { status: 'OK', key: 'cart:usr_ana', vclock: { B: 5 }, acks: ['B', 'C'], latency_ms: 2.1 },
       failure: ['**Only one ack before the timeout:** the write returns an error to the API (it may still exist on one replica). The API retries; vector clocks make the retry safe.']
     },
     {
-      from: 'coord', to: 'e', label: 'hinted write for D',
+      from: 'b', to: 'e', label: 'hinted write for D',
       title: 'Hinted handoff: E keeps D\'s copy',
-      caption: 'To keep three copies, the coordinator writes D\'s copy to the next healthy node on the ring, E, with a hint saying "this belongs to D". E stores it separately.',
+      caption: 'To keep three copies, B (the coordinator) writes D\'s copy to the next healthy node on the ring, E, with a hint saying "this belongs to D". E stores it separately.',
       text: ['{{hinted handoff}} with a {{sloppy quorum}} keeps writes durable on N machines even when an owner is down. The hint is not used for normal reads of E\'s own data.'],
       payloadKind: 'Hint',
       payload: { stored_on: 'E', intended_for: 'D', key: 'cart:usr_ana', vclock: { B: 5 }, hint_created: '2026-11-25T11:41:44Z', hint_ttl_hours: 3 }
@@ -105,7 +105,7 @@ async def add_item(item: CartItem, user=Depends(current_user)):
     {
       from: 'coord', to: 'api', label: '2 siblings + context', reply: true,
       title: 'The read returns both versions',
-      caption: 'The coordinator gets replies from B and C and finds two versions that are concurrent. It returns both as siblings, with a combined context {B:5, C:1}, and lets the application merge.',
+      caption: 'Node A coordinates this read: it gets replies from B and C and finds two versions that are concurrent. It returns both as siblings, with a combined context {B:5, C:1}, and lets the application merge.',
       text: ['For a cart, the merge is a union of items (with removals tracked so a deleted item does not come back). Amazon\'s Dynamo paper describes exactly this: a deleted item can occasionally reappear, which is better than losing an added one.'],
       payloadKind: 'Response',
       payload: { key: 'cart:usr_ana', siblings: [{ items: ['SPG6 ×1', 'SOCK ×2'] }, { items: ['SPG6 ×1', 'BOTTLE ×1'], removed: ['SOCK'] }], context: { B: 5, C: 1 } },
@@ -121,12 +121,12 @@ def merge_siblings(versions: list[dict]) -> Cart:
 # -> SPG6 x1, BOTTLE x1   (the phone removed the socks after seeing them)` }]
     },
     {
-      from: 'coord', to: 'b', label: 'read repair',
+      from: 'coord', to: 'b', label: 'merged write → B',
       title: 'Read repair fixes stale replicas',
-      caption: 'The API writes back the merged cart with context {B:5, C:1}; the coordinator issues {A:1, B:5, C:1}, which dominates both siblings. Replicas replace their old versions, so the conflict disappears.',
+      caption: 'The API writes back the merged cart with context {B:5, C:1}. A forwards it to B, which coordinates again and issues {B:6, C:1}; that dominates both siblings. Replicas replace their old versions, so the conflict disappears.',
       text: ['{{read repair}} also fixes simpler cases: if one replica returns an older version during a read, the coordinator writes the newest one back to it in the background.'],
       payloadKind: 'Repair write',
-      payload: { key: 'cart:usr_ana', new_vclock: { A: 1, B: 5, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'], replaced_on: ['B', 'C', 'D'] }
+      payload: { key: 'cart:usr_ana', new_vclock: { B: 6, C: 1 }, items: ['SPG6 ×1', 'BOTTLE ×1'], replaced_on: ['B', 'C', 'D'] }
     },
     {
       from: 'ae', to: 'd', label: 'Merkle tree compare',

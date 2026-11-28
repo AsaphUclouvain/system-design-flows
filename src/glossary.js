@@ -36,7 +36,7 @@ terms({
   'consistent hashing': 'A way to map keys to servers on a ring so that adding or removing a server moves only a small fraction of the keys, instead of nearly all of them.',
   'eventual consistency': 'If no new writes happen, all copies of the data eventually agree. Reads in the meantime may be stale.',
   'strong consistency': 'Every read sees the latest committed write, as if there were a single copy of the data.',
-  'quorum': 'The minimum number of replicas that must take part in a read or write. With N copies, choosing W + R > N guarantees a read overlaps the latest write.',
+  'quorum': 'The minimum number of replicas that must take part in a read or write. With N designated copies (a strict quorum), choosing W + R > N guarantees a read overlaps the latest write. A sloppy quorum, which counts fallback nodes while owners are down, loses that guarantee (Dynamo §4.6).',
   'base62': 'Writing a number with 62 symbols (0-9, a-z, A-Z). Seven Base62 characters can represent about 3.5 trillion values.',
   'cdn': 'Content delivery network: servers in many cities that cache your static files and media close to users, so they load fast and your origin serves less.',
   'origin': 'Your own server or bucket behind a CDN. The CDN fetches from the origin on a cache miss.',
