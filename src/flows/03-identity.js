@@ -622,10 +622,10 @@ Content-Type: application/json`
     {
       from: 'cli', to: 'mw', label: 'burst of 25 requests',
       title: 'The client bursts',
-      caption: 'A loop fires 25 requests in one second. The first 13 drain the bucket; the 14th onwards finds fewer than one token.',
+      caption: 'A loop fires 25 requests in one second, one every 40 ms. The 13.42 stored tokens plus the refill so far let the first 14 through; refills add one more token in time for request 24, and the other 10 get 429.',
       payloadKind: 'Bucket over one second',
       payload: { t0_tokens: 13.42, requests: 25, refilled_in_1s: 1.67, allowed: 15, rejected: 10, tokens_after: 0.09 },
-      text: ['13.42 tokens at the start plus 1.67 refilled during the second allow 15 requests; 10 are rejected.']
+      text: ['13.42 tokens at the start plus 1.67 refilled during the second allow 15 requests (1–14 and 24); 10 are rejected. The test suite replays this bucket to check the numbers.']
     },
     {
       from: 'mw', to: 'cli', label: '429 Retry-After: 1', reply: true,
